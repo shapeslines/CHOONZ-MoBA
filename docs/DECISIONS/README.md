@@ -23,6 +23,7 @@ rather than editing it (note the supersession in both).
 | 0009 | [Error handling: no exceptions, status + asserts](0009-error-handling.md) | Accepted |
 | 0010 | [Asset id scheme: hashed path + generated constants](0010-asset-id-scheme.md) | Accepted |
 | 0011 | [Server-authoritative netcode](0011-server-authoritative-netcode.md) | Accepted |
+| 0012 | [Vulkan 1.3 hard minimum: dynamicRendering + synchronization2](0012-vulkan-13-minimum-spec.md) | Accepted |
 
 > Numbering note: `0011` was written first (the lockstep → server-authoritative
 > change made during the design phase); `0001–0010` are the foundational
