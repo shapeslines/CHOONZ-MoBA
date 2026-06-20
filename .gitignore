@@ -84,3 +84,5 @@ baked/
 *.bmp
 viz/
 vk_pipeline_cache.bin
+.mcp.json
+.repowise/
