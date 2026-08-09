@@ -10,6 +10,15 @@
 *.inl   text eol=lf
 *.glsl  text eol=lf
 *.hlsl  text eol=lf
+*.vert  text eol=lf
+*.frag  text eol=lf
+*.comp  text eol=lf
+*.geom  text eol=lf
+*.tesc  text eol=lf
+*.tese  text eol=lf
+*.rgen  text eol=lf
+*.rchit text eol=lf
+*.rmiss text eol=lf
 *.md    text eol=lf
 *.txt   text eol=lf
 *.cmake text eol=lf

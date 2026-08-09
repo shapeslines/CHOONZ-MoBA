@@ -15,7 +15,9 @@ RTS-class game engine.
 > the naive dedicated allocator, sampled via a `set=1` descriptor. An in-process
 > readback (`sandbox --screenshot out.bmp`) captures what it rendered, **validation-
 > clean** (verified on a GTX 1070). **Next: M2.3 — camera UBO + instanced meshes.**
-> Run it: `build-ci\tools\sandbox\Debug\sandbox.exe`.
+> Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
+> (the `--frames N` is required — `--screenshot` alone captures only on quit and
+> will run forever).
 >
 > See [`docs/JOURNAL.md`](docs/JOURNAL.md) for the session log,
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan, and
@@ -31,7 +33,10 @@ RTS-class game engine.
 
 **Prerequisites**
 - Visual Studio 2026 with the **Desktop development with C++** workload (provides
-  MSVC, plus bundled CMake ≥ 3.28 and Ninja). Standalone CMake + Ninja also work.
+  MSVC). Standalone CMake ≥ 3.28 also works.
+- **Ninja** (required by the `dev` preset, a Ninja Multi-Config build). Visual
+  Studio does not bundle it in every install, so install it explicitly:
+  `winget install Ninja-build.Ninja`.
 - The **LunarG Vulkan SDK** (sets `VULKAN_SDK`) — needed for the real renderer and
   the shader build (`glslc`). Without it the build still works but produces the
   **null render backend** (blank window; this is what CI builds for now).
