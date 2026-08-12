@@ -60,7 +60,7 @@ component pools while preserving the established replay/hash stream as the regre
 | S0 | Rebaseline and specify storage contracts | M3.0 10,000-tick Debug/Release oracle captured; capacities, failure behavior, generation wrap policy, and canonical hash migration are written down | done 2026-08-12 |
 | S1 | Add arena-backed `EntityManager` | create/alive/destroy/recycle tests pass; stale IDs fail; exhaustion is explicit; generation zero is never issued | done 2026-08-12 |
 | S2 | Add generic sparse/dense membership core | add/remove/has/dense lookup stay O(1); swap-remove repairs sparse and back-reference maps under adversarial sequences | done 2026-08-12 |
-| S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | active |
+| S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | done 2026-08-12 |
 | S4 | Integrate deferred destruction into `SimWorld` | queued destroys commit once at the tick boundary, remove all components, invalidate stale IDs, and cannot partially mutate on failure | queued |
 | S5 | Migrate canonical hash/diff and replay oracle | all authoritative entity/pool fields have an explicit LE order; logic hash is deliberately bumped; run-twice and exact-divergence tests stay green | queued |
 | S6 | Close M3.1 | full `/WX` Debug/Release CTest and boundary gates pass; docs are current; M3.2 gets a separate slate | queued |
@@ -93,4 +93,12 @@ and Release. M3.2 scheduling remains a separate decision and implementation slat
 - **S3 checkpoint A:** Transform, Velocity, and Health typed SoA pools now allocate every lane from
   the arena, expose validated mutable pointer views, and repair all parallel values after sparse-set
   swap-removal. Focused typed-pool plus affected sim suites and the boundary scan pass under the
-  `ci` preset in Debug and Release. `SimWorld` migration remains inside this active slice.
+  `ci` preset in Debug and Release.
+- **S3 checkpoint B:** `SimWorldConfig`, transactional memory sizing/initialization, the entity
+  manager, three pools, stable 64-slot mappings, and the pre-budgeted destroy queue now form the
+  world. The default 16,384-capacity configuration initializes the original 64-unit grid and exact
+  values; compact configs permit 0-64 initial units. Commands validate the entire slot/component
+  schedule before mutation, apply in recorded order, and integrate in ascending unit-slot order.
+  The deliberate M3.1 logic hash is now `0x7902599e173f87a6`; replay v1 and 16-byte commands are
+  unchanged. Debug and Release affected suites, CLI round-trip/error fixtures, boundary scan, and
+  the 10,000-tick oracle all pass. Canonical ECS metadata hashing remains fenced to S5.

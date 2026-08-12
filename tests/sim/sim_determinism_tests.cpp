@@ -16,8 +16,19 @@ static const size_t DETERMINISM_REPLAY_CAPACITY =
     (REPLAY_TICK_BASE_ENCODED_SIZE +
      REPLAY_PLACEHOLDER_MAX_COMMANDS * REPLAY_COMMAND_ENCODED_SIZE);
 static uint8_t g_determinism_replay[DETERMINISM_REPLAY_CAPACITY];
-static_assert(SIM_LOGIC_HASH == 0xf1b4e2b29b1e9643ULL,
+static const size_t DETERMINISM_WORLD_CAPACITY = 8192u;
+alignas(16) static uint8_t g_record_world_storage[DETERMINISM_WORLD_CAPACITY];
+alignas(16) static uint8_t g_replay_world_storage[DETERMINISM_WORLD_CAPACITY];
+alignas(16) static uint8_t g_expected_world_storage[DETERMINISM_WORLD_CAPACITY];
+alignas(16) static uint8_t g_actual_world_storage[DETERMINISM_WORLD_CAPACITY];
+static_assert(SIM_LOGIC_HASH == 0x7902599e173f87a6ULL,
               "logic behavior changes require a deliberate replay compatibility bump");
+
+static bool init_determinism_world(SimWorld* world, Arena* arena, uint8_t* storage,
+                                   uint64_t seed) {
+    arena_init_fixed(arena, storage, DETERMINISM_WORLD_CAPACITY);
+    return sim_init(world, arena, seed, SimWorldConfig{SIM_MAX_UNITS, SIM_MAX_UNITS});
+}
 
 static size_t record_determinism_replay(uint64_t* out_final_hash) {
     ByteWriter writer;
@@ -26,8 +37,10 @@ static size_t record_determinism_replay(uint64_t* out_final_hash) {
         replay_header_make(DETERMINISM_SEED, DETERMINISM_PLAYERS, DETERMINISM_TICKS);
     if (replay_write_header(&writer, &header) != REPLAY_STATUS_OK) return 0;
 
-    SimWorld world;
-    sim_init(&world, DETERMINISM_SEED);
+    SimWorld world{};
+    Arena world_arena{};
+    if (!init_determinism_world(&world, &world_arena,
+                                g_record_world_storage, DETERMINISM_SEED)) return 0;
     for (uint64_t tick = 0; tick < DETERMINISM_TICKS; ++tick) {
         SimCommand commands[REPLAY_PLACEHOLDER_MAX_COMMANDS]{};
         uint32_t command_count = replay_generate_placeholder_commands(
@@ -57,8 +70,10 @@ TEST(sim_determinism, recorded_hash_stream_matches_independent_replay_for_10000_
     ByteReader reader;
     ReplayHeader header{};
     CHECK(open_determinism_replay(size, &reader, &header));
-    SimWorld replayed;
-    sim_init(&replayed, header.seed);
+    SimWorld replayed{};
+    Arena replayed_arena{};
+    CHECK(init_determinism_world(&replayed, &replayed_arena,
+                                 g_replay_world_storage, header.seed));
     uint64_t replayed_final_hash = 0;
     for (uint64_t tick = 0; tick < header.tick_count; ++tick) {
         SimCommand commands[SIM_MAX_COMMANDS_PER_TICK]{};
@@ -90,9 +105,12 @@ TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_unit_7) {
     ByteReader reader;
     ReplayHeader header{};
     CHECK(open_determinism_replay(size, &reader, &header));
-    SimWorld expected, actual;
-    sim_init(&expected, header.seed);
-    sim_init(&actual, header.seed);
+    SimWorld expected{}, actual{};
+    Arena expected_arena{}, actual_arena{};
+    CHECK(init_determinism_world(&expected, &expected_arena,
+                                 g_expected_world_storage, header.seed));
+    CHECK(init_determinism_world(&actual, &actual_arena,
+                                 g_actual_world_storage, header.seed));
 
     uint64_t first_divergent_tick = UINT64_MAX;
     SimStateDiff first_diff{};
@@ -106,7 +124,11 @@ TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_unit_7) {
         SimCommandBuffer command_buffer{commands, command_count};
         CHECK(sim_tick(&expected, &command_buffer));
         CHECK(sim_tick(&actual, &command_buffer));
-        if (tick == MUTATION_TICK) actual.position_x[7] += FIX_ONE;
+        if (tick == MUTATION_TICK) {
+            TransformView transform{};
+            CHECK(transform_pool_get(&actual.transforms, actual.unit_entities[7], &transform));
+            *transform.position_x += FIX_ONE;
+        }
 
         uint64_t expected_hash = sim_hash_state(&expected);
         uint64_t actual_hash = sim_hash_state(&actual);
