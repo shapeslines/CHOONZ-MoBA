@@ -2,7 +2,7 @@
 type: record
 title: "SLATE - Phase 3 M3.2 systems and ordered schedule"
 kind: slate
-status: active
+status: verifying
 project: moba
 axis: "simulation systems scheduling"
 queued: 2026-08-12
@@ -14,11 +14,13 @@ related:
   - "docs/ROADMAP.md M3.2"
   - "docs/slate-moba-phase3-m3.1.md"
   - "PR #15 / M3.1 entity model"
+  - "PR #17 / M3.2 systems and schedule"
 ---
 
 # Slate - Phase 3 M3.2 systems and ordered schedule
 
-**Status:** active on `moba/slate-phase3-systems` from merged `main` at `7ce2b45`.
+**Status:** implementation-complete on draft PR #17; final GitHub and independent acceptance gates
+remain before ready-for-review closure.
 
 ## Goal
 
@@ -112,3 +114,7 @@ Debug/Release replay oracle and boundary gates remain green. M3.3 stays a separa
   rejected as exit class 2. Debug and Release both finish the 10,000-tick stream at
   `0x637628abff59c823`, while the controlled mutation remains exactly
   `tick=4321 field=position_x entity=7`.
+- **S6 local gate:** Complete `/WX` Debug and Release builds are green; all 25 CTest entries pass in
+  both configurations. `sim_boundary` scans 17 headers/sources and confirms the direct dependency
+  seam remains `core + math + serialize`. Architecture, roadmap, journal, next-session, and this
+  slate are updated, and M3.3 has its own queued slate with no implementation pulled forward.

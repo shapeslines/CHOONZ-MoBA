@@ -439,7 +439,7 @@ so Phase 4 consumes exactly this. **Exercises:** Renderer seam, Build (PRIVATE V
 **determinism harness built before there is content to break it.** This is the project's spine and the
 reviews' most-watched risk.
 
-> **Complete:** M3.0–M3.1. **Now:** M3.2 → M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
+> **Complete:** M3.0–M3.2. **Now:** M3.3 → M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
 > 🔴 Determinism is global and fragile: one stray float, unordered iteration, or wall-clock read
 > desyncs. The state-hash self-check is the only humane way to catch it — **build it first.**
 
@@ -483,13 +483,13 @@ retains 16-byte slot commands and deliberately bumps `SIM_LOGIC_HASH` to `0x7902
 Canonical ECS hashing excludes pointers, unused capacity, and sparse/dense storage order while
 covering lifecycle, mappings, queue order, membership, and every typed value. Debug and Release
 `/WX` builds pass all 22 CTest entries; the 10,000-tick golden is `0x981212877a575730`, and the
-controlled mutation reports `tick=4321 field=position_x entity=7`. M3.2 is queued separately in
-[`slate-moba-phase3-m3.2.md`](slate-moba-phase3-m3.2.md).
+controlled mutation reports `tick=4321 field=position_x entity=7`. M3.2 follows on its separate
+completed execution record in [`slate-moba-phase3-m3.2.md`](slate-moba-phase3-m3.2.md).
 **Risks:** swap-remove reorders dense — see M3.2. **Exercises:** ECS, Memory.
 
 ---
 
-### M3.2 — Systems + explicit schedule + ordered iteration  🔴  · M
+### M3.2 — Systems + explicit schedule + ordered iteration  🔴  · M  ✅ COMPLETE 2026-08-12
 **Goal:** the fixed-order system schedule with **deterministic iteration as the default**.
 **Deliverables:** `SimWorld` aggregate (entities, pools, `tick`, `Rng`, event queues,
 `pending_destroy`); plain free-function systems; a hand-written ordered `sim_tick` schedule;
@@ -501,6 +501,17 @@ double-buffered event queues drained in append order (no callbacks).
   the doc's own rule — fix the pattern here.)
 **DoD:** a movement + a damage-event system run under the schedule; determinism self-check (M3.0) still
 green with real pools; no `HashMap`/pointer-order iteration anywhere in sim.
+**Observed:** Each component pool owns an arena-backed derived ordered view rebuilt atomically after
+membership changes. A fixed-capacity, phase-buffered 12-byte `DamageEvent` queue feeds prefixed
+free-function command, movement, combat, cooldown, RNG, and destruction systems through one literal
+`sim_tick` schedule. Damage resolves in append order in the same tick; moving only queue publication
+retains the future next-tick experiment seam. Queue overflow is preflighted before any command
+mutation. Replay remains format v1 with 16-byte commands and logic hash `0xab96814425ba80a4`;
+canonical state includes logical event phases while excluding physical buffers and ordered caches.
+Debug and Release `/WX` builds pass all 25 CTest entries, the new 10,000-tick golden is
+`0x637628abff59c823`, and the controlled mutation still reports exactly
+`tick=4321 field=position_x entity=7`. M3.3 is queued separately in
+[`slate-moba-phase3-m3.3.md`](slate-moba-phase3-m3.3.md).
 **Risks:** 🔴 accidental dense-order iteration in an order-dependent system; per-tick sort budget at
 scale. **Exercises:** ECS, Determinism.
 
