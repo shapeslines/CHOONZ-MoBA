@@ -2,7 +2,7 @@
 type: record
 title: "SLATE - Phase 3 M3.2 systems and ordered schedule"
 kind: slate
-status: verifying
+status: complete
 project: moba
 axis: "simulation systems scheduling"
 queued: 2026-08-12
@@ -19,8 +19,7 @@ related:
 
 # Slate - Phase 3 M3.2 systems and ordered schedule
 
-**Status:** implementation-complete on draft PR #17; final GitHub and independent acceptance gates
-remain before ready-for-review closure.
+**Status:** complete on PR #17 and ready for owner review; merge remains separately owner-approved.
 
 ## Goal
 
@@ -75,7 +74,7 @@ both 10,000-tick runs retain the M3.1 golden, and the controlled divergence rema
 | S3 | Plain systems | movement and damage-resolution systems consume typed views/events with no storage-order dependency | done 2026-08-12 |
 | S4 | Explicit schedule | one literal `sim_tick` order runs commands, movement, damage, cleanup, RNG, and tick-boundary destruction | done 2026-08-12 |
 | S5 | Determinism migration | canonical hash/diff covers authoritative queues/system state; 10,000 ticks and exact mutation proof pass in Debug/Release | done 2026-08-12 |
-| S6 | Close M3.2 | full `/WX` matrix, all CTest, boundary scan, docs, independent acceptance, and GitHub gates are green | queued |
+| S6 | Close M3.2 | full `/WX` matrix, all CTest, boundary scan, docs, independent acceptance, and GitHub gates are green | done 2026-08-12 |
 
 ## Exit gate
 
@@ -118,3 +117,7 @@ Debug/Release replay oracle and boundary gates remain green. M3.3 stays a separa
   both configurations. `sim_boundary` scans 17 headers/sources and confirms the direct dependency
   seam remains `core + math + serialize`. Architecture, roadmap, journal, next-session, and this
   slate are updated, and M3.3 has its own queued slate with no implementation pulled forward.
+- **S6 acceptance gate:** Independent acceptance passed the complete implementation at `e999439`
+  and re-confirmed PASS on exact successor `fe337f6`, whose only delta is seven EOF blank-line
+  deletions. The full GitHub gate on `fe337f6` is green: MSVC Debug, MSVC Release, CodeQL C/C++,
+  and workflow analysis all passed. PR #17 is mergeable; owner approval remains the merge gate.
