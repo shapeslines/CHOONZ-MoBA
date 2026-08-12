@@ -19,7 +19,10 @@ set(BANNED_PATTERNS
     "#[ \t]*include[ \t]*[<\"]render/"
     "#[ \t]*include[ \t]*[<\"](vulkan|volk)"
     "(^|[^A-Za-z0-9_])(unordered_(map|set)|HashMap)([^A-Za-z0-9_]|$)"
-    "#[ \t]*include[ \t]*[<\"]core/hashmap\\.h[>\"]")
+    "#[ \t]*include[ \t]*[<\"]core/hashmap\\.h[>\"]"
+    "#[ \t]*include[ \t]*[<\"](vector|deque|list|map|set|unordered_map|unordered_set)[>\"]"
+    "(^|[^A-Za-z0-9_])(malloc|calloc|realloc|free)[ \t\r\n]*\\("
+    "(^|[^A-Za-z0-9_])(new|delete)([^A-Za-z0-9_]|$)")
 
 set(violations "")
 foreach(path IN LISTS SIM_SOURCES)
@@ -49,4 +52,3 @@ endif()
 
 list(LENGTH SIM_SOURCES source_count)
 message(STATUS "eng_sim boundary clean across ${source_count} source/header files; link seam is core+math+serialize")
-
