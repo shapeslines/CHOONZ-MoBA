@@ -19,8 +19,8 @@ M3.2 scheduling/events have not started.
 
 ## First action
 
-Confirm PR #15 GitHub CI/CodeQL and the independent acceptance verdict, then owner-review and merge.
-Merge remains separately owner-approved.
+Owner-review and merge PR #15. The local Debug/Release matrix, GitHub CI/CodeQL, and fresh independent
+acceptance verdict are green; merge remains separately owner-approved.
 
 ## M3.2 handoff
 

@@ -12,7 +12,7 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 **Scope:** replace the M3.0 placeholder arrays with deterministic arena-backed identity and typed
 component storage without beginning M3.2 scheduling.
-**Outcome:** M3.1 is implementation-complete on PR #15. Replay-v1 unit-slot commands remain stable,
+**Outcome:** M3.1 is complete and independently accepted on PR #15. Replay-v1 unit-slot commands remain stable,
 while `SimWorld` now owns a runtime-sized entity manager, typed sparse-set pools, deferred
 destruction, and a canonical semantic ECS hash. M3.2 is queued on a separate slate.
 
@@ -48,8 +48,8 @@ destruction, and a canonical semantic ECS hash. M3.2 is queued on a separate sla
 
 ### Next
 
-Finish PR #15's GitHub CI/CodeQL and independent acceptance gate, then leave merge to the owner.
-After it lands, branch M3.2 from updated `main` and execute
+Owner-review and merge PR #15; local and GitHub gates plus independent acceptance are green, while
+merge remains separately owner-approved. After it lands, branch M3.2 from updated `main` and execute
 [`slate-moba-phase3-m3.2.md`](slate-moba-phase3-m3.2.md). Do not stack scheduling/event work on the
 M3.1 branch.
 
