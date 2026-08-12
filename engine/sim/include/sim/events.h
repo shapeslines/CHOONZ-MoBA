@@ -46,4 +46,3 @@ bool damage_event_queue_append(DamageEventQueue* queue, const DamageEvent* event
 bool damage_event_queue_publish(DamageEventQueue* queue);
 bool damage_event_queue_read(const DamageEventQueue* queue, DamageEventView* view);
 bool damage_event_queue_consume(DamageEventQueue* queue);
-

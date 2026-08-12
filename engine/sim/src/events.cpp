@@ -96,4 +96,3 @@ bool damage_event_queue_consume(DamageEventQueue* queue) {
     queue->counts[read] = 0u;
     return true;
 }
-

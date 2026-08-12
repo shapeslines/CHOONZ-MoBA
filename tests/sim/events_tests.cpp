@@ -122,4 +122,3 @@ TEST(sim_events, invalid_overflow_and_unread_publish_fail_without_mutation) {
     CHECK(std::memcmp(&queue, &before, sizeof(before)) == 0);
     CHECK(std::memcmp(storage, bytes_before, sizeof(storage)) == 0);
 }
-

@@ -136,4 +136,3 @@ bool sys_flush_destroy(SimWorld* world) {
     world->pending_destroy_count = 0u;
     return true;
 }
-

@@ -69,4 +69,3 @@ M3.3 closes only when one platform-owned accumulator drives the unchanged determ
 snapshot extraction is fixed-only and one-way, presentation owns the sole fixed→float conversion,
 the renderer cannot see `SimWorld`, and render timing variations leave the M3.2 oracle unchanged.
 M3.4 remains a separate closure slate.
-

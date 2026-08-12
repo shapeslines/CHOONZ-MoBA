@@ -10,4 +10,3 @@ bool sys_combat_resolve(SimWorld* world);
 bool sys_cooldown_tick(SimWorld* world);
 void sys_rng_advance(SimWorld* world);
 bool sys_flush_destroy(SimWorld* world);
-

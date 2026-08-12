@@ -121,4 +121,3 @@ TEST(sim_systems, combat_prevalidates_the_whole_read_phase) {
     CHECK(*health.current == 70);
     CHECK(*health.damage_cooldown == 3u);
 }
-
