@@ -54,6 +54,8 @@ TEST(sim, canonical_hash_covers_scalars_lifecycle_order_and_component_values) {
     CHECK(sim_hash_state(&other_config.world) != baseline);
     CHECK(hash_world_init(&other_config, 1234u, SimWorldConfig{64u, 3u, 8u}));
     CHECK(sim_hash_state(&other_config.world) != baseline);
+    CHECK(hash_world_init(&other_config, 1234u, SimWorldConfig{64u, 4u, 9u}));
+    CHECK(sim_hash_state(&other_config.world) != baseline);
 
     CHECK(hash_world_init(&changed));
     EntityId mapped = changed.world.unit_entities[0];
@@ -146,6 +148,52 @@ TEST(sim, canonical_hash_covers_pool_membership_free_stack_and_queue_order) {
     CHECK(sim_tick(&queue_ab.world, nullptr));
     CHECK(sim_hash_state(&queue_ab.world) != 0u);
     CHECK(sim_hash_state(&queue_ab.world) != queued_hash);
+
+    HashWorldFixture damage_ab{}, damage_ba{};
+    CHECK(hash_world_init(&damage_ab));
+    CHECK(hash_world_init(&damage_ba));
+    DamageEvent damage_first{
+        damage_ab.world.unit_entities[2], damage_ab.world.unit_entities[0], 11};
+    DamageEvent damage_second{
+        EntityId{HANDLE_NULL}, damage_ab.world.unit_entities[1], 22};
+    DamageEvent damage_first_b{
+        damage_ba.world.unit_entities[2], damage_ba.world.unit_entities[0], 11};
+    DamageEvent damage_second_b{
+        EntityId{HANDLE_NULL}, damage_ba.world.unit_entities[1], 22};
+    CHECK(damage_event_queue_append(&damage_ab.world.damage_events, &damage_first));
+    CHECK(damage_event_queue_append(&damage_ab.world.damage_events, &damage_second));
+    CHECK(damage_event_queue_append(&damage_ba.world.damage_events, &damage_second_b));
+    CHECK(damage_event_queue_append(&damage_ba.world.damage_events, &damage_first_b));
+    CHECK(sim_hash_state(&damage_ab.world) != sim_hash_state(&damage_ba.world));
+
+    HashWorldFixture damage_write{}, damage_read{};
+    CHECK(hash_world_init(&damage_write));
+    CHECK(hash_world_init(&damage_read));
+    DamageEvent pending{
+        damage_write.world.unit_entities[2], damage_write.world.unit_entities[0], 11};
+    DamageEvent published{
+        damage_read.world.unit_entities[2], damage_read.world.unit_entities[0], 11};
+    CHECK(damage_event_queue_append(&damage_write.world.damage_events, &pending));
+    CHECK(damage_event_queue_append(&damage_read.world.damage_events, &published));
+    CHECK(damage_event_queue_publish(&damage_read.world.damage_events));
+    CHECK(sim_hash_state(&damage_read.world) != sim_hash_state(&damage_write.world));
+
+    HashWorldFixture damage_field{};
+    CHECK(hash_world_init(&damage_field));
+    DamageEvent changed_source{
+        damage_field.world.unit_entities[3], damage_field.world.unit_entities[0], 11};
+    CHECK(damage_event_queue_append(&damage_field.world.damage_events, &changed_source));
+    CHECK(sim_hash_state(&damage_field.world) != sim_hash_state(&damage_write.world));
+    CHECK(hash_world_init(&damage_field));
+    DamageEvent changed_target{
+        damage_field.world.unit_entities[2], damage_field.world.unit_entities[1], 11};
+    CHECK(damage_event_queue_append(&damage_field.world.damage_events, &changed_target));
+    CHECK(sim_hash_state(&damage_field.world) != sim_hash_state(&damage_write.world));
+    CHECK(hash_world_init(&damage_field));
+    DamageEvent changed_amount{
+        damage_field.world.unit_entities[2], damage_field.world.unit_entities[0], 12};
+    CHECK(damage_event_queue_append(&damage_field.world.damage_events, &changed_amount));
+    CHECK(sim_hash_state(&damage_field.world) != sim_hash_state(&damage_write.world));
 }
 
 static void swap_u32(uint32_t* values, uint32_t a, uint32_t b) {
@@ -177,6 +225,13 @@ TEST(sim, canonical_hash_excludes_pointers_unused_capacity_and_dense_order) {
     CHECK(baseline == sim_hash_state(&reordered.world));
     CHECK(std::memcmp(&expected.world, &reordered.world, sizeof(expected.world)) != 0);
 
+    ComponentPoolOrderedView derived{};
+    CHECK(component_pool_ordered_view(&reordered.world.transforms.membership, &derived));
+    CHECK(derived.count > 0u);
+    reordered.world.transforms.membership.ordered_entities[0] = EntityId{HANDLE_NULL};
+    reordered.world.transforms.membership.ordered_count = 1u;
+    reordered.world.transforms.membership.ordered_dirty = 0u;
+
     reordered.world.entities.generations[50] = 123u;
     reordered.world.entities.liveness[50] = 1u;
     reordered.world.entities.free_stack[50] = 50u;
@@ -192,6 +247,14 @@ TEST(sim, canonical_hash_excludes_pointers_unused_capacity_and_dense_order) {
     reordered.world.health.current[50] = 106;
     reordered.world.health.maximum[50] = 107;
     reordered.world.health.damage_cooldown[50] = 108u;
+    reordered.world.damage_events.buffers[0][7] =
+        DamageEvent{EntityId{HANDLE_NULL}, reordered.world.unit_entities[0], 999};
+    reordered.world.damage_events.buffers[1][7] =
+        DamageEvent{reordered.world.unit_entities[1], reordered.world.unit_entities[2], 888};
+    uint8_t read_index = reordered.world.damage_events.read_index;
+    reordered.world.damage_events.read_index = reordered.world.damage_events.write_index;
+    reordered.world.damage_events.write_index = read_index;
+
     CHECK(sim_hash_state(&reordered.world) == baseline);
 
     swap_members(&reordered.world.transforms.membership, 0u, 3u);
@@ -264,6 +327,20 @@ TEST(sim, canonical_diff_reports_matching_field_and_index_domain) {
     CHECK(diff.field == SIM_STATE_FIELD_ENTITY_FREE_STACK);
     CHECK(diff.index == 0u);
 
+    HashWorldFixture event_expected{}, event_actual{};
+    CHECK(hash_world_init(&event_expected));
+    CHECK(hash_world_init(&event_actual));
+    DamageEvent expected_event{
+        event_expected.world.unit_entities[2], event_expected.world.unit_entities[0], 5};
+    DamageEvent actual_event{
+        event_actual.world.unit_entities[2], event_actual.world.unit_entities[0], 6};
+    CHECK(damage_event_queue_append(&event_expected.world.damage_events, &expected_event));
+    CHECK(damage_event_queue_append(&event_actual.world.damage_events, &actual_event));
+    CHECK(sim_diff_state(&event_expected.world, &event_actual.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_AMOUNT);
+    CHECK(diff.index == 0u);
+    CHECK(std::strcmp(sim_state_field_name(diff.field), "damage_event_write_amount") == 0);
+
     CHECK(hash_world_init(&actual, 77u, SimWorldConfig{64u, 8u, 8u}));
     CHECK(!sim_diff_state(&expected.world, &actual.world, &diff));
     CHECK(diff.field == SIM_STATE_FIELD_NONE);
@@ -279,4 +356,11 @@ TEST(sim, invalid_canonical_hash_and_diff_fail_closed) {
     CHECK(sim_diff_state(&invalid.world, &invalid.world, &diff));
     CHECK(diff.field == SIM_STATE_FIELD_INVALID);
     CHECK(diff.index == SIM_STATE_DIFF_NO_INDEX);
+
+    HashWorldFixture stale_event{};
+    CHECK(hash_world_init(&stale_event));
+    DamageEvent event{
+        EntityId{HANDLE_NULL}, EntityId{handle_make(7u, 1u)}, 1};
+    CHECK(damage_event_queue_append(&stale_event.world.damage_events, &event));
+    CHECK(sim_hash_state(&stale_event.world) == 0u);
 }

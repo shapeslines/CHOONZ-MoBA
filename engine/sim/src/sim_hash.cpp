@@ -85,6 +85,30 @@ static bool membership_valid(const ComponentPool* pool, const EntityManager* man
     return observed == pool->count;
 }
 
+static bool damage_event_valid_for_world(const SimWorld* world, const DamageEvent& event) {
+    return world && damage_event_is_canonical(&event) &&
+           entity_manager_is_alive(&world->entities, event.target) &&
+           health_pool_has(&world->health, event.target) &&
+           (event.source.h == HANDLE_NULL ||
+            entity_manager_is_alive(&world->entities, event.source));
+}
+
+static bool damage_queue_valid_for_world(const SimWorld* world) {
+    if (!world || !damage_event_queue_is_valid(&world->damage_events) ||
+        world->damage_events.capacity != world->config.damage_event_capacity) return false;
+    const uint32_t phases[] = {
+        world->damage_events.read_index, world->damage_events.write_index};
+    for (uint32_t phase = 0u; phase < 2u; ++phase) {
+        uint32_t buffer = phases[phase];
+        for (uint32_t ordinal = 0u;
+             ordinal < world->damage_events.counts[buffer]; ++ordinal) {
+            if (!damage_event_valid_for_world(
+                    world, world->damage_events.buffers[buffer][ordinal])) return false;
+        }
+    }
+    return true;
+}
+
 static bool canonical_world_valid(const SimWorld* world) {
     if (!world || !config_valid(world->config) ||
         !entity_manager_valid(&world->entities, world->config.max_entities) ||
@@ -97,7 +121,7 @@ static bool canonical_world_valid(const SimWorld* world) {
         !world->transforms.position_x || !world->transforms.position_y || !world->transforms.facing ||
         !world->velocities.velocity_x || !world->velocities.velocity_y ||
         !world->health.current || !world->health.maximum || !world->health.damage_cooldown ||
-        !damage_event_queue_is_valid(&world->damage_events) ||
+        !damage_queue_valid_for_world(world) ||
         !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
         return false;
 
@@ -171,6 +195,25 @@ static uint64_t hash_health(uint64_t hash, const SimWorld* world) {
     return hash;
 }
 
+static uint64_t hash_damage_event(uint64_t hash, const DamageEvent& event) {
+    hash = hash_u32_le(hash, event.source.h);
+    hash = hash_u32_le(hash, event.target.h);
+    return hash_u32_le(hash, i32_bits(event.amount));
+}
+
+static uint64_t hash_damage_events(uint64_t hash, const SimWorld* world) {
+    uint32_t read = world->damage_events.read_index;
+    hash = hash_u32_le(hash, world->damage_events.counts[read]);
+    for (uint32_t ordinal = 0u; ordinal < world->damage_events.counts[read]; ++ordinal)
+        hash = hash_damage_event(hash, world->damage_events.buffers[read][ordinal]);
+
+    uint32_t write = world->damage_events.write_index;
+    hash = hash_u32_le(hash, world->damage_events.counts[write]);
+    for (uint32_t ordinal = 0u; ordinal < world->damage_events.counts[write]; ++ordinal)
+        hash = hash_damage_event(hash, world->damage_events.buffers[write][ordinal]);
+    return hash;
+}
+
 uint64_t sim_hash_state(const SimWorld* world) {
     if (!canonical_world_valid(world)) return 0u;
 
@@ -178,6 +221,7 @@ uint64_t sim_hash_state(const SimWorld* world) {
     hash = hash_u64_le(hash, world->tick);
     hash = hash_u32_le(hash, world->config.max_entities);
     hash = hash_u32_le(hash, world->config.initial_unit_count);
+    hash = hash_u32_le(hash, world->config.damage_event_capacity);
     hash = hash_u64_le(hash, world->rng.state);
     hash = hash_u64_le(hash, world->rng.inc);
     hash = hash_u32_le(hash, world->entities.capacity);
@@ -197,6 +241,8 @@ uint64_t sim_hash_state(const SimWorld* world) {
     hash = hash_u32_le(hash, world->pending_destroy_count);
     for (uint32_t ordinal = 0u; ordinal < world->pending_destroy_count; ++ordinal)
         hash = hash_u32_le(hash, world->pending_destroy[ordinal].h);
+
+    hash = hash_damage_events(hash, world);
 
     hash = hash_transform(hash, world);
     hash = hash_velocity(hash, world);
@@ -219,6 +265,60 @@ static void set_diff(SimStateDiff* diff, SimStateField field, uint32_t index,
         return true;                                                                     \
     }                                                                                    \
 } while (0)
+
+static bool diff_damage_event_record(const DamageEvent& expected, const DamageEvent& actual,
+                                     uint32_t ordinal, SimStateField source_field,
+                                     SimStateField target_field, SimStateField amount_field,
+                                     SimStateDiff* out_diff) {
+    if (expected.source.h != actual.source.h) {
+        set_diff(out_diff, source_field, ordinal, expected.source.h, actual.source.h);
+        return true;
+    }
+    if (expected.target.h != actual.target.h) {
+        set_diff(out_diff, target_field, ordinal, expected.target.h, actual.target.h);
+        return true;
+    }
+    if (expected.amount != actual.amount) {
+        set_diff(out_diff, amount_field, ordinal,
+                 i32_bits(expected.amount), i32_bits(actual.amount));
+        return true;
+    }
+    return false;
+}
+
+static bool diff_damage_events(const SimWorld* expected, const SimWorld* actual,
+                               SimStateDiff* out_diff) {
+    uint32_t expected_read = expected->damage_events.read_index;
+    uint32_t actual_read = actual->damage_events.read_index;
+    DIFF_SCALAR(expected->damage_events.counts[expected_read],
+                actual->damage_events.counts[actual_read],
+                SIM_STATE_FIELD_DAMAGE_EVENT_READ_COUNT);
+    for (uint32_t ordinal = 0u;
+         ordinal < expected->damage_events.counts[expected_read]; ++ordinal) {
+        if (diff_damage_event_record(
+                expected->damage_events.buffers[expected_read][ordinal],
+                actual->damage_events.buffers[actual_read][ordinal], ordinal,
+                SIM_STATE_FIELD_DAMAGE_EVENT_READ_SOURCE,
+                SIM_STATE_FIELD_DAMAGE_EVENT_READ_TARGET,
+                SIM_STATE_FIELD_DAMAGE_EVENT_READ_AMOUNT, out_diff)) return true;
+    }
+
+    uint32_t expected_write = expected->damage_events.write_index;
+    uint32_t actual_write = actual->damage_events.write_index;
+    DIFF_SCALAR(expected->damage_events.counts[expected_write],
+                actual->damage_events.counts[actual_write],
+                SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_COUNT);
+    for (uint32_t ordinal = 0u;
+         ordinal < expected->damage_events.counts[expected_write]; ++ordinal) {
+        if (diff_damage_event_record(
+                expected->damage_events.buffers[expected_write][ordinal],
+                actual->damage_events.buffers[actual_write][ordinal], ordinal,
+                SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_SOURCE,
+                SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_TARGET,
+                SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_AMOUNT, out_diff)) return true;
+    }
+    return false;
+}
 
 static bool diff_transform(const SimWorld* expected, const SimWorld* actual,
                            SimStateDiff* out_diff) {
@@ -359,6 +459,8 @@ bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDi
                 SIM_STATE_FIELD_CONFIG_MAX_ENTITIES);
     DIFF_SCALAR(expected->config.initial_unit_count, actual->config.initial_unit_count,
                 SIM_STATE_FIELD_CONFIG_INITIAL_UNIT_COUNT);
+    DIFF_SCALAR(expected->config.damage_event_capacity, actual->config.damage_event_capacity,
+                SIM_STATE_FIELD_CONFIG_DAMAGE_EVENT_CAPACITY);
     DIFF_SCALAR(expected->rng.state, actual->rng.state, SIM_STATE_FIELD_RNG_STATE);
     DIFF_SCALAR(expected->rng.inc, actual->rng.inc, SIM_STATE_FIELD_RNG_INC);
     DIFF_SCALAR(expected->entities.capacity, actual->entities.capacity,
@@ -408,6 +510,8 @@ bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDi
         }
     }
 
+    if (diff_damage_events(expected, actual, out_diff)) return true;
+
     if (diff_transform(expected, actual, out_diff) ||
         diff_velocity(expected, actual, out_diff) ||
         diff_health(expected, actual, out_diff)) return true;
@@ -423,6 +527,7 @@ const char* sim_state_field_name(SimStateField field) {
         case SIM_STATE_FIELD_TICK: return "tick";
         case SIM_STATE_FIELD_CONFIG_MAX_ENTITIES: return "config_max_entities";
         case SIM_STATE_FIELD_CONFIG_INITIAL_UNIT_COUNT: return "config_initial_unit_count";
+        case SIM_STATE_FIELD_CONFIG_DAMAGE_EVENT_CAPACITY: return "config_damage_event_capacity";
         case SIM_STATE_FIELD_RNG_STATE: return "rng_state";
         case SIM_STATE_FIELD_RNG_INC: return "rng_inc";
         case SIM_STATE_FIELD_ENTITY_CAPACITY: return "entity_capacity";
@@ -435,6 +540,14 @@ const char* sim_state_field_name(SimStateField field) {
         case SIM_STATE_FIELD_UNIT_ENTITY: return "unit_entity";
         case SIM_STATE_FIELD_PENDING_DESTROY_COUNT: return "pending_destroy_count";
         case SIM_STATE_FIELD_PENDING_DESTROY_ENTITY: return "pending_destroy_entity";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_READ_COUNT: return "damage_event_read_count";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_READ_SOURCE: return "damage_event_read_source";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_READ_TARGET: return "damage_event_read_target";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_READ_AMOUNT: return "damage_event_read_amount";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_COUNT: return "damage_event_write_count";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_SOURCE: return "damage_event_write_source";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_TARGET: return "damage_event_write_target";
+        case SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_AMOUNT: return "damage_event_write_amount";
         case SIM_STATE_FIELD_TRANSFORM_COUNT: return "transform_count";
         case SIM_STATE_FIELD_TRANSFORM_ENTITY: return "transform_entity";
         case SIM_STATE_FIELD_POSITION_X: return "position_x";

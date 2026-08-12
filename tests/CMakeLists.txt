@@ -109,7 +109,7 @@ add_test(NAME replay_inspect
     COMMAND $<TARGET_FILE:moba_replay> inspect "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_inspect PROPERTIES
     FIXTURES_REQUIRED replay_file
-    PASS_REGULAR_EXPRESSION "logic_hash=0x7902599e173f87a6")
+    PASS_REGULAR_EXPRESSION "logic_hash=0xab96814425ba80a4")
 
 add_test(NAME replay_verify
     COMMAND $<TARGET_FILE:moba_replay> verify "${REPLAY_FIXTURE_FILE}")
