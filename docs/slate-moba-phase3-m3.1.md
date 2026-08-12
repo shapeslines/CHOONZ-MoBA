@@ -61,7 +61,7 @@ component pools while preserving the established replay/hash stream as the regre
 | S1 | Add arena-backed `EntityManager` | create/alive/destroy/recycle tests pass; stale IDs fail; exhaustion is explicit; generation zero is never issued | done 2026-08-12 |
 | S2 | Add generic sparse/dense membership core | add/remove/has/dense lookup stay O(1); swap-remove repairs sparse and back-reference maps under adversarial sequences | done 2026-08-12 |
 | S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | done 2026-08-12 |
-| S4 | Integrate deferred destruction into `SimWorld` | queued destroys commit once at the tick boundary, remove all components, invalidate stale IDs, and cannot partially mutate on failure | queued |
+| S4 | Integrate deferred destruction into `SimWorld` | queued destroys commit once at the tick boundary, remove all components, invalidate stale IDs, and cannot partially mutate on failure | done 2026-08-12 |
 | S5 | Migrate canonical hash/diff and replay oracle | all authoritative entity/pool fields have an explicit LE order; logic hash is deliberately bumped; run-twice and exact-divergence tests stay green | queued |
 | S6 | Close M3.1 | full `/WX` Debug/Release CTest and boundary gates pass; docs are current; M3.2 gets a separate slate | queued |
 
@@ -102,3 +102,10 @@ and Release. M3.2 scheduling remains a separate decision and implementation slat
   The deliberate M3.1 logic hash is now `0x7902599e173f87a6`; replay v1 and 16-byte commands are
   unchanged. Debug and Release affected suites, CLI round-trip/error fixtures, boundary scan, and
   the 10,000-tick oracle all pass. Canonical ECS metadata hashing remains fenced to S5.
+- **S4:** Added `sim_destroy_deferred` and end-of-tick commit in literal request order. Focused
+  tests prove null/stale/duplicate/full requests are atomic, queued entities remain command-usable
+  for the current tick, Health/Velocity/Transform and unit mappings disappear exactly at the
+  boundary, stale IDs never resolve after reuse, and release order produces deterministic LIFO
+  recycling. A rejected tick preserves its pending queue byte-for-byte, while componentless
+  unmapped live entities also destroy cleanly. Debug/Release affected suites, replay fixtures,
+  10,000-tick oracle, and boundary scan remain green under the `ci` preset.

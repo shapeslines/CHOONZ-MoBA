@@ -62,6 +62,7 @@ size_t sim_world_memory_required(SimWorldConfig config);
 // Initialization is transactional. Invalid configuration or insufficient arena
 // budget returns false without changing the world or the arena offset.
 bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig config);
+bool sim_destroy_deferred(SimWorld* world, EntityId entity);
 bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, uint32_t unit_count);
 bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* commands);
 bool sim_tick(SimWorld* world, const SimCommandBuffer* commands);

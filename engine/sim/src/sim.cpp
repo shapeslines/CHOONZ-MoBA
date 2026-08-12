@@ -1,5 +1,7 @@
 #include "sim/sim.h"
 
+#include "core/assert.h"
+
 static mm::fix fix_add_wrap(mm::fix a, mm::fix b) {
     return static_cast<mm::fix>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
 }
@@ -91,6 +93,18 @@ bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, 
     }
 }
 
+bool sim_destroy_deferred(SimWorld* world, EntityId entity) {
+    if (!world || !sim_config_valid(world->config) || !world->pending_destroy ||
+        !entity_manager_is_alive(&world->entities, entity) ||
+        world->pending_destroy_count >= world->config.max_entities) return false;
+    for (uint32_t i = 0u; i < world->pending_destroy_count; ++i) {
+        if (world->pending_destroy[i].h == entity.h) return false;
+    }
+    world->pending_destroy[world->pending_destroy_count] = entity;
+    ++world->pending_destroy_count;
+    return true;
+}
+
 bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* commands) {
     if (!world || !sim_config_valid(world->config) ||
         world->entities.capacity != world->config.max_entities ||
@@ -111,6 +125,13 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
             !transform_pool_has(&world->transforms, entity) ||
             !velocity_pool_has(&world->velocities, entity) ||
             !health_pool_has(&world->health, entity)) return false;
+    }
+    for (uint32_t i = 0u; i < world->pending_destroy_count; ++i) {
+        EntityId entity = world->pending_destroy[i];
+        if (!entity_manager_is_alive(&world->entities, entity)) return false;
+        for (uint32_t previous = 0u; previous < i; ++previous) {
+            if (world->pending_destroy[previous].h == entity.h) return false;
+        }
     }
     if (!commands) return true;
     if (commands->count > SIM_MAX_COMMANDS_PER_TICK) return false;
@@ -169,6 +190,33 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
     }
 
     (void)mm::pcg32_next(&world->rng); // exercise the serialized/hashed sim RNG stream each tick
+
+    // Destruction is the tick-boundary commit. Requests retain their literal order;
+    // typed pools may swap dense storage, but each subsequent request resolves by
+    // exact EntityId and release order deterministically defines free-stack order.
+    for (uint32_t request = 0u; request < world->pending_destroy_count; ++request) {
+        EntityId entity = world->pending_destroy[request];
+        if (health_pool_has(&world->health, entity)) {
+            bool removed = health_pool_remove(&world->health, entity);
+            ENSURE(removed);
+        }
+        if (velocity_pool_has(&world->velocities, entity)) {
+            bool removed = velocity_pool_remove(&world->velocities, entity);
+            ENSURE(removed);
+        }
+        if (transform_pool_has(&world->transforms, entity)) {
+            bool removed = transform_pool_remove(&world->transforms, entity);
+            ENSURE(removed);
+        }
+        for (uint32_t unit = 0u; unit < SIM_MAX_UNITS; ++unit) {
+            if (world->unit_entities[unit].h == entity.h)
+                world->unit_entities[unit] = EntityId{HANDLE_NULL};
+        }
+        bool released = entity_manager_release(&world->entities, entity);
+        ENSURE(released);
+        world->pending_destroy[request] = EntityId{HANDLE_NULL};
+    }
+    world->pending_destroy_count = 0u;
     ++world->tick;
     return true;
 }
