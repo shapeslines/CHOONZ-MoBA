@@ -20,6 +20,20 @@ void sim_init(SimWorld* world, uint64_t seed) {
     }
 }
 
+bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, uint32_t unit_count) {
+    if (!command || player_count == 0 || player_count > SIM_MAX_PLAYERS ||
+        unit_count > SIM_MAX_UNITS || command->player_id >= player_count ||
+        command->unit_index >= unit_count) return false;
+    switch (command->kind) {
+        case SIM_COMMAND_SET_VELOCITY:
+            return command->amount == 0;
+        case SIM_COMMAND_DAMAGE:
+            return command->value_x == 0 && command->value_y == 0 && command->amount >= 0;
+        default:
+            return false;
+    }
+}
+
 bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* commands) {
     if (!world || world->unit_count > SIM_MAX_UNITS) return false;
     if (!commands) return true;
@@ -27,18 +41,8 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
     if (commands->count > 0 && !commands->commands) return false;
 
     for (uint32_t i = 0; i < commands->count; ++i) {
-        const SimCommand& command = commands->commands[i];
-        if (command.player_id >= SIM_MAX_PLAYERS || command.unit_index >= world->unit_count) return false;
-        switch (command.kind) {
-            case SIM_COMMAND_SET_VELOCITY:
-                if (command.amount != 0) return false;
-                break;
-            case SIM_COMMAND_DAMAGE:
-                if (command.value_x != 0 || command.value_y != 0 || command.amount < 0) return false;
-                break;
-            default:
-                return false;
-        }
+        if (!sim_command_is_canonical(&commands->commands[i], SIM_MAX_PLAYERS, world->unit_count))
+            return false;
     }
     return true;
 }

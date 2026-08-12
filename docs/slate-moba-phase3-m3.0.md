@@ -71,7 +71,7 @@ green, so changes to entity storage are immediately measurable against an establ
 | S0 | Restore the shared simulation constants contract | `core/sim_config.h` exists, consumers compile against it, and a focused test proves 30 Hz/Q16.16 values without duplicate definitions | done 2026-08-12 |
 | S1 | Scaffold bounded `eng_serialize` plus platform-free `eng_sim` and placeholder world | CMake exposes `eng::serialize` and `eng::sim`; bounded LE I/O is sticky/atomic; `SimWorld` owns fixed-order SoA position/velocity/health/cooldown arrays plus tick and PCG32 state; invalid command buffers do not mutate it | done 2026-08-12 |
 | S2 | Add canonical state hashing and first-field diffing | FNV-1a hashes every live gameplay field and RNG word byte-wise in documented order; changes to each field affect the hash; padding/capacity do not; diagnostics name the first field and unit | done 2026-08-12 |
-| S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | queued |
+| S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | done 2026-08-12 |
 | S4 | Prove 10,000-tick determinism and exact divergence | Two same-seed/input runs match every tick in Debug and Release; a controlled perturbation at tick N reports N as the first divergence | queued |
 | S5 | Enforce the boundary and close M3.0 | Debug/Release `/WX` and CTest pass; sim source has no float, unordered iteration, wall-clock, platform, or renderer dependency; ROADMAP/JOURNAL/next-session are current | queued |
 
@@ -91,6 +91,14 @@ green, so changes to entity storage are immediately measurable against an establ
 M3.0 closes only when the self-check and deliberate-divergence test pass in both Debug and Release,
 the replay persistence path is verified through the platform API, and CI is green. Then open a
 separate M3.1 ECS slate that uses this hash stream as its regression oracle.
+
+## Slice evidence
+
+- **S3:** Debug and Release focused builds passed for `moba_replay` and `engine_tests`. The CTest
+  fixture recorded, inspected, and verified a 10,000-tick replay (`134812` bytes, `923` commands,
+  final hash `0xb85d4b632571948c`). The CLI error test observed exit `1` for usage/I/O, exit `2` for
+  corrupt magic/version/logic/rate, truncation, invalid command/player/unit and trailing bytes, and
+  exit `3` for a changed post-tick hash. The in-memory codec re-encoded byte-identically.
 
 ## Residuals
 

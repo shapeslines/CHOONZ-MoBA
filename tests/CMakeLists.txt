@@ -25,6 +25,7 @@ add_executable(engine_tests
     serialize/serialize_tests.cpp
     sim/sim_config_tests.cpp
     sim/sim_hash_tests.cpp
+    sim/replay_tests.cpp
     sim/sim_tests.cpp
     render/render_tests.cpp
     tga/tga_tests.cpp
@@ -66,3 +67,37 @@ add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
 add_test(NAME det_precise COMMAND det_tests)        # /fp:precise golden hash
 add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (must match)
+
+# --- replay CLI: one fixture records a real file; consumers independently inspect,
+#     verify, and exercise exact public exit classes before cleanup runs.
+set(REPLAY_FIXTURE_FILE "${CMAKE_CURRENT_BINARY_DIR}/moba_replay_fixture.mbr")
+add_test(NAME replay_record
+    COMMAND $<TARGET_FILE:moba_replay> record --out "${REPLAY_FIXTURE_FILE}"
+            --ticks 10000 --seed 1 --players 2)
+set_tests_properties(replay_record PROPERTIES
+    FIXTURES_SETUP replay_file
+    PASS_REGULAR_EXPRESSION "recorded ticks=10000")
+
+add_test(NAME replay_inspect
+    COMMAND $<TARGET_FILE:moba_replay> inspect "${REPLAY_FIXTURE_FILE}")
+set_tests_properties(replay_inspect PROPERTIES
+    FIXTURES_REQUIRED replay_file
+    PASS_REGULAR_EXPRESSION "logic_hash=0xf1b4e2b29b1e9643")
+
+add_test(NAME replay_verify
+    COMMAND $<TARGET_FILE:moba_replay> verify "${REPLAY_FIXTURE_FILE}")
+set_tests_properties(replay_verify PROPERTIES
+    FIXTURES_REQUIRED replay_file
+    PASS_REGULAR_EXPRESSION "verified ticks=10000")
+
+add_test(NAME replay_cli_errors
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/replay/replay_cli_errors.ps1"
+            -Exe $<TARGET_FILE:moba_replay>
+            -Replay "${REPLAY_FIXTURE_FILE}"
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
+set_tests_properties(replay_cli_errors PROPERTIES FIXTURES_REQUIRED replay_file)
+
+add_test(NAME replay_cleanup
+    COMMAND ${CMAKE_COMMAND} -E rm -f "${REPLAY_FIXTURE_FILE}")
+set_tests_properties(replay_cleanup PROPERTIES FIXTURES_CLEANUP replay_file)

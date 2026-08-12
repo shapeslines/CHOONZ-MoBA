@@ -50,5 +50,6 @@ typedef struct SimWorld {
 } SimWorld;
 
 void sim_init(SimWorld* world, uint64_t seed);
+bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, uint32_t unit_count);
 bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* commands);
 bool sim_tick(SimWorld* world, const SimCommandBuffer* commands);
