@@ -439,7 +439,7 @@ so Phase 4 consumes exactly this. **Exercises:** Renderer seam, Build (PRIVATE V
 **determinism harness built before there is content to break it.** This is the project's spine and the
 reviews' most-watched risk.
 
-> **Complete:** M3.0. **Now:** M3.1 → M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
+> **Complete:** M3.0–M3.1. **Now:** M3.2 → M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
 > 🔴 Determinism is global and fragile: one stray float, unordered iteration, or wall-clock read
 > desyncs. The state-hash self-check is the only humane way to catch it — **build it first.**
 
@@ -469,13 +469,22 @@ state hash every tick is fine at 30 Hz / hundreds of units; revisit dirty-hashin
 
 ---
 
-### M3.1 — Entity model + sparse-set SoA component pools  · L
+### M3.1 — Entity model + sparse-set SoA component pools  · L  ✅ COMPLETE 2026-08-12
 **Goal:** the real ECS storage.
 **Deliverables:** `EntityId` (handle+generation per ADR-0003), `EntityManager` free-list, deferred
 end-of-tick destruction; `ComponentPool` (sparse + dense + back-ref); concrete SoA pools (Transform/
 Velocity/Health) with `fix` fields; `pool_add/remove/has/get`.
 **DoD:** add/remove/has/get unit-tested; generation guards a stale `EntityId`; pools live entirely in
 arenas (no malloc).
+**Observed:** `SimWorldConfig` defaults to 16,384 entities and 64 stable replay units; transactional
+arena sizing, 16-bit generations plus explicit liveness, ascending-fresh/LIFO-recycled identity,
+typed Transform/Velocity/Health pools, and ordered deferred destruction are implemented. Replay v1
+retains 16-byte slot commands and deliberately bumps `SIM_LOGIC_HASH` to `0x7902599e173f87a6`.
+Canonical ECS hashing excludes pointers, unused capacity, and sparse/dense storage order while
+covering lifecycle, mappings, queue order, membership, and every typed value. Debug and Release
+`/WX` builds pass all 22 CTest entries; the 10,000-tick golden is `0x981212877a575730`, and the
+controlled mutation reports `tick=4321 field=position_x entity=7`. M3.2 is queued separately in
+[`slate-moba-phase3-m3.2.md`](slate-moba-phase3-m3.2.md).
 **Risks:** swap-remove reorders dense — see M3.2. **Exercises:** ECS, Memory.
 
 ---

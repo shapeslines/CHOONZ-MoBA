@@ -23,6 +23,10 @@ add_executable(engine_tests
     containers/container_tests.cpp
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
+    sim/component_pool_tests.cpp
+    sim/components_tests.cpp
+    sim/deferred_destroy_tests.cpp
+    sim/entity_tests.cpp
     sim/sim_config_tests.cpp
     sim/sim_hash_tests.cpp
     sim/replay_tests.cpp
@@ -67,6 +71,10 @@ add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
 add_test(NAME platform    COMMAND engine_tests --suite platform)  # file I/O (M2.1)
 add_test(NAME serialize   COMMAND engine_tests --suite serialize)
+add_test(NAME sim_component_pool COMMAND engine_tests --suite sim_component_pool)
+add_test(NAME sim_components COMMAND engine_tests --suite sim_components)
+add_test(NAME sim_destroy COMMAND engine_tests --suite sim_destroy)
+add_test(NAME sim_entity  COMMAND engine_tests --suite sim_entity)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
@@ -75,7 +83,7 @@ add_test(NAME det_precise COMMAND det_tests)        # /fp:precise golden hash
 add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (must match)
 add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)
 set_tests_properties(sim_determinism PROPERTIES
-    PASS_REGULAR_EXPRESSION "controlled divergence tick=4321 field=position_x unit=7")
+    PASS_REGULAR_EXPRESSION "controlled divergence tick=4321 field=position_x entity=7")
 
 add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
@@ -95,7 +103,7 @@ add_test(NAME replay_inspect
     COMMAND $<TARGET_FILE:moba_replay> inspect "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_inspect PROPERTIES
     FIXTURES_REQUIRED replay_file
-    PASS_REGULAR_EXPRESSION "logic_hash=0xf1b4e2b29b1e9643")
+    PASS_REGULAR_EXPRESSION "logic_hash=0x7902599e173f87a6")
 
 add_test(NAME replay_verify
     COMMAND $<TARGET_FILE:moba_replay> verify "${REPLAY_FIXTURE_FILE}")

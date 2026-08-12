@@ -1,23 +1,82 @@
 #include "sim/sim.h"
 
-#include <cstring>
+#include "core/assert.h"
 
 static mm::fix fix_add_wrap(mm::fix a, mm::fix b) {
     return static_cast<mm::fix>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
 }
 
-void sim_init(SimWorld* world, uint64_t seed) {
-    if (!world) return;
-    std::memset(world, 0, sizeof(*world));
-    world->unit_count = SIM_MAX_UNITS;
-    mm::pcg32_seed(&world->rng, seed, 1u);
-    for (uint32_t i = 0; i < world->unit_count; ++i) {
+static bool sim_config_valid(SimWorldConfig config) {
+    return config.max_entities > 0u && config.max_entities <= HANDLE_INDEX_MASK + 1u &&
+           config.initial_unit_count <= SIM_MAX_UNITS &&
+           config.initial_unit_count <= config.max_entities;
+}
+
+static bool add_required(size_t* total, size_t required) {
+    if (!total || required == 0u || required > SIZE_MAX - *total) return false;
+    *total += required;
+    return true;
+}
+
+SimWorldConfig sim_world_config_default(void) {
+    return SimWorldConfig{SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS};
+}
+
+size_t sim_world_memory_required(SimWorldConfig config) {
+    if (!sim_config_valid(config)) return 0u;
+    size_t total = 0u;
+    if (!add_required(&total, entity_manager_memory_required(config.max_entities)) ||
+        !add_required(&total, transform_pool_memory_required(
+                                  config.max_entities, config.max_entities)) ||
+        !add_required(&total, velocity_pool_memory_required(
+                                  config.max_entities, config.max_entities)) ||
+        !add_required(&total, health_pool_memory_required(
+                                  config.max_entities, config.max_entities))) return 0u;
+
+    size_t destroy_bytes = sizeof(EntityId) * static_cast<size_t>(config.max_entities);
+    if (destroy_bytes > SIZE_MAX - (alignof(EntityId) - 1u) ||
+        !add_required(&total, destroy_bytes + alignof(EntityId) - 1u)) return 0u;
+    return total;
+}
+
+bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig config) {
+    size_t required = sim_world_memory_required(config);
+    if (!world || !arena || !arena->base || arena->offset > arena->reserved ||
+        required == 0u || required > arena->reserved - arena->offset) return false;
+
+    TempMemory temp = temp_begin(arena);
+    SimWorld staged{};
+    staged.config = config;
+    if (!entity_manager_init(&staged.entities, arena, config.max_entities) ||
+        !transform_pool_init(&staged.transforms, arena,
+                             config.max_entities, config.max_entities) ||
+        !velocity_pool_init(&staged.velocities, arena,
+                            config.max_entities, config.max_entities) ||
+        !health_pool_init(&staged.health, arena,
+                          config.max_entities, config.max_entities)) {
+        temp_end(temp);
+        return false;
+    }
+    staged.pending_destroy = static_cast<EntityId*>(arena_push_zero(
+        arena, sizeof(EntityId) * static_cast<size_t>(config.max_entities), alignof(EntityId)));
+    mm::pcg32_seed(&staged.rng, seed, 1u);
+
+    for (uint32_t i = 0; i < config.initial_unit_count; ++i) {
+        EntityId entity = entity_manager_create(&staged.entities);
         int32_t grid_x = static_cast<int32_t>(i % 8u) - 4;
         int32_t grid_y = static_cast<int32_t>(i / 8u) - 4;
-        world->position_x[i] = mm::fix_from_int(grid_x);
-        world->position_y[i] = mm::fix_from_int(grid_y);
-        world->health[i] = 100;
+        if (entity.h == HANDLE_NULL ||
+            !transform_pool_add(&staged.transforms, entity,
+                                mm::fix_from_int(grid_x), mm::fix_from_int(grid_y), 0) ||
+            !velocity_pool_add(&staged.velocities, entity, 0, 0) ||
+            !health_pool_add(&staged.health, entity, 100, 100, 0u)) {
+            temp_end(temp);
+            return false;
+        }
+        staged.unit_entities[i] = entity;
     }
+    *world = staged;
+    return true;
 }
 
 bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, uint32_t unit_count) {
@@ -34,15 +93,54 @@ bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, 
     }
 }
 
+bool sim_destroy_deferred(SimWorld* world, EntityId entity) {
+    if (!world || !sim_config_valid(world->config) || !world->pending_destroy ||
+        !entity_manager_is_alive(&world->entities, entity) ||
+        world->pending_destroy_count >= world->config.max_entities) return false;
+    for (uint32_t i = 0u; i < world->pending_destroy_count; ++i) {
+        if (world->pending_destroy[i].h == entity.h) return false;
+    }
+    world->pending_destroy[world->pending_destroy_count] = entity;
+    ++world->pending_destroy_count;
+    return true;
+}
+
 bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* commands) {
-    if (!world || world->unit_count > SIM_MAX_UNITS) return false;
+    if (!world || !sim_config_valid(world->config) ||
+        world->entities.capacity != world->config.max_entities ||
+        world->transforms.membership.capacity != world->config.max_entities ||
+        world->velocities.membership.capacity != world->config.max_entities ||
+        world->health.membership.capacity != world->config.max_entities ||
+        !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
+        return false;
+
+    // Validate the complete unit-slot schedule before any command or integration
+    // mutation. Cleared slots are legal; mapped slots must resolve every required
+    // component through the exact live generation.
+    for (uint32_t i = 0; i < SIM_MAX_UNITS; ++i) {
+        EntityId entity = world->unit_entities[i];
+        if (entity.h == HANDLE_NULL) continue;
+        if (i >= world->config.initial_unit_count ||
+            !entity_manager_is_alive(&world->entities, entity) ||
+            !transform_pool_has(&world->transforms, entity) ||
+            !velocity_pool_has(&world->velocities, entity) ||
+            !health_pool_has(&world->health, entity)) return false;
+    }
+    for (uint32_t i = 0u; i < world->pending_destroy_count; ++i) {
+        EntityId entity = world->pending_destroy[i];
+        if (!entity_manager_is_alive(&world->entities, entity)) return false;
+        for (uint32_t previous = 0u; previous < i; ++previous) {
+            if (world->pending_destroy[previous].h == entity.h) return false;
+        }
+    }
     if (!commands) return true;
     if (commands->count > SIM_MAX_COMMANDS_PER_TICK) return false;
     if (commands->count > 0 && !commands->commands) return false;
 
     for (uint32_t i = 0; i < commands->count; ++i) {
-        if (!sim_command_is_canonical(&commands->commands[i], SIM_MAX_PLAYERS, world->unit_count))
-            return false;
+        const SimCommand& command = commands->commands[i];
+        if (!sim_command_is_canonical(&command, SIM_MAX_PLAYERS, SIM_MAX_UNITS) ||
+            world->unit_entities[command.unit_index].h == HANDLE_NULL) return false;
     }
     return true;
 }
@@ -55,28 +153,70 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
     if (commands) {
         for (uint32_t i = 0; i < commands->count; ++i) {
             const SimCommand& command = commands->commands[i];
-            uint32_t unit = command.unit_index;
+            EntityId entity = world->unit_entities[command.unit_index];
             if (command.kind == SIM_COMMAND_SET_VELOCITY) {
-                world->velocity_x[unit] = command.value_x;
-                world->velocity_y[unit] = command.value_y;
+                VelocityView velocity{};
+                bool found = velocity_pool_get(&world->velocities, entity, &velocity);
+                ENSURE(found);
+                *velocity.velocity_x = command.value_x;
+                *velocity.velocity_y = command.value_y;
             } else {
-                if (command.amount >= world->health[unit]) world->health[unit] = 0;
-                else world->health[unit] -= command.amount;
-                if (command.amount > 0) world->cooldown[unit] = 3;
+                HealthView health{};
+                bool found = health_pool_get(&world->health, entity, &health);
+                ENSURE(found);
+                if (command.amount >= *health.current) *health.current = 0;
+                else *health.current -= command.amount;
+                if (command.amount > 0) *health.damage_cooldown = 3u;
             }
         }
     }
 
-    // Ascending slot order is the placeholder's deterministic schedule.
-    for (uint32_t i = 0; i < world->unit_count; ++i) {
-        mm::fix dx = mm::fix_mul(world->velocity_x[i], SIM_DT_FIXED);
-        mm::fix dy = mm::fix_mul(world->velocity_y[i], SIM_DT_FIXED);
-        world->position_x[i] = fix_add_wrap(world->position_x[i], dx);
-        world->position_y[i] = fix_add_wrap(world->position_y[i], dy);
-        if (world->cooldown[i] > 0) --world->cooldown[i];
+    // Stable replay slots, not dense pool order, define the deterministic schedule.
+    for (uint32_t i = 0; i < SIM_MAX_UNITS; ++i) {
+        EntityId entity = world->unit_entities[i];
+        if (entity.h == HANDLE_NULL) continue;
+        TransformView transform{};
+        VelocityView velocity{};
+        HealthView health{};
+        bool found = transform_pool_get(&world->transforms, entity, &transform) &&
+                     velocity_pool_get(&world->velocities, entity, &velocity) &&
+                     health_pool_get(&world->health, entity, &health);
+        ENSURE(found);
+        mm::fix dx = mm::fix_mul(*velocity.velocity_x, SIM_DT_FIXED);
+        mm::fix dy = mm::fix_mul(*velocity.velocity_y, SIM_DT_FIXED);
+        *transform.position_x = fix_add_wrap(*transform.position_x, dx);
+        *transform.position_y = fix_add_wrap(*transform.position_y, dy);
+        if (*health.damage_cooldown > 0u) --*health.damage_cooldown;
     }
 
     (void)mm::pcg32_next(&world->rng); // exercise the serialized/hashed sim RNG stream each tick
+
+    // Destruction is the tick-boundary commit. Requests retain their literal order;
+    // typed pools may swap dense storage, but each subsequent request resolves by
+    // exact EntityId and release order deterministically defines free-stack order.
+    for (uint32_t request = 0u; request < world->pending_destroy_count; ++request) {
+        EntityId entity = world->pending_destroy[request];
+        if (health_pool_has(&world->health, entity)) {
+            bool removed = health_pool_remove(&world->health, entity);
+            ENSURE(removed);
+        }
+        if (velocity_pool_has(&world->velocities, entity)) {
+            bool removed = velocity_pool_remove(&world->velocities, entity);
+            ENSURE(removed);
+        }
+        if (transform_pool_has(&world->transforms, entity)) {
+            bool removed = transform_pool_remove(&world->transforms, entity);
+            ENSURE(removed);
+        }
+        for (uint32_t unit = 0u; unit < SIM_MAX_UNITS; ++unit) {
+            if (world->unit_entities[unit].h == entity.h)
+                world->unit_entities[unit] = EntityId{HANDLE_NULL};
+        }
+        bool released = entity_manager_release(&world->entities, entity);
+        ENSURE(released);
+        world->pending_destroy[request] = EntityId{HANDLE_NULL};
+    }
+    world->pending_destroy_count = 0u;
     ++world->tick;
     return true;
 }

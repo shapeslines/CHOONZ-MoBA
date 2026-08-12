@@ -51,6 +51,18 @@ static bool record_capacity(uint64_t tick_count, size_t* out_capacity) {
     return true;
 }
 
+static bool init_cli_world(SimWorld* world, Arena* arena, uint64_t seed) {
+    if (!world || !arena) return false;
+    SimWorldConfig config = sim_world_config_default();
+    size_t required = sim_world_memory_required(config);
+    if (required == 0u || !platform_arena_reserve(arena, required)) return false;
+    if (!sim_init(world, arena, seed, config)) {
+        platform_arena_release(arena);
+        return false;
+    }
+    return true;
+}
+
 static int command_record(int argc, char** argv) {
     const char* out_path = nullptr;
     uint64_t tick_count = DEFAULT_TICKS;
@@ -111,8 +123,13 @@ static int command_record(int argc, char** argv) {
     ReplayHeader header = replay_header_make(seed, player_count, tick_count);
     ReplayStatus status = replay_write_header(&writer, &header);
 
-    SimWorld world;
-    sim_init(&world, seed);
+    Arena world_arena{};
+    SimWorld world{};
+    if (!init_cli_world(&world, &world_arena, seed)) {
+        std::fprintf(stderr, "record: could not initialize simulation arena\n");
+        platform_arena_release(&arena);
+        return CLI_USAGE_OR_IO;
+    }
     for (uint64_t tick = 0; tick < tick_count && status == REPLAY_STATUS_OK; ++tick) {
         SimCommand commands[REPLAY_PLACEHOLDER_MAX_COMMANDS]{};
         uint32_t command_count =
@@ -121,6 +138,7 @@ static int command_record(int argc, char** argv) {
         if (!sim_tick(&world, &command_buffer)) {
             std::fprintf(stderr, "record: internal command validation failed at tick %" PRIu64 "\n",
                          tick);
+            platform_arena_release(&world_arena);
             platform_arena_release(&arena);
             return CLI_USAGE_OR_IO;
         }
@@ -129,12 +147,14 @@ static int command_record(int argc, char** argv) {
 
     if (status != REPLAY_STATUS_OK) {
         std::fprintf(stderr, "record: %s\n", replay_status_string(status));
+        platform_arena_release(&world_arena);
         platform_arena_release(&arena);
         return CLI_USAGE_OR_IO;
     }
     size_t size = byte_writer_size(&writer);
     if (!platform_file_write(out_path, bytes, size)) {
         std::fprintf(stderr, "record: could not atomically write '%s'\n", out_path);
+        platform_arena_release(&world_arena);
         platform_arena_release(&arena);
         return CLI_USAGE_OR_IO;
     }
@@ -142,6 +162,7 @@ static int command_record(int argc, char** argv) {
     std::printf("recorded ticks=%" PRIu64 " players=%u bytes=%zu final_hash=0x%016" PRIx64
                 " file=%s\n",
                 tick_count, player_count, size, sim_hash_state(&world), out_path);
+    platform_arena_release(&world_arena);
     platform_arena_release(&arena);
     return CLI_SUCCESS;
 }
@@ -251,9 +272,14 @@ static int command_verify(const char* path) {
     ByteReader reader;
     ReplayHeader header{};
     ReplayStatus status = read_header(&reader, loaded, &header);
-    SimWorld world;
-    sim_init(&world, header.seed);
-    uint64_t final_hash = sim_hash_state(&world);
+    Arena world_arena{};
+    SimWorld world{};
+    if (status == REPLAY_STATUS_OK && !init_cli_world(&world, &world_arena, header.seed)) {
+        std::fprintf(stderr, "verify: could not initialize simulation arena\n");
+        platform_arena_release(&loaded.arena);
+        return CLI_USAGE_OR_IO;
+    }
+    uint64_t final_hash = status == REPLAY_STATUS_OK ? sim_hash_state(&world) : 0u;
     SimCommand commands[SIM_MAX_COMMANDS_PER_TICK]{};
 
     for (uint64_t tick = 0; tick < header.tick_count && status == REPLAY_STATUS_OK; ++tick) {
@@ -273,6 +299,7 @@ static int command_verify(const char* path) {
                          "verify: divergence at tick %" PRIu64
                          ": expected=0x%016" PRIx64 " actual=0x%016" PRIx64 "\n",
                          tick, expected_hash, final_hash);
+            platform_arena_release(&world_arena);
             platform_arena_release(&loaded.arena);
             return CLI_DIVERGENCE;
         }
@@ -280,12 +307,14 @@ static int command_verify(const char* path) {
     if (status == REPLAY_STATUS_OK) status = replay_require_end(&reader);
     if (status != REPLAY_STATUS_OK) {
         std::fprintf(stderr, "verify: invalid replay: %s\n", replay_status_string(status));
+        if (world_arena.base) platform_arena_release(&world_arena);
         platform_arena_release(&loaded.arena);
         return CLI_INVALID_REPLAY;
     }
 
     std::printf("verified ticks=%" PRIu64 " final_hash=0x%016" PRIx64 " file=%s\n",
                 header.tick_count, final_hash, path);
+    platform_arena_release(&world_arena);
     platform_arena_release(&loaded.arena);
     return CLI_SUCCESS;
 }

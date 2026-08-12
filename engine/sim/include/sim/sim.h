@@ -2,13 +2,17 @@
 
 #include <stdint.h>
 
+#include "core/mem.h"
 #include "math/fix.h"
 #include "math/rng.h"
+#include "sim/components.h"
+#include "sim/entity.h"
 #include "sim/sim_config.h"
 
 static const uint32_t SIM_MAX_UNITS = 64;
 static const uint32_t SIM_MAX_PLAYERS = 10;
 static const uint32_t SIM_MAX_COMMANDS_PER_TICK = 256;
+static const uint32_t SIM_DEFAULT_MAX_ENTITIES = 16384;
 
 typedef enum SimCommandKind : uint8_t {
     SIM_COMMAND_SET_VELOCITY = 1,
@@ -34,22 +38,31 @@ typedef struct SimCommandBuffer {
     uint32_t count;
 } SimCommandBuffer;
 
-// M3.0 placeholder world: fixed-capacity SoA, deliberately not the M3.1 ECS.
-// sim_init clears the complete object so equal runs are byte-identical, including
-// padding and unused capacity; hashing will still encode only authoritative fields.
+typedef struct SimWorldConfig {
+    uint32_t max_entities;
+    uint32_t initial_unit_count;
+} SimWorldConfig;
+
 typedef struct SimWorld {
     uint64_t tick;
-    uint32_t unit_count;
+    SimWorldConfig config;
     mm::pcg32 rng;
-    mm::fix position_x[SIM_MAX_UNITS];
-    mm::fix position_y[SIM_MAX_UNITS];
-    mm::fix velocity_x[SIM_MAX_UNITS];
-    mm::fix velocity_y[SIM_MAX_UNITS];
-    int32_t health[SIM_MAX_UNITS];
-    uint32_t cooldown[SIM_MAX_UNITS];
+    EntityManager entities;
+    TransformPool transforms;
+    VelocityPool velocities;
+    HealthPool health;
+    EntityId unit_entities[SIM_MAX_UNITS];
+    EntityId* pending_destroy;
+    uint32_t pending_destroy_count;
 } SimWorld;
 
-void sim_init(SimWorld* world, uint64_t seed);
+SimWorldConfig sim_world_config_default(void);
+size_t sim_world_memory_required(SimWorldConfig config);
+
+// Initialization is transactional. Invalid configuration or insufficient arena
+// budget returns false without changing the world or the arena offset.
+bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig config);
+bool sim_destroy_deferred(SimWorld* world, EntityId entity);
 bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, uint32_t unit_count);
 bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* commands);
 bool sim_tick(SimWorld* world, const SimCommandBuffer* commands);

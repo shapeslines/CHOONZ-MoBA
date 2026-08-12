@@ -8,6 +8,53 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 08 — 2026-08-12 — M3.1: arena entity model and sparse-set SoA
+
+**Scope:** replace the M3.0 placeholder arrays with deterministic arena-backed identity and typed
+component storage without beginning M3.2 scheduling.
+**Outcome:** M3.1 is complete and independently accepted on PR #15. Replay-v1 unit-slot commands remain stable,
+while `SimWorld` now owns a runtime-sized entity manager, typed sparse-set pools, deferred
+destruction, and a canonical semantic ECS hash. M3.2 is queued on a separate slate.
+
+### What landed
+
+- `SimWorldConfig` defaults to 16,384 entities and 64 initial replay units; exact memory sizing and
+  staged initialization make invalid and under-budget attempts atomic.
+- The dedicated `EntityManager` preserves all 14 generation bits, tracks liveness separately,
+  allocates fresh slots ascending, recycles LIFO, and rejects exhausted, stale, forged, and double
+  releases without mutation.
+- `ComponentPool` owns sparse↔dense membership; Transform, Velocity, and Health own arena-backed SoA
+  values and repair every lane after swap-removal. Stable 64-slot replay mappings remain the command
+  seam.
+- Deferred destruction commits at the tick boundary in request order, removes Health→Velocity→
+  Transform, clears mappings, releases identity, and preserves stale-handle safety after reuse.
+- Replay format remains `1` with 16-byte commands. The deliberate M3.1 logic hash is
+  `0x7902599e173f87a6`; M3.0 recordings are intentionally incompatible.
+- Canonical FNV-1a/64 now covers explicit little-endian config, RNG, lifecycle, free-stack, mapping,
+  queue, membership, and component fields in semantic entity-index order. Pointers, padding, unused
+  capacity, allocator state, and sparse/dense storage order are excluded.
+
+### Verification
+
+- MSVC `ci` preset (`/WX`): complete Debug and Release builds clean.
+- **22/22 CTest entries green** in both configurations, including entity lifecycle, sparse-set
+  churn, typed values, deferred destruction, canonical hash/diff, replay CLI, and boundary suites.
+- Debug and Release independently end the 10,000-tick stream at `0x981212877a575730`.
+- Controlled mutation: `tick=4321 field=position_x entity=7` in both configurations.
+- Replay record→inspect→verify remains byte-exact; the exact M3.0 logic hash is rejected, corrupt or
+  incompatible files return exit 2, divergence 3, and usage/I/O 1.
+- `sim_boundary` scans all 13 sim headers/sources; `eng_sim` still links directly only to core,
+  math, and serialize.
+
+### Next
+
+Owner-review and merge PR #15; local and GitHub gates plus independent acceptance are green, while
+merge remains separately owner-approved. After it lands, branch M3.2 from updated `main` and execute
+[`slate-moba-phase3-m3.2.md`](slate-moba-phase3-m3.2.md). Do not stack scheduling/event work on the
+M3.1 branch.
+
+---
+
 ## Session 07 — 2026-08-12 — M3.0: deterministic simulation oracle and replay CLI
 
 **Scope:** build the Phase 3 desync detector before starting the real ECS.
