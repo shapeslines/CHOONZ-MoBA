@@ -35,12 +35,16 @@ Dependency rules (enforced by the link graph):
 core, math            -> leaves (only the platform page-alloc seam)
 platform              -> core
 render                -> core, math, platform        (ONLY module that sees Vulkan)
-sim                   -> core, math                   (NO platform/render, NO float)
+sim                   -> core, math, serialize        (NO platform/render, NO float)
 net                   -> core, math, platform(sockets), sim   (drives sim_tick)
 assets                -> core, math, platform(file)
 serialize             -> core                          (shared LE codecs)
 game / server / tests -> link the above + own only main()/wiring
 ```
+
+Shared configuration follows the same boundary: `core/sim_config.h` owns the tick
+rate and wall-clock accumulator constants, while `sim/sim_config.h` derives
+`SIM_DT_FIXED` from core's `SIM_HZ` and math's `FIX_ONE`. Core never includes math.
 
 ## Consequences
 

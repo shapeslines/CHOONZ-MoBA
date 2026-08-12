@@ -116,9 +116,9 @@ this is the bedrock that prevents foundation-level rework.
 written. These are effectively irreversible once code is built on them.
 **Deliverables — one ADR file each in `docs/DECISIONS/`:**
 - **`0001-tick-rate.md` → 30 Hz.** The sim/net/gameplay trio already agree; Platform's 60 Hz is the
-  outlier. Define `SIM_HZ = 30`, `SIM_DT_SECONDS`, `SIM_DT_FIXED` in **one** header
-  (`engine/core/include/core/sim_config.h`). The platform loop *includes* this; it never defines its
-  own `FIXED_DT`. Accumulator stays rate-agnostic so a later bump to 60 is a one-line change.
+  outlier. Define `SIM_HZ = 30`, `SIM_DT_SECONDS`, and the catch-up clamp in
+  `engine/core/include/core/sim_config.h`; derive `SIM_DT_FIXED` in `sim/sim_config.h`, where core's
+  rate and math's `FIX_ONE` first meet. The platform loop never defines its own `FIXED_DT`.
 - **`0002-fixed-point-format.md` → Q16.16 (`typedef int32_t fix`, `int64_t` intermediate multiply).**
   Reasons: compiles cleanly on MSVC (Q32.32's `__int128` does **not** — it's a GCC/Clang extension;
   MSVC would need `_mul128`/`__mulh`); halves sim-state / snapshot / wire / hash size; the gameplay
@@ -439,13 +439,13 @@ so Phase 4 consumes exactly this. **Exercises:** Renderer seam, Build (PRIVATE V
 **determinism harness built before there is content to break it.** This is the project's spine and the
 reviews' most-watched risk.
 
-> **Now:** M3.0 → M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
+> **Complete:** M3.0. **Now:** M3.1 → M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
 > 🔴 Determinism is global and fragile: one stray float, unordered iteration, or wall-clock read
 > desyncs. The state-hash self-check is the only humane way to catch it — **build it first.**
 
 ---
 
-### M3.0 — Determinism harness FIRST: state-hash + record/replay  🔴  · L
+### M3.0 — Determinism harness FIRST: state-hash + record/replay  🔴  · L  ✅ COMPLETE 2026-08-12
 **Goal:** the desync detector, standing up before the sim has any real systems.
 **Deliverables:**
 - A trivial placeholder `SimWorld` (a few SoA arrays of `fix`) + `sim_init(seed)` / `sim_tick(world,
@@ -459,6 +459,10 @@ reviews' most-watched risk.
   every tick; on mismatch print the first divergent tick.
 **DoD:** the run-twice self-check passes for 10,000 ticks of placeholder sim; a deliberately-injected
 nondeterminism (e.g. an uninitialized field) is caught at the exact tick.
+**Observed:** Debug and Release `/WX` builds pass all 18 CTest entries. The recorded/replayed
+10,000-tick stream ends at `0xb85d4b632571948c`; an injected mutation reports exactly
+`tick=4321 field=position_x unit=7`. Replay record/inspect/verify and corrupt-file exit classes are
+covered through CTest fixtures, and the boundary scan confirms `eng_sim → core + math + serialize`.
 **Risks:** 🔴 hash-input layout is keyed to the fixed-point ADR — must be settled (it is, M0.1). Full-
 state hash every tick is fine at 30 Hz / hundreds of units; revisit dirty-hashing only if profiled.
 **Exercises:** ECS, Tooling (the centerpiece), Math (fixed), Memory.
@@ -499,7 +503,8 @@ scale. **Exercises:** ECS, Determinism.
 - The accumulator lives in the **platform's outer loop** (it owns the OS pump + clock); the ECS
   "loop.c" and netcode "Stage 0 loop" are re-described as **what `engine_frame`/`engine_render` call
   into**, not independent loops (reviews: three "the loop" specs reconciled to one).
-- `SIM_DT_FIXED` from `core/sim_config.h` (30 Hz); 0.25s clamp (spiral-of-death guard).
+- `SIM_DT_FIXED` from `sim/sim_config.h` (derived from core's 30 Hz); core's 0.25s clamp
+  remains the spiral-of-death guard.
 - `RenderSnapshot` (slim, interpolatable presentation fields); `snapshot_extract` (fixed) at tick end;
   double-buffered prev/curr.
 - **One named owner for interpolation + fixed→float + DrawItem building: the game/present glue.** It
@@ -525,6 +530,9 @@ convention+hash, not a compiler flag:** put sim in its own lib, add a CI/grep ch
 sim wired into the pre-push hook.
 **DoD:** `eng_sim` builds with no render/platform-OS deps; the float-grep lint is part of `ctest`/hook;
 self-check passes from both the test binary and the game binary.
+**M3.0 baseline already landed:** the direct link isolation, `/fp:precise`, source scan, and dedicated
+test-binary self-check are active now. M3.4 extends that gate over the mature ECS and proves the game
+binary path after M3.1–M3.3; it is not otherwise pulled forward.
 **Risks:** flag drift between binaries is a silent desync source — single toolchain include prevents it.
 **Exercises:** Build (sim isolation), Tooling, Determinism.
 

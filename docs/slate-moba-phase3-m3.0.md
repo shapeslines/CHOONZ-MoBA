@@ -2,13 +2,13 @@
 type: record
 title: "SLATE - Phase 3 M3.0 determinism harness"
 kind: slate
-status: queued
+status: complete
 project: moba
 axis: "simulation determinism"
 opened: 2026-08-12
 updated: 2026-08-12
-closed:
-worktree: "new branch from main after PR #13 lands"
+closed: 2026-08-12
+worktree: "repo root"
 branch: "moba/slate-phase3-determinism"
 tags: [slate, determinism, simulation]
 related:
@@ -17,11 +17,13 @@ related:
   - "docs/DECISIONS/0002-fixed-point-sim-math.md"
   - "docs/DECISIONS/0007-sim-rng.md"
   - "PR #13 / Phase 2 closeout"
+  - "PR #14 / M3.0 implementation"
+  - "docs/slate-moba-phase3-m3.1.md"
 ---
 
 # Slate - Phase 3 M3.0 determinism harness
 
-**Status:** queued behind PR #13 landing. The Phase 2 S6 owner gate passed on 2026-08-12.
+**Status:** complete on PR #14 from merged `main` baseline `6a21920`.
 
 ## Goal
 
@@ -35,8 +37,8 @@ green, so changes to entity storage are immediately measurable against an establ
 ## Entry gate
 
 - [x] Phase 2 S6 passes with zero Vulkan validation messages.
-- [ ] PR #13 lands on `main`.
-- [ ] Create `moba/slate-phase3-determinism` from the updated `main`; do not stack simulation work on
+- [x] PR #13 lands on `main` as `6a21920`.
+- [x] Create `moba/slate-phase3-determinism` from the updated `main`; do not stack simulation work on
   the renderer branch.
 
 ## Fence
@@ -51,11 +53,11 @@ green, so changes to entity storage are immediately measurable against an establ
 
 ## Architecture constraints
 
-- `eng_sim` depends on `eng_core` and `eng_math` only. It must not link platform, renderer, OS,
-  wall-clock, or floating-point code.
-- `core/sim_config.h` is the single owner of `SIM_HZ`, `SIM_DT_SECONDS`, `SIM_DT_FIXED`, and
-  `SIM_MAX_CATCHUP_S`, matching ADR-0001. The documented header is currently missing and is the
-  first repair.
+- `eng_sim` depends on `eng_core`, `eng_math`, and the OS-free `eng_serialize` codec only. It must
+  not link platform, renderer, OS, wall-clock, or floating-point code.
+- `core/sim_config.h` owns `SIM_HZ`, `SIM_DT_SECONDS`, and `SIM_MAX_CATCHUP_S`.
+  `sim/sim_config.h` derives `SIM_DT_FIXED` where the core and math authorities first meet,
+  preserving both as independent leaves (ADR-0001/0006).
 - State hashing consumes explicit fields in an explicit order. Never hash struct padding, raw
   capacity, pointers, render data, timing data, or debug state.
 - Replay encoding is hand-written and little-endian. The deterministic codec stays independent of
@@ -68,12 +70,12 @@ green, so changes to entity storage are immediately measurable against an establ
 
 | ID | Slice | Done-when | Status |
 |----|-------|-----------|--------|
-| S0 | Restore the shared simulation constants contract | `core/sim_config.h` exists, consumers compile against it, and a focused test proves 30 Hz/Q16.16 values without duplicate definitions | queued |
-| S1 | Scaffold platform-free `eng_sim` and placeholder world | CMake exposes `eng::sim`; `SimWorld` owns fixed-order SoA position/velocity/health/cooldown arrays plus tick and PCG32 state; `sim_init(seed)` and `sim_tick(world, commands)` are deterministic | queued |
-| S2 | Add canonical state hashing | FNV-1a hashes every live gameplay field and RNG word byte-wise in documented order; changes to each field affect the hash; padding/capacity do not | queued |
-| S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | queued |
-| S4 | Prove 10,000-tick determinism and exact divergence | Two same-seed/input runs match every tick in Debug and Release; a controlled perturbation at tick N reports N as the first divergence | queued |
-| S5 | Enforce the boundary and close M3.0 | Debug/Release `/WX` and CTest pass; sim source has no float, unordered iteration, wall-clock, platform, or renderer dependency; ROADMAP/JOURNAL/next-session are current | queued |
+| S0 | Restore the shared simulation constants contract | `core/sim_config.h` exists, consumers compile against it, and a focused test proves 30 Hz/Q16.16 values without duplicate definitions | done 2026-08-12 |
+| S1 | Scaffold bounded `eng_serialize` plus platform-free `eng_sim` and placeholder world | CMake exposes `eng::serialize` and `eng::sim`; bounded LE I/O is sticky/atomic; `SimWorld` owns fixed-order SoA position/velocity/health/cooldown arrays plus tick and PCG32 state; invalid command buffers do not mutate it | done 2026-08-12 |
+| S2 | Add canonical state hashing and first-field diffing | FNV-1a hashes every live gameplay field and RNG word byte-wise in documented order; changes to each field affect the hash; padding/capacity do not; diagnostics name the first field and unit | done 2026-08-12 |
+| S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | done 2026-08-12 |
+| S4 | Prove 10,000-tick determinism and exact divergence | Two same-seed/input runs match every tick in Debug and Release; a controlled perturbation at tick N reports N as the first divergence | done 2026-08-12 |
+| S5 | Enforce the boundary and close M3.0 | Debug/Release `/WX` and CTest pass; sim source has no float, unordered iteration, wall-clock, platform, or renderer dependency; ROADMAP/JOURNAL/next-session are current | done 2026-08-12 |
 
 ## Verification matrix
 
@@ -84,13 +86,31 @@ green, so changes to entity storage are immediately measurable against an establ
 - Negative proof: perturb one gameplay field at a selected tick => first mismatch is that tick.
 - Replay: memory round-trip plus platform-file round-trip; corrupt magic/version/logic hash/length
   each fail deterministically.
-- Isolation: link graph and source scan confirm `eng_sim -> eng_core + eng_math` only.
+- Isolation: link graph and source scan confirm `eng_sim -> eng_core + eng_math + eng_serialize` only.
 
 ## Exit gate
 
 M3.0 closes only when the self-check and deliberate-divergence test pass in both Debug and Release,
 the replay persistence path is verified through the platform API, and CI is green. Then open a
 separate M3.1 ECS slate that uses this hash stream as its regression oracle.
+
+## Slice evidence
+
+- **S3:** Debug and Release focused builds passed for `moba_replay` and `engine_tests`. The CTest
+  fixture recorded, inspected, and verified a 10,000-tick replay (`134812` bytes, `923` commands,
+  final hash `0xb85d4b632571948c`). The CLI error test observed exit `1` for usage/I/O, exit `2` for
+  corrupt magic/version/logic/rate, truncation, invalid command/player/unit and trailing bytes, and
+  exit `3` for a changed post-tick hash. The in-memory codec re-encoded byte-identically.
+- **S4:** The dedicated platform-free `sim_determinism_tests` target passed Debug and Release with
+  `47,301` checks in each configuration. The independently replayed 10,000-tick hash stream matched
+  the recorded stream at every tick; the pinned final hash is `0xb85d4b632571948c`. A controlled
+  post-tick mutation reported exactly `tick=4321 field=position_x unit=7`. The CTest boundary scan
+  found all seven `engine/sim` source/header files clean and confirmed the direct link seam is
+  `eng_core + eng_math + eng_serialize` only.
+- **S5:** A fresh `cmake --preset ci` completed the full `/WX` Debug and Release builds; all 18
+  CTest entries passed in both configurations. ROADMAP, architecture, journal, next-session, and
+  this record now reflect the observed M3.0 result. M3.1 is queued separately in
+  `docs/slate-moba-phase3-m3.1.md`; no ECS implementation entered this branch.
 
 ## Residuals
 

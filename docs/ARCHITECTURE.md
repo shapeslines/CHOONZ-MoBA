@@ -62,9 +62,17 @@ The CMake link graph *is* the architecture. Each module is one static library (`
   assert, handle)     vec/mat/rng)
 ```
 
-`eng_core` and `eng_math` are dependency-free leaves. `eng_net` depends on `eng_sim` (it calls `sim_tick`) and on `eng_platform` (sockets). Only `eng_render` sees Vulkan. Only `eng_platform` contains Win32-specific `.cpp`.
+`eng_core` and `eng_math` are dependency-free leaves. `eng_serialize` depends only on core;
+`eng_sim` depends on core, math, and serialize. `eng_net` depends on `eng_sim` (it calls
+`sim_tick`) and on `eng_platform` (sockets). Only `eng_render` sees Vulkan. Only `eng_platform`
+contains Win32-specific `.cpp`.
 
-**`eng_core_group`** is an INTERFACE/aggregate CMake target that link-groups exactly the OS-free, GPU-free modules — `eng_core`, `eng_math`, `eng_sim`, `eng_net` (core logic), `eng_assets` (parsers), `eng_serialize` — so the test binary and offline tools link the deterministic core **headlessly**. It is a grouping, not a separate compilation of those sources. (This reconciles the "module graph" and the "engine_core/engine_app" testing split into one architecture: the seven fine-grained libs exist; `eng_core_group` simply names the non-Win32/non-Vulkan subset.)
+**`eng_core_group`** is the aggregate used by the broad headless test executable. It currently also
+links `eng_platform` because that executable owns the OS-page-arena and platform-file suites, so it is
+not the proof of simulation isolation. The stronger M3.0 proof is the dedicated
+`sim_determinism_tests` executable, which links `eng_sim` directly, plus the `sim_boundary` CTest that
+checks both source imports and `engine/sim/CMakeLists.txt`. `eng_sim` itself resolves only to
+`eng_core`, `eng_math`, and `eng_serialize`.
 
 ### 1.4 Module responsibilities
 
@@ -74,10 +82,10 @@ The CMake link graph *is* the architecture. Each module is one static library (`
 | Math | `eng_math` | `fix` (Q16.16) + fixed vec/trig/rng for sim; `f32` vec/mat/quat/geom for render; deterministic PRNG | no | no |
 | Platform | `eng_platform` | Win32 window/input/timer/file I/O/DLL load, **page allocator**, **VkSurface creation + Vulkan loader bootstrap**, UDP sockets, dir-watch. The outer loop + accumulator. | **yes (only here)** | headers only (surface) |
 | Render | `eng_render` | Raw Vulkan backend behind the thin renderer seam; bring-up, frames-in-flight, own device-memory allocator, pipelines, instanced forward draw | no | **yes (only here)** |
-| Sim | `eng_sim` | Sparse-set SoA ECS, deterministic fixed-tick simulation, events, snapshots, `sim_hash` | no | no |
+| Sim | `eng_sim` | M3.0 fixed-capacity placeholder world, deterministic tick, canonical hash/diff, replay codec; sparse-set ECS begins in M3.1 | no | no |
 | Net | `eng_net` | Server loop driving sim_tick, per-client baseline/delta snapshots + interest management, client prediction/reconciliation, lag-comp history ring, own UDP reliability, command codec, replay, divergence detection | via platform seam | no |
 | Assets | `eng_assets` | Own PNG/glTF/WAV/TGA parsers, baked `.mba` container, runtime loader, resource registry | via platform seam | no (hands blobs to render seam) |
-| Serialize | `eng_serialize` | LE byte readers/writers shared by net + replay + asset codecs | no | no |
+| Serialize | `eng_serialize` | Bounded, sticky, allocation-free LE byte readers/writers shared by net + replay + asset codecs | no | no |
 | Game | `moba_game` | `WinMain` wiring, gameplay glue, selection/input→commands, present glue | links platform | links render |
 
 ---
@@ -90,15 +98,20 @@ This section defines, **once**, the things every subsystem must agree on. Other 
 
 Determinism is a global, engine-wide invariant, not a feature. It is enforced by construction and verified continuously.
 
-**Shared constants live in `core/sim_config.h` — the single source of truth:**
+**Cadence and accumulator constants live in `core/sim_config.h`:**
 
 ```c
-// core/sim_config.h — included by platform loop, sim, net, gameplay. NOBODY redefines these.
+// core/sim_config.h — included by platform loop, sim, net, gameplay.
 #define SIM_HZ              30                       // fixed simulation rate
 #define SIM_DT_SECONDS      (1.0 / (double)SIM_HZ)   // for the wall-clock accumulator only
-#define SIM_DT_FIXED        (FIX_ONE / SIM_HZ)       // fixed-point dt for sim integration
 #define SIM_MAX_CATCHUP_S   0.25                     // accumulator clamp (anti spiral-of-death)
+
+// sim/sim_config.h — first layer that sees both core cadence and math's Q16.16 scale.
+#define SIM_DT_FIXED        (FIX_ONE / SIM_HZ)       // fixed-point dt for sim integration
 ```
+
+The split preserves `eng_core` and `eng_math` as independent leaves: core owns the
+rate, math owns `FIX_ONE`, and sim derives the value that needs both.
 
 > **Resolved — tick rate is 30 Hz.** The platform loop owns the accumulator but **reads `SIM_HZ`**; it never hardcodes its own rate. 30 Hz is the MOBA-proven value the netcode bandwidth and input-delay math (2–4 ticks ≈ 66–133 ms) are built on. The accumulator stays rate-agnostic so a later bump to 60 Hz is a one-line change.
 
@@ -137,7 +150,12 @@ The rules, binding on every subsystem:
 - **No wall-clock, no addresses, no pointer-as-key, no hash-bucket iteration** in sim logic. Time is `world.tick`; identity is the handle; iteration is by ascending index.
 - **Debug and Release must be bit-identical.** Sim code must never branch on `ASSERT`/`#if BUILD_DEBUG` in a way that changes the computation (asserts may *read* state, never alter it).
 
-**Enforcement is convention + hash, not a fantasy compiler flag.** There is no portable MSVC switch that bans the `float` *type*. Instead: (1) sim sources live in their own lib (`eng_sim`) with a CI/grep check rejecting `\bfloat\b|\bdouble\b|<math.h>` in `sim/*.cpp`; (2) the per-tick state-hash self-check (run-twice-compare, §10) is the real backstop and is built first; (3) the sim lib is pinned to identical `/fp:precise` flags in one toolchain include so the test binary and game binary compile sim identically.
+**Enforcement is boundary + hash, not a fantasy compiler flag.** There is no portable MSVC switch
+that bans the `float` type. Instead: (1) `eng_sim` is its own library with a CTest source scan that
+rejects float/double, libm, wall-clock, platform/render/Vulkan imports, and unordered containers;
+(2) the same test checks that the direct link seam remains core + math + serialize; (3) the per-tick
+record/replay hash self-check is the behavioral backstop; and (4) `eng_sim` is pinned to
+`/fp:precise` in its target definition.
 
 ### 2.2 Memory & ownership model
 
@@ -255,7 +273,7 @@ moba-game/
 │  ├─ platform/  include/platform/*.h  src/win32/*.cpp   # the OS seam + impl
 │  ├─ render/    include/render/*.h    src/vk/*.cpp       # raw Vulkan
 │  ├─ assets/    include/assets/*.h    src/*.cpp          # parsers, .mba loader, registry
-│  ├─ sim/       include/sim/*.h       src/*.cpp          # ECS + deterministic sim
+│  ├─ sim/       include/sim/*.h       src/*.cpp          # config derivative + deterministic sim/ECS
 │  └─ net/       include/net/*.h       src/*.cpp          # server-auth + UDP
 ├─ game/         src/main_win32.cpp  src/game_*.cpp  src/present/*.cpp
 ├─ tools/
@@ -828,6 +846,12 @@ Forward rendering (light- and overdraw-modest scenes; deferred is unjustified). 
 
 The spine of the game (`eng_sim`): what exists in the world, and how it advances in time. Built backward from the determinism contract (§2.1).
 
+**M3.0 baseline now implemented:** a deliberately temporary 64-slot SoA `SimWorld` owns tick,
+PCG32 state, position/velocity, health, and cooldown. Commands are validated as a complete buffer,
+applied in recorded order, and units integrate in ascending slot order. M3.1 replaces this storage
+with the entity manager and component pools below while preserving the M3.0 replay hash stream as
+the regression oracle.
+
 ### 9.1 Entities & sparse-set SoA pools
 
 **Entities are 32-bit generational handles (§2.3); components live in per-type sparse-set pools stored SoA.** Not archetypes (over-engineering for hundreds of units, a small stable component set, and hand-picked driving pools), not OOP `GameObject`. Sparse sets give O(1) add/remove/has, dense cache-friendly iteration, and code you can read in one sitting.
@@ -904,7 +928,12 @@ void snapshot_extract(RenderSnapshot* dst, const SimWorld*);  // per tick, sim-s
 
 ### 9.7 Determinism enforcement & deferrals
 
-The float ban is convention+hash-enforced (§2.1): a CI/grep check on `sim/*.cpp` plus the run-twice state-hash self-check (§10), with the sim lib pinned to identical `/fp:precise` flags in one toolchain include. **Deferred:** archetypes, multithreaded systems/job system (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation first), rollback machinery (the design is rollback-*ready* via flat snapshot + pure `sim_tick` + `sim_hash`, but server-authoritative ships first; rollback/GGPO is explicitly NOT the model, latency hidden by local prediction + interpolation + lag compensation), generic query DSL, reflection/serialization codegen, scene-graph/parent-child entities.
+The M3.0 boundary is executable: `sim_boundary` scans all `engine/sim` headers/sources and validates
+the direct CMake link seam, while `sim_determinism` replays 10,000 ticks in both build configurations.
+The sim lib is pinned to `/fp:precise`. **Deferred:** archetypes, multithreaded systems/job system
+(sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
+first), rollback machinery, generic query DSL, reflection/serialization codegen, and
+scene-graph/parent-child entities.
 
 ---
 
@@ -916,26 +945,40 @@ The discipline layer (`eng_core` debug facilities + `tests/` + `tools/`). All ha
 
 The sim is pure: a full match replays from `seed + input stream`. Three pieces:
 
-1. **Input recording (replay):** record only per-tick `Cmd_Packet`s + a header (`{magic, version, sim_logic_hash, seed, tick_rate, player_count}`). Tiny. The replay codec is *shared* with the netcode (one source of truth for the wire format, §11).
-2. **Per-tick state hash:** after every `sim_tick`, FNV-1a over the entire authoritative `SimWorld` (RNG state + every gameplay-affecting SoA array, fixed order) — fast, simple, ours. It hashes only deterministic sim state (never render/interp/debug/timing).
+1. **Input recording (replay):** `.mbr` starts with `MOBARPLY`, container version `1`, the manually
+   reviewed `SIM_LOGIC_HASH`, seed, 30 Hz rate, player count, and tick count. Each tick stores command
+   count, expected post-tick hash, then canonical 16-byte command records. Container layout changes
+   bump the format version; deterministic behavior or command encoding changes bump the logic hash.
+2. **Per-tick state hash:** after every `sim_tick`, FNV-1a/64 consumes explicit little-endian fields
+   in this order: tick, live unit count, RNG state/inc, then each live position/velocity/health/
+   cooldown SoA. It never hashes struct memory, padding, unused capacity, pointers, render, timing,
+   or debug state.
 
 ```c
-uint64_t sim_hash(const SimWorld* s);   // FNV-1a over rng + all sim SoA arrays (Q16.16 bytes)
+uint64_t sim_hash_state(const SimWorld* s); // FNV-1a over rng + all live sim SoA arrays
 ```
 
 3. **Comparator (two modes):** *self-check* (record replay + per-tick hashes, replay later and assert hash equality every tick — catches non-determinism against the same machine, the most common early bug); *server replay-hash integrity* (the server records inputs + per-tick `sim_hash`; an offline re-sim must reproduce the hash stream) and *client prediction-divergence* (compare the client's predicted controlled-entity state at tick T against the server's authoritative value, beyond the benign-correction tolerance); on mismatch, log the **first divergent tick** and dump both states; a field-diff tool names the exact array/entity that diverged — turning "the game desynced" into "entity 47's cooldown differs at tick 5012").
 
-This is the `test_determinism.cpp` integration test and the live overlay canary. It costs ~a day and catches determinism bugs the moment they're introduced — retrofitting after months is archaeology.
+This is now executable in `sim_determinism_tests`: one run records 10,000 expected hashes and an
+independent replay matches every one. A second run perturbs unit 7's `position_x` after tick 4321 and
+must identify that exact first tick/field/index. `moba_replay record|inspect|verify` exposes the same
+codec through atomic platform-file persistence; malformed or incompatible files are classified
+separately from deterministic divergence.
 
 ### 10.2 Unit test harness
 
-A ~200-line single-header `core/test.h` (doctest-shaped, **no exceptions, no STL**, self-registering `TEST(...)` macros, `CHECK(...)`), one tiny `tests/main.cpp` calling `test_run_all()`. Wired into CTest:
+A small `tests/test.h` harness (doctest-shaped, **no exceptions, no STL**, self-registering
+`TEST(...)` macros and `CHECK(...)`) plus `tests/test_main.cpp`. Suite sources compile directly into
+their executable so the linker cannot discard static registrars. The M3.0 shape is:
 
 ```cmake
-add_executable(engine_tests tests/main.cpp tests/test_math.cpp tests/test_arena.cpp
-               tests/test_serial.cpp tests/test_determinism.cpp)
-target_link_libraries(engine_tests PRIVATE eng_core_group)   # headless: no Win32, no Vulkan
-add_test(NAME unit COMMAND engine_tests)
+add_executable(engine_tests test_main.cpp ...)
+target_link_libraries(engine_tests PRIVATE engine_core_group)
+add_executable(sim_determinism_tests test_main.cpp sim/sim_determinism_tests.cpp)
+target_link_libraries(sim_determinism_tests PRIVATE eng::sim)
+add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)
+add_test(NAME sim_boundary COMMAND cmake -P tests/sim/check_sim_boundary.cmake)
 ```
 
 **Test, in priority order:** math (pure, regression-prone, everything depends on it — incl. property tests), allocators (alignment, free-list reuse, no overlap, scratch save/restore), containers, serialization (round-trip byte-identical), and the determinism replay-hash test. **Don't unit-test:** Vulkan (validation layers + visual + RenderDoc), Win32 glue (running the game exercises it), or UI. Don't chase coverage.
