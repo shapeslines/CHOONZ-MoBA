@@ -1,6 +1,8 @@
 # eng_sim — deterministic fixed-point simulation. Platform, renderer, wall-clock,
 # and presentation dependencies are forbidden by the link graph.
-add_library(eng_sim STATIC src/sim.cpp)
+add_library(eng_sim STATIC
+    src/sim.cpp
+    src/sim_hash.cpp)
 add_library(eng::sim ALIAS eng_sim)
 
 target_include_directories(eng_sim

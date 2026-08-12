@@ -24,6 +24,7 @@ add_executable(engine_tests
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
     sim/sim_config_tests.cpp
+    sim/sim_hash_tests.cpp
     sim/sim_tests.cpp
     render/render_tests.cpp
     tga/tga_tests.cpp

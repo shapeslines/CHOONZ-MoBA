@@ -928,7 +928,7 @@ The sim is pure: a full match replays from `seed + input stream`. Three pieces:
 2. **Per-tick state hash:** after every `sim_tick`, FNV-1a over the entire authoritative `SimWorld` (RNG state + every gameplay-affecting SoA array, fixed order) — fast, simple, ours. It hashes only deterministic sim state (never render/interp/debug/timing).
 
 ```c
-uint64_t sim_hash(const SimWorld* s);   // FNV-1a over rng + all sim SoA arrays (Q16.16 bytes)
+uint64_t sim_hash_state(const SimWorld* s); // FNV-1a over rng + all live sim SoA arrays
 ```
 
 3. **Comparator (two modes):** *self-check* (record replay + per-tick hashes, replay later and assert hash equality every tick — catches non-determinism against the same machine, the most common early bug); *server replay-hash integrity* (the server records inputs + per-tick `sim_hash`; an offline re-sim must reproduce the hash stream) and *client prediction-divergence* (compare the client's predicted controlled-entity state at tick T against the server's authoritative value, beyond the benign-correction tolerance); on mismatch, log the **first divergent tick** and dump both states; a field-diff tool names the exact array/entity that diverged — turning "the game desynced" into "entity 47's cooldown differs at tick 5012").
