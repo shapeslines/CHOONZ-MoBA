@@ -43,8 +43,8 @@ entity views, a phase-buffered `DamageEvent` seam, and one literal plain-functio
 
 ### Next
 
-Owner-review and merge PR #17 after GitHub CI/CodeQL and independent acceptance are green. Then
-branch M3.3 from updated `main` and execute
+PR #17 is independently accepted, ready, mergeable, and green under GitHub CI/CodeQL. Owner-review
+and merge it as the remaining gate. Then branch M3.3 from updated `main` and execute
 [`slate-moba-phase3-m3.3.md`](slate-moba-phase3-m3.3.md). Do not fold M3.3 platform/presentation
 work into this branch.
 

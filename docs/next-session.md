@@ -1,42 +1,49 @@
 # MOBA-proto — next session
 
-## State · `moba/slate-phase3-systems` · PR #17 · 2026-08-12
+## State @ implementation `133da41` · 2026-08-12 · DESKTOP-BK4F0OA/Codex
 
-Phase 3 M3.2 is implementation-complete. The branch adds derived ascending-entity component views,
-phase-buffered typed damage events, prefixed plain-function systems, and one literal deterministic
-tick schedule. M3.3 platform accumulator and presentation-snapshot work has not started.
+Phase 3 M3.0–M3.2 are complete. PR #14 (determinism/replay) and PR #15 (ECS) are merged.
+PR #17 (systems/schedule) is ready, mergeable, independently accepted, and green on GitHub;
+owner-approved merge is the only immediate gate. M3.3 has not started.
+
+## Shipped
+
+- `9c14fdfe` M3.0 determinism harness, canonical hash/diff, replay v1, and replay CLI — PR #14 merged.
+- `7ce2b45b` M3.1 arena entity manager, sparse-set SoA pools, and deferred destruction — PR #15 merged.
+- `133da41` M3.2 ordered views, phase-buffered damage events, and explicit same-tick schedule — PR #17 ready.
 
 ## Verified
 
-- MSVC `ci` preset (`/WX`) builds every Debug and Release target.
-- 25/25 CTest entries pass in both configurations.
-- Independent 10,000-tick streams match every tick and end at `0x637628abff59c823`.
+- M3.2 `/WX` Debug and Release builds pass; 25/25 CTest entries pass in each configuration.
+- The two independent 10,000-tick runs end at `0x637628abff59c823` in Debug and Release.
 - Controlled mutation reports exactly `tick=4321 field=position_x entity=7`.
-- Replay v1 and 16-byte commands remain byte-exact with logic hash `0xab96814425ba80a4`;
-  exact M3.1 files are rejected.
-- CLI record → inspect → verify and all public exit classes pass through platform-file persistence.
-- `eng_sim` is clean under the 17-file boundary scan and directly links only core, math, serialize.
+- Replay remains format v1 with 16-byte commands and logic hash `0xab96814425ba80a4`.
+- The 17-file sim boundary and direct `eng_sim → core + math + serialize` dependency are clean.
+- Independent acceptance and final GitHub MSVC/CodeQL checks passed on the implementation head.
 
-## First action
+## Signals
 
-Owner-review and merge PR #17. Local Debug/Release gates are green; GitHub CI/CodeQL and fresh
-independent acceptance must also be green before the PR is marked ready. Merge remains separately
-owner-approved.
+- **state/flags:** damage resolves in the same tick; the two-phase event queue deliberately preserves
+  a future next-tick experiment by moving only publication. Any timing-policy change requires a new
+  reviewed logic hash. Replay container version stays 1 unless its layout changes.
+- **communicated:** PR #17 carries the complete review surface; independent acceptance passed twice
+  across whitespace/docs-only successors. The full cold-resume baton is mirrored to the vault.
+- **raised for /custodian:** none; architecture, roadmap, journal, slate, and restart state are current.
+- **FOR /brain:** distill → `brain/moba-deterministic-sim-spine.md` ←
+  `MOBA-proto@133da41`: M3.0–M3.2 oracle, semantic-hash exclusions, ordered-system rule, and event-timing seam.
+- **DEFERRED / unresolved:** owner merge of PR #17; M3.3 platform accumulator/presentation snapshots;
+  M3.4 build isolation; hosted Vulkan SDK installation before making Vulkan required in CI.
 
-## M3.3 handoff
+## Next — FIRST action
 
-After PR #17 lands, create `moba/slate-phase3-presentation` from updated `main` and execute
-[`M3.3 presentation slate`](slate-moba-phase3-m3.3.md). Preserve the M3.2 command generator,
-run-twice hash stream, and tick-4321 field diff as the regression oracle. M3.3 owns the platform
-accumulator, fixed-state snapshot extraction, presentation interpolation, and the one fixed→float
-edge only; keep gameplay, networking, assets, and M3.4 build-isolation closure out.
+1. Owner-review and merge PR #17. Confirm its head and required checks remain green; do not begin
+   M3.3 from the open M3.2 branch.
 
-## Retained event-timing experiment
+## Queue
 
-M3.2 uses same-tick damage. A later targeted experiment can defer only
-`damage_event_queue_publish` to the next tick. Measure one-tick combat latency and specify how stale
-source/target handles are rejected or ignored before changing the schedule or logic hash.
-
-## Residual owner gate
-
-- Vulkan SDK installation in hosted CI before changing `find_package(Vulkan)` to `REQUIRED`.
+- From updated `main`, create `moba/slate-phase3-presentation` and execute
+  [`M3.3 presentation slate`](slate-moba-phase3-m3.3.md).
+- Preserve the M3.2 command stream, per-tick hash oracle, and tick-4321 diagnostic unchanged.
+- Keep the platform accumulator outside `eng_sim`; fixed→float conversion belongs only to game/present glue.
+- Measure same-tick versus next-tick damage before changing policy; define stale-handle behavior first.
+- Close M3.4 separately before opening Phase 4/5 work.
