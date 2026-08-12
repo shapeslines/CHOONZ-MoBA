@@ -3,18 +3,19 @@
 A multiplayer online battle arena built **from scratch in C++**, on a custom
 RTS-class game engine.
 
-> 🚧 **Status:** Early development. **Phases 0–1 complete; Phase 2 underway (M2.0 –
-> M2.2 done).** Build spine, ADRs, Win32 window, memory arenas, float/fixed-point
+> 🚧 **Status:** Early development. **Phases 0–2 complete.** Build spine, ADRs,
+> Win32 window, memory arenas, float/fixed-point
 > math, containers, and a self-registering test harness on CTest + a pre-push gate
 > (determinism golden across `/fp:precise` + `/fp:fast`), plus GitHub Actions CI
 > (Windows MSVC, `/WX`, Debug + Release).
-> **The renderer draws a textured quad:** a hand-loaded raw-Vulkan renderer (ADR-0004)
+> **The renderer draws a 500-cube instanced field:** a hand-loaded raw-Vulkan renderer (ADR-0004)
 > on **dynamic rendering + synchronization2** (the hard minimum spec, ADR-0012) with
-> offline-compiled SPIR-V (ADR-0008), an on-disk pipeline cache, a triangle, and a
-> **textured quad** — vertex/index buffers + an sRGB image uploaded through staging by
-> the naive dedicated allocator, sampled via a `set=1` descriptor. An in-process
+> offline-compiled SPIR-V (ADR-0008), an on-disk pipeline cache, depth, per-frame
+> camera/instance buffers, typed resources, deterministic batching, deferred destruction,
+> debug draw/F1 overlay, and an always-built null backend. An in-process
 > readback (`sandbox --screenshot out.bmp`) captures what it rendered, **validation-
-> clean** (verified on a GTX 1070). **Next: M2.3 — camera UBO + instanced meshes.**
+> clean** (verified on an RTX 4070 Ti), including an owner-run resize, minimize/restore,
+> alt-tab, and F1-overlay interaction check. **Next: Phase 3 M3.0 determinism harness.**
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -91,4 +92,3 @@ game/ tools/   the game exe, sandbox, asset cooker
 assets/ tests/
 docs/          ARCHITECTURE.md, ROADMAP.md, DECISIONS/ (ADRs)
 ```
-

@@ -1,39 +1,34 @@
 # MOBA-proto — next session
 
-## State @ `1624070` (main) · `b87e653` (moba/slate-2026-08-11) · 2026-08-11 · doto-n/opencode
+## State · `moba/slate-2026-08-11` · 2026-08-12
 
-Phase 2 pickup: M2.3-a (S1) landed on branch `moba/slate-2026-08-11` (worktree
-`.worktrees/moba-slate-2026-08-11`) — per-frame view/proj UBO at set=0 + sandbox orbit
-camera. Slate: `docs/slate-moba-2026-08-11.md`. Main is clean; branch is pushed, no PR yet.
+Phase 2 M2.3–M2.5 is complete on the slate branch. The Vulkan renderer now shows a
+depth-correct 20×25 cube field from one batch/draw, camera UBO motion, debug world geometry and a
+5×7 stroke F1 overlay. The public seam is typed resource creation/destruction plus
+begin/submit/end-frame; deferred destruction and a real null backend are covered headlessly.
 
-## Shipped
-- `1624070` docs(slate): Phase 2 pickup slate M2.3–M2.5 [main, pushed]
-- `b87e653` feat(render): M2.3-a UBO at set=0 + orbit camera [moba/slate-2026-08-11, pushed]
+## Verified
 
-## Signals
-- **state/flags:** Vulkan SDK 1.4.357.0 installed on THIS machine (winget) — set
-  `VULKAN_SDK=C:\VulkanSDK\1.4.357.0`; build via `vcvars64` + `cmake --preset dev`.
-  Repo's other machine (Carson) had VS18 Enterprise + SDK; here it's VS2022 Community.
-  `docs/next-session.md` created (this file — first one).
-- **communicated:** none needed (single-claimant repo this period).
-- **raised for /custodian:** none — no `docs/custodian-queue.md` in this repo yet.
-- **FOR /brain:** distill → brain/moba-engine-proto.md ← MOBA-proto@b87e653:
-  design docs at vault `20 Projects/moba/` (+ new divergence register
-  `moba_engine_reconciliation.llm.md`); repo ADRs are implementation authority;
-  S1 proved set=0 UBO ring pattern (per-frame slot write after fence wait, HOST_COHERENT).
-- **DEFERRED / unresolved:** JOURNAL Session 06 entry (M2.3-a) not yet written (belongs to
-  S3); slate statuses not yet marked (S1 → done); no PR opened for `moba/slate-2026-08-11`
-  (merge gate = squash PR, per repo history); interactive resize/min/alt-tab DoD (S6, owner).
+- MSVC `ci` preset (`/WX`) builds Vulkan, null backend, both sandboxes, and tests.
+- 9/9 CTest suites green.
+- Validation-layer readback run: zero warnings/errors; 500 objects, one batch, one scene draw,
+  three total draws, 12 live dedicated allocations.
+- Owner S6 run passed: resize, minimize/restore, alt-tab focus loss/return, and F1 off/on were
+  event-logged; validation remained clean through shutdown.
+- `sandbox_null --frames 5` opens, creates valid typed handles, runs blank, and exits cleanly.
 
-## Next — FIRST action
-1. In worktree `.worktrees/moba-slate-2026-08-11`: implement S2 — M2.3-b per-instance
-   buffer + push-constant model + one batched instanced draw (500+ cubes).
-   Order: S1 → S2 → S3 → S4 → S5 (see slate); S6 owner-gated.
+## First action
 
-## Queue
-- S2 M2.3-b instanced draw (needs `CmdPushConstants` in `src/vk/vk.h` dispatch — absent)
-- S3 M2.3-c DoD verify + JOURNAL Session 06
-- S4 M2.4 debug-draw + F1 overlay
-- S5 M2.5 seam audit (typed handles, deferred-destroy, null backend)
-- S6 interactive DoD (owner: real display)
-- Residual: Vulkan SDK in CI (`find_package` → REQUIRED), `plat_mem_*` split, clang-cl/UBSan
+Review and squash-merge PR #13. Do not start Phase 3 implementation on the renderer branch.
+
+## Phase 3 handoff
+
+Create `moba/slate-phase3-determinism` from the updated `main` and execute the queued
+[`M3.0 determinism slate`](slate-moba-phase3-m3.0.md). It restores the missing shared sim constants,
+then builds the platform-free placeholder sim, canonical state hash, replay path, and 10,000-tick
+exact-divergence proof. Keep M3.1 ECS in its own later slate; do not pull Phase 4 assets, allocator
+Phase 2, or Vulkan-in-hosted-CI into M3.0.
+
+## Residual owner gates
+
+- Vulkan SDK installation in hosted CI before changing `find_package(Vulkan)` to `REQUIRED`.

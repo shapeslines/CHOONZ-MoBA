@@ -8,6 +8,51 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 06 — 2026-08-12 — M2.3–M2.5: instanced field, debug workhorse, real renderer seam
+
+**Scope:** finish the Phase 2 pickup slate from camera UBO through the renderer seam audit.
+**Outcome:** Phase 2 is complete. A 20×25 programmatic cube field renders
+depth-correctly as one scene batch/draw; immediate world lines and 5×7 stroke text render last; the
+sandbox F1 overlay reports FPS, frame time, arena bytes, live device allocations, and draw calls; and
+Vulkan/null backends implement the same typed-handle frame contract. The owner interaction gate
+passed with explicit resize, minimize/restore, focus loss/return, and F1 overlay transitions.
+
+### What landed
+
+- `set=0` now holds a per-frame camera UBO and storage-buffer instance stream. Public `DrawItem`s sort
+  deterministically by pipeline/material/mesh, models pack into the stream, and a 4-byte
+  `instance_base` push constant selects each coalesced batch.
+- One depth image per swapchain image, cleared every frame; mesh pipelines use `LESS` with depth
+  test/write. The scripted sandbox reports `objects=500 batches=1 scene_draws=1`.
+- `dbg_line/sphere/aabb/text_2d` allocate one fixed vertex block from the current frame arena. World
+  lines depth-test without writing depth; the pixel-space overlay bypasses depth. F1 uses rising-edge
+  input in the sandbox.
+- The provisional single-texture/draw API is gone. `renderer_types.h` is the Vulkan-free authority for
+  typed descriptors, `FrameView`, `DrawItem`, and stats. Destroy calls retire handles for at least two
+  frames before releasing GPU objects.
+- `eng_render_common`, `eng_render`, and always-built `eng_render_null` make the seam testable on a
+  Vulkan machine. `sandbox_null` runs a blank window with valid handles; a dedicated headless suite
+  pins stale-handle rejection and no-draw stats.
+
+### Verification
+
+- `ci` preset, MSVC `/WX`: clean.
+- **9/9 CTest suites green**, including batching/debug-frame-arena/null-backend coverage.
+- Validation-layer orbit/readback run: zero warnings/errors; screenshot shows the cube field, debug
+  geometry, and overlay. Stats: 500 objects, one batch, one scene draw, three total draws, 12 live
+  dedicated allocations.
+- Owner S6 run (76.00s): event log captured resize, minimize/restore, alt-tab focus loss/return, and
+  F1 overlay off/on; validation enabled on the RTX 4070 Ti; zero validation warnings/errors; clean
+  exit with the same 500-object/one-batch/three-draw/12-allocation stats.
+- Seam grep: no Vulkan identifiers/includes in the sandbox, tests, or public renderer headers.
+
+### Next
+
+Review and squash-merge PR #13, then create the queued M3.0 determinism branch from updated `main`.
+Vulkan-in-hosted-CI remains separately owner-gated.
+
+---
+
 ## Session 05 — 2026-06-11 — M2.2: the textured quad (first real GPU memory traffic)
 
 **Scope:** M2.2 — vertex/index buffers, an image upload, a sampler, and a descriptor

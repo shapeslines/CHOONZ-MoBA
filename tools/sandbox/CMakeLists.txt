@@ -5,3 +5,7 @@
 add_executable(sandbox src/main.cpp src/tga_direct.cpp)
 target_link_libraries(sandbox PRIVATE eng::platform eng::render moba_warnings moba_options)
 target_compile_definitions(sandbox PRIVATE "MOBA_ASSET_DIR=\"${CMAKE_SOURCE_DIR}/assets\"")
+
+add_executable(sandbox_null src/main.cpp src/tga_direct.cpp)
+target_link_libraries(sandbox_null PRIVATE eng::platform eng::render_null moba_warnings moba_options)
+target_compile_definitions(sandbox_null PRIVATE "MOBA_ASSET_DIR=\"${CMAKE_SOURCE_DIR}/assets\"")

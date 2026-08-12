@@ -62,4 +62,4 @@ bool platform_file_write(const char* path, const void* data, size_t size);
 
 // ---- Diagnostics ----
 void platform_log  (const char* fmt, ...);
-void platform_fatal(const char* fmt, ...);     // logs, then aborts the process
+[[noreturn]] void platform_fatal(const char* fmt, ...); // logs, then aborts the process

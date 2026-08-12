@@ -6,7 +6,7 @@
 
 **Layer:** Game · standalone C++/Vulkan engine — **off-spine**, a separate universe from the Shapes//Lines data spine
 **Role:** Custom from-scratch MOBA/RTS-hybrid game engine (C++17, raw Vulkan 1.3, own ECS, netcode, and math); no shared auth, no database, no GromDB relation — isolation is by design.
-**Status:** Phase 2 underway — Phases 0–1 complete (12 ADRs, CMake, Win32, arenas, fixed-point math, containers, determinism golden hash, CI); M2.0–M2.2 done (Vulkan bring-up → first triangle → textured quad, validation-clean); M2.3–M2.5 and Phases 3–8 are spec-only in `docs/ROADMAP.md`.
+**Status:** Phase 2 complete — M2.0–M2.5 cover Vulkan bring-up through depth-correct 500-cube instancing, debug draw/F1 overlay, typed resources with deferred destruction, and an always-built null backend. The owner-run resize/minimize/alt-tab/F1 gate passed validation-clean on 2026-08-12; Phase 3 begins with the queued M3.0 determinism harness in `docs/slate-moba-phase3-m3.0.md`.
 
 **Canonical deep-dive:** https://github.com/shapeslines/System-Architecture/blob/main/projects/moba.md
 &nbsp;&nbsp;(local sibling: `../System-Architecture/projects/moba.md`)

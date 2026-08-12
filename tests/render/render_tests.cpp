@@ -3,6 +3,9 @@
 // spec's VkPipelineCacheHeaderVersionOne (see pipeline_cache_check.h).
 #include "test.h"
 #include "render/pipeline_cache_check.h"
+#include "render_batch.h"
+#include "render_debug_draw.h"
+#include "render_handle_table.h"
 #include <cstdint>
 #include <cstring>
 
@@ -72,4 +75,114 @@ TEST(render, cache_blob_unaligned_source_ok) {
     uint8_t* blob = backing + 1;                           // deliberately misaligned
     size_t n = make_blob(blob, 8);
     CHECK(pipeline_cache_blob_ok(blob, n, VENDOR, DEVICE, UUID));
+}
+
+static bool resolve_test_draw(void*, const DrawItem* item, uint32_t* out_pipeline_key) {
+    if (!item || !out_pipeline_key || handle_is_null(item->mesh.h) || handle_is_null(item->material.h))
+        return false;
+    *out_pipeline_key = handle_index(item->material.h) & 1u;
+    return true;
+}
+
+TEST(render, five_hundred_objects_coalesce_to_one_batch) {
+    uint8_t memory[256 * 1024];
+    Arena arena;
+    arena_init_fixed(&arena, memory, sizeof(memory));
+
+    DrawItem items[500]{};
+    const MeshHandle mesh{handle_make(3, 1)};
+    const MaterialHandle material{handle_make(7, 1)};
+    for (uint32_t i = 0; i < 500; ++i) {
+        items[i].mesh = mesh;
+        items[i].material = material;
+        items[i].model = mm::mat4_translate(mm::vec3_make((float)i, 0, 0));
+    }
+
+    RenderBatchOutput out{};
+    CHECK(render_build_batches(items, 500, 4096, &arena, resolve_test_draw, nullptr, &out));
+    CHECK(out.instance_count == 500);
+    CHECK(out.batch_count == 1);
+    CHECK(out.batches[0].instance_base == 0);
+    CHECK(out.batches[0].instance_count == 500);
+    CHECK_APPROX(out.instances[499].model.m[3][0], 499.0f, 0.001f);
+}
+
+TEST(render, batching_key_is_deterministic_and_material_aware) {
+    uint8_t memory[64 * 1024];
+    Arena arena;
+    arena_init_fixed(&arena, memory, sizeof(memory));
+
+    const MeshHandle mesh_a{handle_make(2, 1)};
+    const MeshHandle mesh_b{handle_make(5, 1)};
+    const MaterialHandle material_a{handle_make(4, 1)}; // pipeline key 0
+    const MaterialHandle material_b{handle_make(7, 1)}; // pipeline key 1
+    DrawItem items[4]{};
+    items[0].model = mm::mat4_translate(mm::vec3_make(30, 0, 0)); items[0].mesh = mesh_b; items[0].material = material_b;
+    items[1].model = mm::mat4_translate(mm::vec3_make(10, 0, 0)); items[1].mesh = mesh_a; items[1].material = material_a;
+    items[2].model = mm::mat4_translate(mm::vec3_make(20, 0, 0)); items[2].mesh = mesh_a; items[2].material = material_a;
+    items[3].model = mm::mat4_translate(mm::vec3_make(40, 0, 0)); items[3].mesh = mesh_b; items[3].material = material_a;
+
+    RenderBatchOutput out{};
+    CHECK(render_build_batches(items, 4, 4, &arena, resolve_test_draw, nullptr, &out));
+    CHECK(out.batch_count == 3);
+    CHECK(out.batches[0].pipeline_key == 0);
+    CHECK(out.batches[0].mesh.h == mesh_a.h);
+    CHECK(out.batches[0].instance_count == 2);
+    CHECK_APPROX(out.instances[0].model.m[3][0], 10.0f, 0.001f);
+    CHECK_APPROX(out.instances[1].model.m[3][0], 20.0f, 0.001f);
+    CHECK(out.batches[2].pipeline_key == 1);
+    CHECK(!render_build_batches(items, 4, 3, &arena, resolve_test_draw, nullptr, &out));
+}
+
+static void count_release(void* user, uint32_t) {
+    ++*(uint32_t*)user;
+}
+
+TEST(render, handle_table_defers_reuse_and_rejects_stale_handles) {
+    uint8_t memory[4096];
+    Arena arena;
+    arena_init_fixed(&arena, memory, sizeof(memory));
+    RenderHandleTable table{};
+    CHECK(render_handle_table_init(&table, &arena, 2));
+
+    Handle first = render_handle_alloc(&table);
+    Handle second = render_handle_alloc(&table);
+    CHECK(render_handle_valid(&table, first));
+    CHECK(render_handle_valid(&table, second));
+    CHECK(handle_is_null(render_handle_alloc(&table)));
+
+    CHECK(render_handle_retire(&table, first, 5));
+    CHECK(!render_handle_valid(&table, first));
+    uint32_t releases = 0;
+    render_handle_collect(&table, 4, count_release, &releases);
+    CHECK(releases == 0);
+    CHECK(handle_is_null(render_handle_alloc(&table)));
+
+    render_handle_collect(&table, 5, count_release, &releases);
+    CHECK(releases == 1);
+    Handle replacement = render_handle_alloc(&table);
+    CHECK(handle_index(replacement) == handle_index(first));
+    CHECK(handle_gen(replacement) != handle_gen(first));
+    CHECK(!render_handle_valid(&table, first));
+    CHECK(render_handle_valid(&table, replacement));
+}
+
+TEST(render, debug_draw_uses_one_frame_arena_block_and_resets) {
+    alignas(16) uint8_t memory[64 * 1024]{};
+    Arena arena;
+    arena_init_fixed(&arena, memory, sizeof(memory));
+    RenderDebugList list{};
+    CHECK(render_debug_begin(&list, &arena, 2048));
+    const size_t allocated_once = arena.offset;
+    CHECK(render_debug_line(&list, mm::vec3_make(0,0,0), mm::vec3_make(1,0,0), 0xffffffffu));
+    CHECK(render_debug_aabb(&list, mm::vec3_make(-1,-1,-1), mm::vec3_make(1,1,1), 0xff00ffffu));
+    CHECK(render_debug_sphere(&list, mm::vec3_make(0,0,0), 1.0f, 0xffff00ffu, 8));
+    render_debug_end_world(&list);
+    CHECK(list.world_count == 2 + 24 + 48);
+    CHECK(render_debug_text_2d(&list, 8.0f, 8.0f, 1.0f, 0xffffffffu, "FPS: 60"));
+    CHECK(list.count > list.world_count);
+    CHECK(arena.offset == allocated_once);
+    arena_reset(&arena);
+    CHECK(render_debug_begin(&list, &arena, 2048));
+    CHECK(list.count == 0);
 }
