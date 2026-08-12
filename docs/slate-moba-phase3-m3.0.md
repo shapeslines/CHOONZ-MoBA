@@ -51,8 +51,8 @@ green, so changes to entity storage are immediately measurable against an establ
 
 ## Architecture constraints
 
-- `eng_sim` depends on `eng_core` and `eng_math` only. It must not link platform, renderer, OS,
-  wall-clock, or floating-point code.
+- `eng_sim` depends on `eng_core`, `eng_math`, and the OS-free `eng_serialize` codec only. It must
+  not link platform, renderer, OS, wall-clock, or floating-point code.
 - `core/sim_config.h` owns `SIM_HZ`, `SIM_DT_SECONDS`, and `SIM_MAX_CATCHUP_S`.
   `sim/sim_config.h` derives `SIM_DT_FIXED` where the core and math authorities first meet,
   preserving both as independent leaves (ADR-0001/0006).
@@ -69,7 +69,7 @@ green, so changes to entity storage are immediately measurable against an establ
 | ID | Slice | Done-when | Status |
 |----|-------|-----------|--------|
 | S0 | Restore the shared simulation constants contract | `core/sim_config.h` exists, consumers compile against it, and a focused test proves 30 Hz/Q16.16 values without duplicate definitions | done 2026-08-12 |
-| S1 | Scaffold platform-free `eng_sim` and placeholder world | CMake exposes `eng::sim`; `SimWorld` owns fixed-order SoA position/velocity/health/cooldown arrays plus tick and PCG32 state; `sim_init(seed)` and `sim_tick(world, commands)` are deterministic | queued |
+| S1 | Scaffold bounded `eng_serialize` plus platform-free `eng_sim` and placeholder world | CMake exposes `eng::serialize` and `eng::sim`; bounded LE I/O is sticky/atomic; `SimWorld` owns fixed-order SoA position/velocity/health/cooldown arrays plus tick and PCG32 state; invalid command buffers do not mutate it | done 2026-08-12 |
 | S2 | Add canonical state hashing | FNV-1a hashes every live gameplay field and RNG word byte-wise in documented order; changes to each field affect the hash; padding/capacity do not | queued |
 | S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | queued |
 | S4 | Prove 10,000-tick determinism and exact divergence | Two same-seed/input runs match every tick in Debug and Release; a controlled perturbation at tick N reports N as the first divergence | queued |
@@ -84,7 +84,7 @@ green, so changes to entity storage are immediately measurable against an establ
 - Negative proof: perturb one gameplay field at a selected tick => first mismatch is that tick.
 - Replay: memory round-trip plus platform-file round-trip; corrupt magic/version/logic hash/length
   each fail deterministically.
-- Isolation: link graph and source scan confirm `eng_sim -> eng_core + eng_math` only.
+- Isolation: link graph and source scan confirm `eng_sim -> eng_core + eng_math + eng_serialize` only.
 
 ## Exit gate
 

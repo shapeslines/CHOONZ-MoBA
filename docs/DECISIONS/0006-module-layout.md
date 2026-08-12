@@ -35,7 +35,7 @@ Dependency rules (enforced by the link graph):
 core, math            -> leaves (only the platform page-alloc seam)
 platform              -> core
 render                -> core, math, platform        (ONLY module that sees Vulkan)
-sim                   -> core, math                   (NO platform/render, NO float)
+sim                   -> core, math, serialize        (NO platform/render, NO float)
 net                   -> core, math, platform(sockets), sim   (drives sim_tick)
 assets                -> core, math, platform(file)
 serialize             -> core                          (shared LE codecs)

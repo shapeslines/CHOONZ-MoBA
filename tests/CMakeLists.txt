@@ -12,7 +12,8 @@
 # app layer (ADR-0006) so headless testing holds. Splitting the page backend out of
 # the Win32 window TU so this group is literally window-free is a later cleanup.
 add_library(engine_core_group INTERFACE)
-target_link_libraries(engine_core_group INTERFACE eng::core eng::math eng::platform)
+target_link_libraries(engine_core_group INTERFACE
+    eng::core eng::math eng::serialize eng::sim eng::platform)
 
 # --- engine_tests: the headless aggregate suite (mem + math + containers) ---
 add_executable(engine_tests
@@ -21,13 +22,14 @@ add_executable(engine_tests
     math/math_tests.cpp
     containers/container_tests.cpp
     platform/platform_tests.cpp
+    serialize/serialize_tests.cpp
     sim/sim_config_tests.cpp
+    sim/sim_tests.cpp
     render/render_tests.cpp
     tga/tga_tests.cpp
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
 target_include_directories(engine_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/engine/sim/include
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src
     ${CMAKE_SOURCE_DIR}/engine/render/src)                  # Vulkan-free render internals under test
 # The aggregate suite links only the Vulkan-free renderer core; the null seam has its
@@ -56,6 +58,7 @@ add_test(NAME mem         COMMAND engine_tests --suite mem)
 add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
 add_test(NAME platform    COMMAND engine_tests --suite platform)  # file I/O (M2.1)
+add_test(NAME serialize   COMMAND engine_tests --suite serialize)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)

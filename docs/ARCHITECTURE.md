@@ -62,7 +62,10 @@ The CMake link graph *is* the architecture. Each module is one static library (`
   assert, handle)     vec/mat/rng)
 ```
 
-`eng_core` and `eng_math` are dependency-free leaves. `eng_net` depends on `eng_sim` (it calls `sim_tick`) and on `eng_platform` (sockets). Only `eng_render` sees Vulkan. Only `eng_platform` contains Win32-specific `.cpp`.
+`eng_core` and `eng_math` are dependency-free leaves. `eng_serialize` depends only on core;
+`eng_sim` depends on core, math, and serialize. `eng_net` depends on `eng_sim` (it calls
+`sim_tick`) and on `eng_platform` (sockets). Only `eng_render` sees Vulkan. Only `eng_platform`
+contains Win32-specific `.cpp`.
 
 **`eng_core_group`** is an INTERFACE/aggregate CMake target that link-groups exactly the OS-free, GPU-free modules — `eng_core`, `eng_math`, `eng_sim`, `eng_net` (core logic), `eng_assets` (parsers), `eng_serialize` — so the test binary and offline tools link the deterministic core **headlessly**. It is a grouping, not a separate compilation of those sources. (This reconciles the "module graph" and the "engine_core/engine_app" testing split into one architecture: the seven fine-grained libs exist; `eng_core_group` simply names the non-Win32/non-Vulkan subset.)
 
