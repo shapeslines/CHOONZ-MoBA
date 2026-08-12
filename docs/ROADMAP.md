@@ -116,9 +116,9 @@ this is the bedrock that prevents foundation-level rework.
 written. These are effectively irreversible once code is built on them.
 **Deliverables — one ADR file each in `docs/DECISIONS/`:**
 - **`0001-tick-rate.md` → 30 Hz.** The sim/net/gameplay trio already agree; Platform's 60 Hz is the
-  outlier. Define `SIM_HZ = 30`, `SIM_DT_SECONDS`, `SIM_DT_FIXED` in **one** header
-  (`engine/core/include/core/sim_config.h`). The platform loop *includes* this; it never defines its
-  own `FIXED_DT`. Accumulator stays rate-agnostic so a later bump to 60 is a one-line change.
+  outlier. Define `SIM_HZ = 30`, `SIM_DT_SECONDS`, and the catch-up clamp in
+  `engine/core/include/core/sim_config.h`; derive `SIM_DT_FIXED` in `sim/sim_config.h`, where core's
+  rate and math's `FIX_ONE` first meet. The platform loop never defines its own `FIXED_DT`.
 - **`0002-fixed-point-format.md` → Q16.16 (`typedef int32_t fix`, `int64_t` intermediate multiply).**
   Reasons: compiles cleanly on MSVC (Q32.32's `__int128` does **not** — it's a GCC/Clang extension;
   MSVC would need `_mul128`/`__mulh`); halves sim-state / snapshot / wire / hash size; the gameplay
@@ -499,7 +499,8 @@ scale. **Exercises:** ECS, Determinism.
 - The accumulator lives in the **platform's outer loop** (it owns the OS pump + clock); the ECS
   "loop.c" and netcode "Stage 0 loop" are re-described as **what `engine_frame`/`engine_render` call
   into**, not independent loops (reviews: three "the loop" specs reconciled to one).
-- `SIM_DT_FIXED` from `core/sim_config.h` (30 Hz); 0.25s clamp (spiral-of-death guard).
+- `SIM_DT_FIXED` from `sim/sim_config.h` (derived from core's 30 Hz); core's 0.25s clamp
+  remains the spiral-of-death guard.
 - `RenderSnapshot` (slim, interpolatable presentation fields); `snapshot_extract` (fixed) at tick end;
   double-buffered prev/curr.
 - **One named owner for interpolation + fixed→float + DrawItem building: the game/present glue.** It

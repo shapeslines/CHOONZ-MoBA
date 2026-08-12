@@ -2,13 +2,13 @@
 type: record
 title: "SLATE - Phase 3 M3.0 determinism harness"
 kind: slate
-status: queued
+status: active
 project: moba
 axis: "simulation determinism"
 opened: 2026-08-12
 updated: 2026-08-12
 closed:
-worktree: "new branch from main after PR #13 lands"
+worktree: "repo root"
 branch: "moba/slate-phase3-determinism"
 tags: [slate, determinism, simulation]
 related:
@@ -21,7 +21,7 @@ related:
 
 # Slate - Phase 3 M3.0 determinism harness
 
-**Status:** queued behind PR #13 landing. The Phase 2 S6 owner gate passed on 2026-08-12.
+**Status:** active on merged `main` baseline `6a21920`.
 
 ## Goal
 
@@ -35,8 +35,8 @@ green, so changes to entity storage are immediately measurable against an establ
 ## Entry gate
 
 - [x] Phase 2 S6 passes with zero Vulkan validation messages.
-- [ ] PR #13 lands on `main`.
-- [ ] Create `moba/slate-phase3-determinism` from the updated `main`; do not stack simulation work on
+- [x] PR #13 lands on `main` as `6a21920`.
+- [x] Create `moba/slate-phase3-determinism` from the updated `main`; do not stack simulation work on
   the renderer branch.
 
 ## Fence
@@ -53,9 +53,9 @@ green, so changes to entity storage are immediately measurable against an establ
 
 - `eng_sim` depends on `eng_core` and `eng_math` only. It must not link platform, renderer, OS,
   wall-clock, or floating-point code.
-- `core/sim_config.h` is the single owner of `SIM_HZ`, `SIM_DT_SECONDS`, `SIM_DT_FIXED`, and
-  `SIM_MAX_CATCHUP_S`, matching ADR-0001. The documented header is currently missing and is the
-  first repair.
+- `core/sim_config.h` owns `SIM_HZ`, `SIM_DT_SECONDS`, and `SIM_MAX_CATCHUP_S`.
+  `sim/sim_config.h` derives `SIM_DT_FIXED` where the core and math authorities first meet,
+  preserving both as independent leaves (ADR-0001/0006).
 - State hashing consumes explicit fields in an explicit order. Never hash struct padding, raw
   capacity, pointers, render data, timing data, or debug state.
 - Replay encoding is hand-written and little-endian. The deterministic codec stays independent of
@@ -68,7 +68,7 @@ green, so changes to entity storage are immediately measurable against an establ
 
 | ID | Slice | Done-when | Status |
 |----|-------|-----------|--------|
-| S0 | Restore the shared simulation constants contract | `core/sim_config.h` exists, consumers compile against it, and a focused test proves 30 Hz/Q16.16 values without duplicate definitions | queued |
+| S0 | Restore the shared simulation constants contract | `core/sim_config.h` exists, consumers compile against it, and a focused test proves 30 Hz/Q16.16 values without duplicate definitions | done 2026-08-12 |
 | S1 | Scaffold platform-free `eng_sim` and placeholder world | CMake exposes `eng::sim`; `SimWorld` owns fixed-order SoA position/velocity/health/cooldown arrays plus tick and PCG32 state; `sim_init(seed)` and `sim_tick(world, commands)` are deterministic | queued |
 | S2 | Add canonical state hashing | FNV-1a hashes every live gameplay field and RNG word byte-wise in documented order; changes to each field affect the hash; padding/capacity do not | queued |
 | S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | queued |

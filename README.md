@@ -82,11 +82,12 @@ git config core.hooksPath tools/hooks
 
 ```
 engine/        the engine, one static lib per module (the CMake link graph = the architecture)
-  core/        arenas, containers, handle.h, sim_config.h, log/assert  (leaf)
+  core/        arenas, containers, handle.h, cadence config, log/assert (leaf)
   math/        fix.h (Q16.16), rng.h, vec/mat/quat                     (leaf)
   platform/    the OS seam (Win32): window, input, timing, files, sockets, Vulkan surface
   render/      raw Vulkan behind a thin renderer seam; GLSL sources in render/shaders/
-  (serialize / assets / sim / net arrive in their phases)
+  sim/         fixed-point config derivative; deterministic sim arrives in Phase 3
+  (serialize / assets / net arrive in their phases)
 cmake/         CompilerWarnings, EngineOptions, CompileShaders helpers
 game/ tools/   the game exe, sandbox, asset cooker
 assets/ tests/

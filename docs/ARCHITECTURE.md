@@ -90,15 +90,20 @@ This section defines, **once**, the things every subsystem must agree on. Other 
 
 Determinism is a global, engine-wide invariant, not a feature. It is enforced by construction and verified continuously.
 
-**Shared constants live in `core/sim_config.h` — the single source of truth:**
+**Cadence and accumulator constants live in `core/sim_config.h`:**
 
 ```c
-// core/sim_config.h — included by platform loop, sim, net, gameplay. NOBODY redefines these.
+// core/sim_config.h — included by platform loop, sim, net, gameplay.
 #define SIM_HZ              30                       // fixed simulation rate
 #define SIM_DT_SECONDS      (1.0 / (double)SIM_HZ)   // for the wall-clock accumulator only
-#define SIM_DT_FIXED        (FIX_ONE / SIM_HZ)       // fixed-point dt for sim integration
 #define SIM_MAX_CATCHUP_S   0.25                     // accumulator clamp (anti spiral-of-death)
+
+// sim/sim_config.h — first layer that sees both core cadence and math's Q16.16 scale.
+#define SIM_DT_FIXED        (FIX_ONE / SIM_HZ)       // fixed-point dt for sim integration
 ```
+
+The split preserves `eng_core` and `eng_math` as independent leaves: core owns the
+rate, math owns `FIX_ONE`, and sim derives the value that needs both.
 
 > **Resolved — tick rate is 30 Hz.** The platform loop owns the accumulator but **reads `SIM_HZ`**; it never hardcodes its own rate. 30 Hz is the MOBA-proven value the netcode bandwidth and input-delay math (2–4 ticks ≈ 66–133 ms) are built on. The accumulator stays rate-agnostic so a later bump to 60 Hz is a one-line change.
 
@@ -255,7 +260,7 @@ moba-game/
 │  ├─ platform/  include/platform/*.h  src/win32/*.cpp   # the OS seam + impl
 │  ├─ render/    include/render/*.h    src/vk/*.cpp       # raw Vulkan
 │  ├─ assets/    include/assets/*.h    src/*.cpp          # parsers, .mba loader, registry
-│  ├─ sim/       include/sim/*.h       src/*.cpp          # ECS + deterministic sim
+│  ├─ sim/       include/sim/*.h       src/*.cpp          # config derivative + deterministic sim/ECS
 │  └─ net/       include/net/*.h       src/*.cpp          # server-auth + UDP
 ├─ game/         src/main_win32.cpp  src/game_*.cpp  src/present/*.cpp
 ├─ tools/

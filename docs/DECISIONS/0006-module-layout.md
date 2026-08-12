@@ -42,6 +42,10 @@ serialize             -> core                          (shared LE codecs)
 game / server / tests -> link the above + own only main()/wiring
 ```
 
+Shared configuration follows the same boundary: `core/sim_config.h` owns the tick
+rate and wall-clock accumulator constants, while `sim/sim_config.h` derives
+`SIM_DT_FIXED` from core's `SIM_HZ` and math's `FIX_ONE`. Core never includes math.
+
 ## Consequences
 
 - Architecture is enforced by the compiler/linker, not by convention.
