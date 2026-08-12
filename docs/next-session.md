@@ -23,8 +23,11 @@ land the branch via squash PR.
 
 ## After Phase 2 closes
 
-Open a fresh Phase 3 slate starting at M3.0 (determinism harness/state hash), then M3.1 ECS. Do not
-pull Phase 4 assets, allocator Phase 2, or Vulkan-in-hosted-CI into that slate.
+Create `moba/slate-phase3-determinism` from the updated `main` and execute the queued
+[`M3.0 determinism slate`](slate-moba-phase3-m3.0.md). It restores the missing shared sim constants,
+then builds the platform-free placeholder sim, canonical state hash, replay path, and 10,000-tick
+exact-divergence proof. Keep M3.1 ECS in its own later slate; do not pull Phase 4 assets, allocator
+Phase 2, or Vulkan-in-hosted-CI into M3.0.
 
 ## Residual owner gates
 
