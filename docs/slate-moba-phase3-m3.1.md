@@ -20,7 +20,7 @@ related:
 
 # Slate - Phase 3 M3.1 entity model and sparse-set SoA
 
-**Status:** active on merged `main` baseline `9c14fdf`.
+**Status:** active on merged `main` baseline `9c14fdf`; draft PR #15.
 
 ## Goal
 
@@ -59,7 +59,7 @@ component pools while preserving the established replay/hash stream as the regre
 |----|-------|---------------------------|--------|
 | S0 | Rebaseline and specify storage contracts | M3.0 10,000-tick Debug/Release oracle captured; capacities, failure behavior, generation wrap policy, and canonical hash migration are written down | done 2026-08-12 |
 | S1 | Add arena-backed `EntityManager` | create/alive/destroy/recycle tests pass; stale IDs fail; exhaustion is explicit; generation zero is never issued | done 2026-08-12 |
-| S2 | Add generic sparse/dense membership core | add/remove/has/dense lookup stay O(1); swap-remove repairs sparse and back-reference maps under adversarial sequences | queued |
+| S2 | Add generic sparse/dense membership core | add/remove/has/dense lookup stay O(1); swap-remove repairs sparse and back-reference maps under adversarial sequences | done 2026-08-12 |
 | S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | queued |
 | S4 | Integrate deferred destruction into `SimWorld` | queued destroys commit once at the tick boundary, remove all components, invalidate stale IDs, and cannot partially mutate on failure | queued |
 | S5 | Migrate canonical hash/diff and replay oracle | all authoritative entity/pool fields have an explicit LE order; logic hash is deliberately bumped; run-twice and exact-divergence tests stay green | queued |
@@ -85,3 +85,8 @@ and Release. M3.2 scheduling remains a separate decision and implementation slat
   Release explicitly proves deterministic generation wrap to one. The Debug sim-boundary scan
   remains green, and initialization tests prove invalid and under-budget attempts preserve both
   the output object and arena offset.
+- **S2:** Added the arena-backed `ComponentPool` membership core with sparse index to dense-slot
+  plus one and exact-`EntityId` dense back-references. Focused tests cover initialization budgets,
+  duplicate/stale/full/missing atomic failures, first/middle/last swap-removal, and 1,024 churn
+  operations with both directions checked after every mutation. `sim_component_pool`,
+  `sim_entity`, `sim`, and `sim_boundary` pass under the `ci` preset in Debug and Release.
