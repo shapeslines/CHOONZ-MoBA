@@ -27,6 +27,7 @@ add_executable(engine_tests
     sim/components_tests.cpp
     sim/deferred_destroy_tests.cpp
     sim/entity_tests.cpp
+    sim/events_tests.cpp
     sim/sim_config_tests.cpp
     sim/sim_hash_tests.cpp
     sim/replay_tests.cpp
@@ -75,6 +76,7 @@ add_test(NAME sim_component_pool COMMAND engine_tests --suite sim_component_pool
 add_test(NAME sim_components COMMAND engine_tests --suite sim_components)
 add_test(NAME sim_destroy COMMAND engine_tests --suite sim_destroy)
 add_test(NAME sim_entity  COMMAND engine_tests --suite sim_entity)
+add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)

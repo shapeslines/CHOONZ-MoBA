@@ -9,7 +9,8 @@ static mm::fix fix_add_wrap(mm::fix a, mm::fix b) {
 static bool sim_config_valid(SimWorldConfig config) {
     return config.max_entities > 0u && config.max_entities <= HANDLE_INDEX_MASK + 1u &&
            config.initial_unit_count <= SIM_MAX_UNITS &&
-           config.initial_unit_count <= config.max_entities;
+           config.initial_unit_count <= config.max_entities &&
+           config.damage_event_capacity > 0u;
 }
 
 static bool add_required(size_t* total, size_t required) {
@@ -19,7 +20,8 @@ static bool add_required(size_t* total, size_t required) {
 }
 
 SimWorldConfig sim_world_config_default(void) {
-    return SimWorldConfig{SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS};
+    return SimWorldConfig{
+        SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY};
 }
 
 size_t sim_world_memory_required(SimWorldConfig config) {
@@ -31,7 +33,9 @@ size_t sim_world_memory_required(SimWorldConfig config) {
         !add_required(&total, velocity_pool_memory_required(
                                   config.max_entities, config.max_entities)) ||
         !add_required(&total, health_pool_memory_required(
-                                  config.max_entities, config.max_entities))) return 0u;
+                                  config.max_entities, config.max_entities)) ||
+        !add_required(&total, damage_event_queue_memory_required(
+                                  config.damage_event_capacity))) return 0u;
 
     size_t destroy_bytes = sizeof(EntityId) * static_cast<size_t>(config.max_entities);
     if (destroy_bytes > SIZE_MAX - (alignof(EntityId) - 1u) ||
@@ -53,7 +57,9 @@ bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig confi
         !velocity_pool_init(&staged.velocities, arena,
                             config.max_entities, config.max_entities) ||
         !health_pool_init(&staged.health, arena,
-                          config.max_entities, config.max_entities)) {
+                          config.max_entities, config.max_entities) ||
+        !damage_event_queue_init(&staged.damage_events, arena,
+                                 config.damage_event_capacity)) {
         temp_end(temp);
         return false;
     }
@@ -111,6 +117,7 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
         world->transforms.membership.capacity != world->config.max_entities ||
         world->velocities.membership.capacity != world->config.max_entities ||
         world->health.membership.capacity != world->config.max_entities ||
+        !damage_event_queue_is_valid(&world->damage_events) ||
         !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
         return false;
 

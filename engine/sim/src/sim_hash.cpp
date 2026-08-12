@@ -35,7 +35,8 @@ static uint32_t i32_bits(int32_t value) {
 static bool config_valid(SimWorldConfig config) {
     return config.max_entities > 0u && config.max_entities <= HANDLE_INDEX_MASK + 1u &&
            config.initial_unit_count <= SIM_MAX_UNITS &&
-           config.initial_unit_count <= config.max_entities;
+           config.initial_unit_count <= config.max_entities &&
+           config.damage_event_capacity > 0u;
 }
 
 static bool entity_manager_valid(const EntityManager* manager, uint32_t capacity) {
@@ -96,6 +97,7 @@ static bool canonical_world_valid(const SimWorld* world) {
         !world->transforms.position_x || !world->transforms.position_y || !world->transforms.facing ||
         !world->velocities.velocity_x || !world->velocities.velocity_y ||
         !world->health.current || !world->health.maximum || !world->health.damage_cooldown ||
+        !damage_event_queue_is_valid(&world->damage_events) ||
         !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
         return false;
 

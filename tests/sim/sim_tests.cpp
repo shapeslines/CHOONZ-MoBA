@@ -28,13 +28,14 @@ static SimCommand damage(uint8_t player, uint16_t unit, int32_t amount) {
 }
 
 static SimWorldConfig test_config(uint32_t initial_units = SIM_MAX_UNITS) {
-    return SimWorldConfig{SIM_MAX_UNITS, initial_units};
+    return SimWorldConfig{SIM_MAX_UNITS, initial_units, 8u};
 }
 
 TEST(sim, initialization_sizes_the_arena_and_is_atomic) {
     SimWorldConfig defaults = sim_world_config_default();
     CHECK(defaults.max_entities == SIM_DEFAULT_MAX_ENTITIES);
     CHECK(defaults.initial_unit_count == SIM_MAX_UNITS);
+    CHECK(defaults.damage_event_capacity == SIM_DEFAULT_DAMAGE_EVENT_CAPACITY);
     CHECK(sim_world_memory_required(defaults) > sim_world_memory_required(test_config()));
 
     size_t required = sim_world_memory_required(test_config(4u));
@@ -48,6 +49,9 @@ TEST(sim, initialization_sizes_the_arena_and_is_atomic) {
     CHECK(exact_arena.offset <= required);
     CHECK(initialized.config.max_entities == SIM_MAX_UNITS);
     CHECK(initialized.config.initial_unit_count == 4u);
+    CHECK(initialized.config.damage_event_capacity == 8u);
+    CHECK(damage_event_queue_is_valid(&initialized.damage_events));
+    CHECK(initialized.damage_events.capacity == 8u);
     CHECK(initialized.entities.live_count == 4u);
 
     alignas(16) uint8_t short_storage[TEST_WORLD_BYTES]{};
@@ -61,10 +65,11 @@ TEST(sim, initialization_sizes_the_arena_and_is_atomic) {
     CHECK(short_arena.offset == 0u);
 
     const SimWorldConfig invalid[] = {
-        {0u, 0u},
-        {HANDLE_INDEX_MASK + 2u, 0u},
-        {4u, 5u},
-        {SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS + 1u},
+        {0u, 0u, 8u},
+        {HANDLE_INDEX_MASK + 2u, 0u, 8u},
+        {4u, 5u, 8u},
+        {SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS + 1u, 8u},
+        {SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, 0u},
     };
     for (const SimWorldConfig config : invalid) {
         CHECK(sim_world_memory_required(config) == 0u);

@@ -69,7 +69,7 @@ both 10,000-tick runs retain the M3.1 golden, and the controlled divergence rema
 |----|-------|---------------------------|--------|
 | S0 | Land and rebaseline | branch starts at merged PR #15 and the untouched M3.1 Debug/Release oracle is recorded | done 2026-08-12 |
 | S1 | Ordered iteration cache | membership churn rebuilds a unique ascending entity-index view; dense reorder cannot affect it | done 2026-08-12 |
-| S2 | Typed event queues | fixed-capacity double buffers append/drain deterministically and reject overflow atomically | queued |
+| S2 | Typed event queues | fixed-capacity double buffers append/drain deterministically and reject overflow atomically | done 2026-08-12 |
 | S3 | Plain systems | movement and damage-resolution systems consume typed views/events with no storage-order dependency | queued |
 | S4 | Explicit schedule | one literal `sim_tick` order runs commands, movement, damage, cleanup, RNG, and tick-boundary destruction | queued |
 | S5 | Determinism migration | canonical hash/diff covers authoritative queues/system state; 10,000 ticks and exact mutation proof pass in Debug/Release | queued |
@@ -88,3 +88,9 @@ Debug/Release replay oracle and boundary gates remain green. M3.3 stays a separa
   atomic rebuild by ascending sparse index. Focused Debug tests cover divergent dense layouts,
   swap-remove/re-add churn, stable clean-cache reads, and failure atomicity. The affected sim targets,
   M3.1 golden stream, exact tick-4321 diagnostic, and sim-boundary test remain green.
+- **S2:** Added the typed 12-byte `DamageEvent` and an arena-backed two-buffer queue with explicit
+  append, publish, read, and consume phases. The world configuration owns queue capacity (256 by
+  default), sizing and initialization remain transactional, overflow/invalid/unread-publish failures
+  are byte-for-byte mutation-free, and a focused test demonstrates that deferring only `publish`
+  produces the future next-tick policy. All affected sim/replay targets and the unchanged M3.1 oracle
+  remain green.

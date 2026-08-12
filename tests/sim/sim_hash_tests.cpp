@@ -12,7 +12,7 @@ typedef struct HashWorldFixture {
 } HashWorldFixture;
 
 static bool hash_world_init(HashWorldFixture* fixture, uint64_t seed = 1234u,
-                            SimWorldConfig config = SimWorldConfig{64u, 4u}) {
+                            SimWorldConfig config = SimWorldConfig{64u, 4u, 8u}) {
     if (!fixture) return false;
     std::memset(fixture, 0, sizeof(*fixture));
     arena_init_fixed(&fixture->arena, fixture->storage, sizeof(fixture->storage));
@@ -50,9 +50,9 @@ TEST(sim, canonical_hash_covers_scalars_lifecycle_order_and_component_values) {
     CHECK(sim_hash_state(&changed.world) != baseline);
 
     HashWorldFixture other_config{};
-    CHECK(hash_world_init(&other_config, 1234u, SimWorldConfig{65u, 4u}));
+    CHECK(hash_world_init(&other_config, 1234u, SimWorldConfig{65u, 4u, 8u}));
     CHECK(sim_hash_state(&other_config.world) != baseline);
-    CHECK(hash_world_init(&other_config, 1234u, SimWorldConfig{64u, 3u}));
+    CHECK(hash_world_init(&other_config, 1234u, SimWorldConfig{64u, 3u, 8u}));
     CHECK(sim_hash_state(&other_config.world) != baseline);
 
     CHECK(hash_world_init(&changed));
@@ -121,8 +121,8 @@ TEST(sim, canonical_hash_covers_pool_membership_free_stack_and_queue_order) {
     CHECK(sim_hash_state(&with_health.world) != componentless_hash);
 
     HashWorldFixture free_ab{}, free_ba{};
-    CHECK(hash_world_init(&free_ab, 1u, SimWorldConfig{8u, 0u}));
-    CHECK(hash_world_init(&free_ba, 1u, SimWorldConfig{8u, 0u}));
+    CHECK(hash_world_init(&free_ab, 1u, SimWorldConfig{8u, 0u, 8u}));
+    CHECK(hash_world_init(&free_ba, 1u, SimWorldConfig{8u, 0u, 8u}));
     EntityId ab0 = create_componentless(&free_ab);
     EntityId ab1 = create_componentless(&free_ab);
     EntityId ba0 = create_componentless(&free_ba);
@@ -210,8 +210,8 @@ TEST(sim, canonical_hash_excludes_pointers_unused_capacity_and_dense_order) {
 
 TEST(sim, canonical_diff_reports_matching_field_and_index_domain) {
     HashWorldFixture expected{}, actual{};
-    CHECK(hash_world_init(&expected, 77u, SimWorldConfig{64u, 8u}));
-    CHECK(hash_world_init(&actual, 77u, SimWorldConfig{64u, 8u}));
+    CHECK(hash_world_init(&expected, 77u, SimWorldConfig{64u, 8u, 8u}));
+    CHECK(hash_world_init(&actual, 77u, SimWorldConfig{64u, 8u, 8u}));
     TransformView transform{};
     VelocityView velocity{};
     HealthView health{};
@@ -230,7 +230,7 @@ TEST(sim, canonical_diff_reports_matching_field_and_index_domain) {
     CHECK(diff.field == SIM_STATE_FIELD_TICK);
     CHECK(diff.index == SIM_STATE_DIFF_NO_INDEX);
 
-    CHECK(hash_world_init(&actual, 77u, SimWorldConfig{64u, 8u}));
+    CHECK(hash_world_init(&actual, 77u, SimWorldConfig{64u, 8u, 8u}));
     EntityId first = actual.world.unit_entities[0];
     actual.world.unit_entities[0] = actual.world.unit_entities[1];
     actual.world.unit_entities[1] = first;
@@ -250,8 +250,8 @@ TEST(sim, canonical_diff_reports_matching_field_and_index_domain) {
     CHECK(diff.index == 0u);
 
     HashWorldFixture free_ab{}, free_ba{};
-    CHECK(hash_world_init(&free_ab, 1u, SimWorldConfig{8u, 0u}));
-    CHECK(hash_world_init(&free_ba, 1u, SimWorldConfig{8u, 0u}));
+    CHECK(hash_world_init(&free_ab, 1u, SimWorldConfig{8u, 0u, 8u}));
+    CHECK(hash_world_init(&free_ba, 1u, SimWorldConfig{8u, 0u, 8u}));
     EntityId ab0 = create_componentless(&free_ab);
     EntityId ab1 = create_componentless(&free_ab);
     EntityId ba0 = create_componentless(&free_ba);
@@ -264,7 +264,7 @@ TEST(sim, canonical_diff_reports_matching_field_and_index_domain) {
     CHECK(diff.field == SIM_STATE_FIELD_ENTITY_FREE_STACK);
     CHECK(diff.index == 0u);
 
-    CHECK(hash_world_init(&actual, 77u, SimWorldConfig{64u, 8u}));
+    CHECK(hash_world_init(&actual, 77u, SimWorldConfig{64u, 8u, 8u}));
     CHECK(!sim_diff_state(&expected.world, &actual.world, &diff));
     CHECK(diff.field == SIM_STATE_FIELD_NONE);
 }

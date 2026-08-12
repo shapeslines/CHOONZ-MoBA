@@ -18,7 +18,7 @@ static bool destroy_fixture_init(DestroyFixture* fixture,
     std::memset(fixture, 0, sizeof(*fixture));
     arena_init_fixed(&fixture->arena, fixture->storage, sizeof(fixture->storage));
     return sim_init(&fixture->world, &fixture->arena, 123u,
-                    SimWorldConfig{max_entities, initial_units});
+                    SimWorldConfig{max_entities, initial_units, 8u});
 }
 
 static SimCommand destroy_test_velocity(uint16_t unit, mm::fix x) {
