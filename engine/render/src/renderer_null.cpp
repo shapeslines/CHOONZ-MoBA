@@ -16,3 +16,6 @@ bool renderer_upload_texture(Renderer* r, int width, int height, const void* rgb
     (void)r; (void)width; (void)height; (void)rgba8;
     return false;
 }
+void renderer_set_view_proj(Renderer* r, const mm::mat4* view, const mm::mat4* proj) {
+    (void)r; (void)view; (void)proj;
+}

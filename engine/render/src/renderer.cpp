@@ -44,15 +44,17 @@ static const PipelineDesc k_pipeline_registry[PIPELINE_COUNT] = {
     { "quad",     "quad.vert.spv",     "quad.frag.spv",     VERTEX_LAYOUT_POS2_UV2, LAYOUT_MATERIAL },
 };
 
-// ---- Quad geometry (M2.2) ------------------------------------------------------
+// ---- Quad geometry (M2.2/M2.3) ----------------------------------------------------
 // NDC is Y-down; uv (0,0) is the texture's top-left texel (rows uploaded top-down),
-// so the top-left vertex carries uv (0,0) and the image appears upright.
+// so the top-left vertex carries uv (0,0) and the image appears upright. Since M2.3
+// the verts are WORLD-space XY (z=0) on the ground plane around the origin, warped by
+// the camera UBO — ±2.0 units reads well from the sandbox camera's default distance.
 struct QuadVertex { float x, y, u, v; };
 static const QuadVertex k_quad_verts[4] = {
-    { -0.4f, -0.4f, 0.0f, 0.0f },   // top-left
-    {  0.4f, -0.4f, 1.0f, 0.0f },   // top-right
-    {  0.4f,  0.4f, 1.0f, 1.0f },   // bottom-right
-    { -0.4f,  0.4f, 0.0f, 1.0f },   // bottom-left
+    { -2.0f, -2.0f, 0.0f, 0.0f },   // top-left
+    {  2.0f, -2.0f, 1.0f, 0.0f },   // top-right
+    {  2.0f,  2.0f, 1.0f, 1.0f },   // bottom-right
+    { -2.0f,  2.0f, 0.0f, 1.0f },   // bottom-left
 };
 static const uint16_t k_quad_indices[6] = { 0, 1, 2, 0, 2, 3 };
 
@@ -103,12 +105,22 @@ struct Renderer {
     VkDeviceMemory        texture_mem;
     VkImageView           texture_view;
     VkSampler             sampler;
-    VkDescriptorSetLayout set0_layout;               // empty placeholder (per-frame UBO lands here in M2.3)
+    VkDescriptorSetLayout set0_layout;               // set=0: per-frame view/proj UBO (M2.3)
     VkDescriptorSetLayout material_layout;           // set=1: combined image sampler
     VkDescriptorPool      desc_pool;
     VkDescriptorSet       material_set;
     VkPipelineLayout      material_pipeline_layout;  // [set0_layout, material_layout]
     bool                  texture_ready;             // quad draws only once this is set
+
+    // camera / per-frame UBO ring (M2.3): one persistently-mapped HOST_COHERENT buffer
+    // + descriptor per frame slot. Written at the top of draw_frame — slot fr is safe
+    // to touch because in_flight[fr] was just waited on (the old frame is done).
+    struct CameraUBO { mm::mat4 view; mm::mat4 proj; };   // 128 B, 16-aligned, std140-clean
+    CameraUBO             camera_ubo;                 // latest app camera (identity until set)
+    VkBuffer              ubo[FRAMES_IN_FLIGHT];
+    VkDeviceMemory        ubo_mem[FRAMES_IN_FLIGHT];
+    void*                 ubo_map[FRAMES_IN_FLIGHT];
+    VkDescriptorSet       ubo_set[FRAMES_IN_FLIGHT];
 
     // per-frame
     VkCommandPool   cmd_pool;
@@ -808,8 +820,20 @@ Renderer* renderer_create(PlatformWindow* window) {
         platform_log("renderer: vkCreatePipelineLayout failed\n"); renderer_destroy(r); return nullptr;
     }
     {
-        VkDescriptorSetLayoutCreateInfo empty_ci{};
-        empty_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        // set=0: per-frame view/proj UBO (M2.3) — the slot M2.2 reserved empty. One
+        // binding: uniform buffer at 0, vertex stage only. The triangle's own layout
+        // stays truly empty (it has no descriptors); only the material pipeline
+        // carries [set0_layout, material_layout].
+        VkDescriptorSetLayoutBinding ubo_bind{};
+        ubo_bind.binding         = 0;
+        ubo_bind.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        ubo_bind.descriptorCount = 1;
+        ubo_bind.stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
+        VkDescriptorSetLayoutCreateInfo set0_ci{};
+        set0_ci.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        set0_ci.bindingCount = 1;
+        set0_ci.pBindings    = &ubo_bind;
+
         VkDescriptorSetLayoutBinding tex_bind{};
         tex_bind.binding         = 0;
         tex_bind.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -819,7 +843,7 @@ Renderer* renderer_create(PlatformWindow* window) {
         mat_ci.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         mat_ci.bindingCount = 1;
         mat_ci.pBindings    = &tex_bind;
-        if (r->vk.CreateDescriptorSetLayout(r->device, &empty_ci, nullptr, &r->set0_layout) != VK_SUCCESS ||
+        if (r->vk.CreateDescriptorSetLayout(r->device, &set0_ci, nullptr, &r->set0_layout) != VK_SUCCESS ||
             r->vk.CreateDescriptorSetLayout(r->device, &mat_ci, nullptr, &r->material_layout) != VK_SUCCESS) {
             platform_log("renderer: vkCreateDescriptorSetLayout failed\n"); renderer_destroy(r); return nullptr;
         }
@@ -832,14 +856,18 @@ Renderer* renderer_create(PlatformWindow* window) {
             platform_log("renderer: material pipeline layout failed\n"); renderer_destroy(r); return nullptr;
         }
 
-        VkDescriptorPoolSize pool_size{};
-        pool_size.type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        pool_size.descriptorCount = 1;
+        // One pool for the whole descriptor life: FRAMES_IN_FLIGHT UBO sets (set=0) +
+        // one material set (set=1). Sized up front; no per-frame allocation.
+        VkDescriptorPoolSize pool_sizes[2]{};
+        pool_sizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        pool_sizes[0].descriptorCount = FRAMES_IN_FLIGHT;
+        pool_sizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        pool_sizes[1].descriptorCount = 1;
         VkDescriptorPoolCreateInfo pool_ci{};
         pool_ci.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        pool_ci.maxSets       = 1;
-        pool_ci.poolSizeCount = 1;
-        pool_ci.pPoolSizes    = &pool_size;
+        pool_ci.maxSets       = FRAMES_IN_FLIGHT + 1;
+        pool_ci.poolSizeCount = 2;
+        pool_ci.pPoolSizes    = pool_sizes;
         VkDescriptorSetAllocateInfo set_ai{};
         if (r->vk.CreateDescriptorPool(r->device, &pool_ci, nullptr, &r->desc_pool) != VK_SUCCESS) {
             platform_log("renderer: vkCreateDescriptorPool failed\n"); renderer_destroy(r); return nullptr;
@@ -865,6 +893,48 @@ Renderer* renderer_create(PlatformWindow* window) {
         if (r->vk.CreateSampler(r->device, &samp_ci, nullptr, &r->sampler) != VK_SUCCESS) {
             platform_log("renderer: vkCreateSampler failed\n"); renderer_destroy(r); return nullptr;
         }
+    }
+
+    // Per-frame view/proj UBO ring (M2.3): HOST_VISIBLE|HOST_COHERENT, PERSISTENTLY
+    // mapped, written directly each frame — no staging, no flush (ARCHITECTURE §8).
+    // One buffer + one set=0 descriptor per frame slot; the draw writes only the slot
+    // whose fence was just waited on, so a submitted frame never sees a mid-write UBO.
+    {
+        const VkDeviceSize ubo_bytes = sizeof(Renderer::CameraUBO);
+        VkDescriptorBufferInfo binfo{};
+        binfo.range = ubo_bytes;
+        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
+            if (!alloc_buffer(r, ubo_bytes, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                              &r->ubo[i], &r->ubo_mem[i])) {
+                platform_log("renderer: per-frame UBO alloc failed\n"); renderer_destroy(r); return nullptr;
+            }
+            if (r->vk.MapMemory(r->device, r->ubo_mem[i], 0, ubo_bytes, 0, &r->ubo_map[i]) != VK_SUCCESS) {
+                platform_log("renderer: UBO map failed\n"); renderer_destroy(r); return nullptr;
+            }
+            VkDescriptorSetAllocateInfo set_ai{};
+            set_ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            set_ai.descriptorPool     = r->desc_pool;
+            set_ai.descriptorSetCount = 1;
+            set_ai.pSetLayouts        = &r->set0_layout;
+            if (r->vk.AllocateDescriptorSets(r->device, &set_ai, &r->ubo_set[i]) != VK_SUCCESS) {
+                platform_log("renderer: UBO descriptor set alloc failed\n"); renderer_destroy(r); return nullptr;
+            }
+            binfo.buffer = r->ubo[i];
+            VkWriteDescriptorSet write{};
+            write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet          = r->ubo_set[i];
+            write.dstBinding      = 0;
+            write.descriptorCount = 1;
+            write.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            write.pBufferInfo     = &binfo;
+            r->vk.UpdateDescriptorSets(r->device, 1, &write, 0, nullptr);
+        }
+        // Identity until the app hands a camera in (quad then draws in raw NDC).
+        r->camera_ubo.view = mm::mat4{};
+        r->camera_ubo.view.m[0][0] = 1; r->camera_ubo.view.m[1][1] = 1;
+        r->camera_ubo.view.m[2][2] = 1; r->camera_ubo.view.m[3][3] = 1;
+        r->camera_ubo.proj = r->camera_ubo.view;
     }
 
     // Quad VB/IB: DEVICE_LOCAL, filled through ONE staging buffer (verts then indices)
@@ -1043,6 +1113,13 @@ bool renderer_upload_texture(Renderer* r, int width, int height, const void* rgb
     return false;
 }
 
+// M2.3: camera in from the app — stored once, copied into the UBO ring per frame.
+void renderer_set_view_proj(Renderer* r, const mm::mat4* view, const mm::mat4* proj) {
+    if (!r || !view || !proj) return;
+    r->camera_ubo.view = *view;
+    r->camera_ubo.proj = *proj;
+}
+
 void renderer_destroy(Renderer* r) {
     if (!r) return;
     if (r->device) r->vk.DeviceWaitIdle(r->device);
@@ -1056,6 +1133,11 @@ void renderer_destroy(Renderer* r) {
     free_image(r, &r->texture, &r->texture_mem);
     free_buffer(r, &r->quad_vb, &r->quad_vb_mem);
     free_buffer(r, &r->quad_ib, &r->quad_ib_mem);
+    // M2.3 per-frame UBO ring (descriptor sets die with the pool).
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
+        if (r->ubo_map[i]) r->vk.UnmapMemory(r->device, r->ubo_mem[i]);
+        free_buffer(r, &r->ubo[i], &r->ubo_mem[i]);
+    }
     if (r->sampler)                  r->vk.DestroySampler(r->device, r->sampler, nullptr);
     if (r->desc_pool)                r->vk.DestroyDescriptorPool(r->device, r->desc_pool, nullptr);   // frees material_set
     if (r->set0_layout)              r->vk.DestroyDescriptorSetLayout(r->device, r->set0_layout, nullptr);
@@ -1140,6 +1222,10 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
     clear.color.float32[2] = (float)(0.5 + 0.5 * sin(t + 4.188));
     clear.color.float32[3] = 1.0f;
 
+    // Per-frame UBO (M2.3): slot fr is free (fence just waited) — write the camera
+    // in. HOST_COHERENT: visible to the GPU without a flush.
+    memcpy(r->ubo_map[fr], &r->camera_ubo, sizeof(Renderer::CameraUBO));
+
     VkCommandBuffer cb = r->cmd[fr];
     r->vk.ResetCommandBuffer(cb, 0);
     VkCommandBufferBeginInfo bi{}; bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO; bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1185,9 +1271,10 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
         r->vk.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[PIPELINE_QUAD]);
         r->vk.CmdBindVertexBuffers(cb, 0, 1, &r->quad_vb, &vb_offset);
         r->vk.CmdBindIndexBuffer(cb, r->quad_ib, 0, VK_INDEX_TYPE_UINT16);
-        // set=0 is an empty placeholder the shaders never touch — only set=1 binds.
+        // set=0 per-frame view/proj UBO (M2.3) + set=1 material — both sets at once.
+        VkDescriptorSet sets[2] = { r->ubo_set[fr], r->material_set };
         r->vk.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->material_pipeline_layout,
-                                    1, 1, &r->material_set, 0, nullptr);
+                                    0, 2, sets, 0, nullptr);
         r->vk.CmdDrawIndexed(cb, 6, 1, 0, 0, 0);
     }
 

@@ -4,14 +4,19 @@
 //   sandbox --frames N            auto-quits after N frames (smoke test)
 //   sandbox --screenshot out.bmp  captures the LAST frame to a 24-bit BMP (M2.1
 //                                 readback — session-independent visual proof)
+//   sandbox --orbit               auto-rotates the camera (screenshot verification)
 // M2.2: loads assets/uv_test.tga (direct TGA — the asset manager doesn't exist yet)
 // and uploads it so the renderer's textured quad draws.
+// M2.3: an orbit camera (arrows rotate, wheel zooms) feeds view/proj into the
+// renderer's per-frame set=0 UBO through the seam.
 #include "platform/platform.h"
 #include "render/renderer.h"
+#include "math/math.h"
 #include "tga_direct.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
 // Minimal 24-bit bottom-up BMP, same shape tools/visualize writes. `rgba8` rows are
 // top-down (renderer_capture contract); BMP wants bottom-up BGR with 4-byte row pad.
@@ -57,15 +62,18 @@ static bool write_bmp24(const char* path, const uint8_t* rgba8, int w, int h) {
 int main(int argc, char** argv) {
     int max_frames = -1;
     const char* screenshot_path = nullptr;
+    bool orbit = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc)
             max_frames = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc)
             screenshot_path = argv[++i];
+        else if (std::strcmp(argv[i], "--orbit") == 0)
+            orbit = true;
     }
 
     PlatformWindowDesc desc;
-    desc.title = "MOBA - sandbox (M2.2)";
+    desc.title = "MOBA - sandbox (M2.3)";
     desc.width = 1280; desc.height = 720;
     desc.resizable = true; desc.fullscreen = false;
 
@@ -112,6 +120,12 @@ int main(int argc, char** argv) {
     double since_print = 0.0;
     bool quit_requested = false;
 
+    // M2.3 orbit camera: yaw/pitch/distance around the world origin. Arrows rotate,
+    // wheel zooms; --orbit auto-rotates for scripted screenshot verification.
+    double cam_yaw = 0.0, cam_pitch = 0.5, cam_dist = 8.0;
+    const mm::vec3 cam_target = mm::vec3_make(0, 0, 0);
+    const mm::vec3 world_up   = mm::vec3_make(0, 1, 0);
+
     std::printf("sandbox: window open (%dx%d). %s\n", desc.width, desc.height,
                 max_frames >= 0 ? "auto-quit mode" : "close the window or press Esc to exit");
 
@@ -123,9 +137,9 @@ int main(int argc, char** argv) {
 
         since_print += dt;
         if (since_print >= 0.25) {   // ~4 status lines/sec
-            std::printf("  frame %ld  dt=%.2fms  size=%dx%d  focus=%d  min=%d\n",
+            std::printf("  frame %ld  dt=%.2fms  size=%dx%d  focus=%d  min=%d  cam=(%.2f, %.2f, %.2f)\n",
                         frame, dt * 1000.0, in.fb_width, in.fb_height,
-                        (int)in.window_focused, (int)in.window_minimized);
+                        (int)in.window_focused, (int)in.window_minimized, cam_yaw, cam_pitch, cam_dist);
             since_print = 0.0;
         }
 
@@ -133,6 +147,35 @@ int main(int argc, char** argv) {
         if (max_frames >= 0 && frame >= max_frames) {
             std::printf("  reached %d frames -> quit\n", max_frames);
             quit_requested = true;
+        }
+
+        // Camera input (M2.3): arrows = yaw/pitch, wheel = distance. --orbit advances
+        // a fixed PER-FRAME yaw step (render-rate independent, so --frames N lands on
+        // a deterministic camera angle for screenshot verification).
+        if (orbit) {
+            cam_yaw += 0.01;
+        } else {
+            if (in.keyboard.down[KEY_LEFT])  cam_yaw   += dt * 1.2;
+            if (in.keyboard.down[KEY_RIGHT]) cam_yaw   -= dt * 1.2;
+            if (in.keyboard.down[KEY_UP])    cam_pitch += dt * 0.8;
+            if (in.keyboard.down[KEY_DOWN])  cam_pitch -= dt * 0.8;
+        }
+        if (in.mouse.wheel != 0)
+            cam_dist *= 1.0 - (double)in.mouse.wheel * 0.1;
+        cam_pitch = cam_pitch > 1.55 ? 1.55 : (cam_pitch < -1.55 ? -1.55 : cam_pitch);
+        cam_dist  = cam_dist  > 40.0 ? 40.0 : (cam_dist  < 2.0 ? 2.0 : cam_dist);
+
+        // Compose view/proj with eng_math and hand them through the seam (M2.3).
+        if (rnd) {
+            const double sy = std::sin(cam_yaw), cy = std::cos(cam_yaw);
+            const double sp = std::sin(cam_pitch), cp = std::cos(cam_pitch);
+            mm::vec3 eye = mm::vec3_make((float)(cam_dist * cp * sy),
+                                         (float)(cam_dist * sp),
+                                         (float)(cam_dist * cp * cy));
+            mm::mat4 view = mm::mat4_look_at_rh(eye, cam_target, world_up);
+            float aspect = (in.fb_height > 0) ? (float)in.fb_width / (float)in.fb_height : 16.0f / 9.0f;
+            mm::mat4 proj = mm::mat4_perspective_vk(60.0f * 3.14159265f / 180.0f, aspect, 0.1f, 100.0f);
+            renderer_set_view_proj(rnd, &view, &proj);
         }
 
         if (quit_requested && screenshot_path && rnd) {
