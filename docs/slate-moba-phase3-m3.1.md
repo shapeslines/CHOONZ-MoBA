@@ -2,10 +2,11 @@
 type: record
 title: "SLATE - Phase 3 M3.1 entity model and sparse-set SoA"
 kind: slate
-status: queued
+status: active
 project: moba
 axis: "simulation ECS storage"
 queued: 2026-08-12
+opened: 2026-08-12
 updated: 2026-08-12
 worktree: "repo root"
 branch: "moba/slate-phase3-ecs"
@@ -19,7 +20,7 @@ related:
 
 # Slate - Phase 3 M3.1 entity model and sparse-set SoA
 
-**Status:** queued; do not open until PR #14 lands on `main`.
+**Status:** active on merged `main` baseline `9c14fdf`.
 
 ## Goal
 
@@ -28,9 +29,9 @@ component pools while preserving the established replay/hash stream as the regre
 
 ## Entry gate
 
-- [ ] PR #14 is merged and GitHub CI/CodeQL are green on the merge commit.
-- [ ] Create `moba/slate-phase3-ecs` from that updated `main`.
-- [ ] Capture the M3.0 Debug/Release determinism baseline before changing `SimWorld` layout.
+- [x] PR #14 is squash-merged as `9c14fdf`; its Debug/Release CI and CodeQL gates were green.
+- [x] Create `moba/slate-phase3-ecs` from that updated `main`.
+- [x] Capture the M3.0 Debug/Release determinism baseline before changing `SimWorld` layout.
 
 ## Fence
 
@@ -56,7 +57,7 @@ component pools while preserving the established replay/hash stream as the regre
 
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
-| S0 | Rebaseline and specify storage contracts | M3.0 10,000-tick Debug/Release oracle captured; capacities, failure behavior, generation wrap policy, and canonical hash migration are written down | queued |
+| S0 | Rebaseline and specify storage contracts | M3.0 10,000-tick Debug/Release oracle captured; capacities, failure behavior, generation wrap policy, and canonical hash migration are written down | done 2026-08-12 |
 | S1 | Add arena-backed `EntityManager` | create/alive/destroy/recycle tests pass; stale IDs fail; exhaustion is explicit; generation zero is never issued | queued |
 | S2 | Add generic sparse/dense membership core | add/remove/has/dense lookup stay O(1); swap-remove repairs sparse and back-reference maps under adversarial sequences | queued |
 | S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | queued |
@@ -69,3 +70,12 @@ component pools while preserving the established replay/hash stream as the regre
 M3.1 closes only when entity lifecycle, sparse-set repair, SoA storage, deferred destruction, stale
 generation rejection, canonical hash migration, and the full M3.0 replay oracle are green in Debug
 and Release. M3.2 scheduling remains a separate decision and implementation slate.
+
+## Slice evidence
+
+- **S0:** PR #14 merged without stranded commits (`headRefOid` matched the shipped head
+  `2fb8f0d`; squash `9c14fdf`). The untouched M3.0 `sim_determinism` test passed from the `ci`
+  preset in Debug and Release, retaining the 10,000-tick final hash `0xb85d4b632571948c` and exact
+  `tick=4321 field=position_x unit=7` diagnostic. M3.1 is locked to runtime capacity configuration
+  (default 16,384), replay-v1 stable unit slots, a temporary cooldown field in `HealthPool`, and
+  logic hash `0x7902599e173f87a6`.
