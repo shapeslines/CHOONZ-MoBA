@@ -86,3 +86,8 @@ viz/
 vk_pipeline_cache.bin
 .mcp.json
 .repowise/
+
+# Environment / secrets (never commit)
+.env
+.env.*
+!.env.example
