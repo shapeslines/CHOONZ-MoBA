@@ -26,10 +26,15 @@ add_executable(engine_tests
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
 target_include_directories(engine_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/tools/sandbox/src)                  # tga_direct.h
-# eng::render is linked for its Vulkan-FREE pieces only (the pipeline-cache blob
-# checker); in CI it is the null backend, so the binary stays headless either way.
-target_link_libraries(engine_tests PRIVATE engine_core_group eng::render moba_warnings moba_options)
+    ${CMAKE_SOURCE_DIR}/tools/sandbox/src
+    ${CMAKE_SOURCE_DIR}/engine/render/src)                  # Vulkan-free render internals under test
+# The aggregate suite links only the Vulkan-free renderer core; the null seam has its
+# own executable below, and neither test binary initializes Vulkan.
+target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common moba_warnings moba_options)
+
+add_executable(render_null_tests test_main.cpp render/render_null_tests.cpp)
+target_include_directories(render_null_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(render_null_tests PRIVATE eng::render_null moba_warnings moba_options)
 
 # --- determinism: the SAME source built twice under different float models. The
 #     golden hash is integer-only, so /fp:precise and /fp:fast must agree (ADR-0002).
@@ -50,6 +55,7 @@ add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
 add_test(NAME platform    COMMAND engine_tests --suite platform)  # file I/O (M2.1)
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
+add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
 add_test(NAME det_precise COMMAND det_tests)        # /fp:precise golden hash
 add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (must match)

@@ -698,25 +698,25 @@ A thin C-style seam between the game (meshes/textures/materials/draw-items by ha
 // render/renderer.h — the ENTIRE surface the game sees. No Vulkan types.
 typedef struct Renderer Renderer;
 
-bool renderer_init(Renderer** out, const RendererConfig*, PlatformWindow*);
-void renderer_shutdown(Renderer*);
-void renderer_resize(Renderer*, uint32_t w, uint32_t h);
+Renderer* renderer_create(PlatformWindow*);
+void renderer_destroy(Renderer*);
 
 MeshHandle     renderer_create_mesh   (Renderer*, const MeshDesc*);
 TextureHandle  renderer_create_texture(Renderer*, const TextureDesc*);
 MaterialHandle renderer_create_material(Renderer*, const MaterialDesc*);
 void renderer_destroy_mesh   (Renderer*, MeshHandle,    uint32_t frames_until_free);
 void renderer_destroy_texture(Renderer*, TextureHandle, uint32_t frames_until_free);
+void renderer_destroy_material(Renderer*, MaterialHandle, uint32_t frames_until_free);
 
-bool renderer_begin_frame(Renderer*, const FrameView*);             // wait fence, acquire, write view UBO
-void renderer_submit     (Renderer*, const DrawItem* items, uint32_t count); // memcpy into frame arena
-void renderer_end_frame  (Renderer*);                              // sort, record, submit, present
+bool renderer_begin_frame(Renderer*, const FrameView*, int width, int height, bool minimized);
+bool renderer_submit(Renderer*, const DrawItem* items, uint32_t count); // copy into frame arena
+void renderer_end_frame(Renderer*);                                  // sort, record, submit, present
 ```
 
 ```c
-typedef struct { MeshHandle mesh; MaterialHandle material; mat4 model;
-                 uint32_t instance_base, instance_count; } DrawItem;   // float, POD, sortable
-typedef struct { mat4 view; mat4 proj; vec3 camera_pos; f32 time; } FrameView;
+typedef struct { mat4 model; MeshHandle mesh; MaterialHandle material; } DrawItem;
+typedef struct { mat4 view; mat4 proj; vec3 camera_pos;
+                 f32 time_seconds; f32 delta_seconds; } FrameView;
 ```
 
 > **Resolved — one creation/upload API, with deferred-destroy on the destroy calls.** Earlier the asset layer expected `r_upload_*` returning a generic `GpuHandle` while the renderer offered `renderer_create_*` returning typed handles, and only the asset side had a `frames_until_free` deferred-destroy. Canonical: GPU resources are addressed by the renderer's **typed handles** (`MeshHandle`/`TextureHandle`); the asset layer consumes exactly `renderer_create_*`; the deferred-destroy `frames_until_free` parameter is **on the renderer's destroy functions** (needed by both hot-reload and normal teardown). `MeshDesc`/`TextureDesc`/`MaterialDesc` are single shared structs in `render/renderer_types.h` onto which the baked asset blob maps (§11).

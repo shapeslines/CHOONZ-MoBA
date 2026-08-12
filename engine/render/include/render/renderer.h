@@ -1,12 +1,13 @@
 #pragma once
 #include <stdint.h>
 #include "core/mem.h"   // Allocator (capture output is caller-allocated)
+#include "render/renderer_types.h"
 #include "math/math.h"  // mm::mat4 — the seam speaks eng_math (ADR-0006: render -> math)
 // The renderer seam (ADR-0004). The app/game sees ONLY this header — never
 // <vulkan/vulkan.h>. M2.1: graphics pipeline + first triangle over dynamic
 // rendering/synchronization2 (ADR-0012 minimum spec), offline SPIR-V (ADR-0008),
 // an on-disk pipeline cache, and a readback capture for screenshots/tests.
-// M2.3: per-frame view/proj UBO at set=0, fed through renderer_set_view_proj.
+// M2.3–M2.5: typed resources, batched frame submission, debug draw, and capture.
 
 typedef struct PlatformWindow PlatformWindow;
 typedef struct Renderer Renderer;
@@ -18,25 +19,19 @@ typedef struct Renderer Renderer;
 Renderer* renderer_create(PlatformWindow* window);
 void      renderer_destroy(Renderer* r);
 
-// Render one frame: clear to an animated color, draw the registered pipelines (the
-// M2.1 triangle, plus the M2.2 textured quad once a texture is uploaded), present.
-// Pass the current framebuffer size + minimized flag from the platform pump; swapchain
-// recreation on resize is handled inside. No-op for the null backend or while minimized.
-void renderer_draw(Renderer* r, int fb_width, int fb_height, bool minimized);
+MeshHandle     renderer_create_mesh(Renderer* r, const MeshDesc* desc);
+TextureHandle  renderer_create_texture(Renderer* r, const TextureDesc* desc);
+MaterialHandle renderer_create_material(Renderer* r, const MaterialDesc* desc);
+void renderer_destroy_mesh(Renderer* r, MeshHandle handle, uint32_t frames_until_free);
+void renderer_destroy_texture(Renderer* r, TextureHandle handle, uint32_t frames_until_free);
+void renderer_destroy_material(Renderer* r, MaterialHandle handle, uint32_t frames_until_free);
 
-// M2.2 (PROVISIONAL until the M2.5 upload-API unification into typed handles): upload
-// the quad's texture. `rgba8` is w*h*4, rows top-down, interpreted as sRGB. Copies
-// through a staging buffer into a DEVICE_LOCAL image and blocks until the upload
-// completes (startup-path; not for per-frame use). Replaces any previous texture
-// (device-idles first). The quad draws only after a successful upload. False (logged)
-// on the null backend or any failure.
-bool renderer_upload_texture(Renderer* r, int width, int height, const void* rgba8);
-
-// M2.3: hand the camera in as view/proj matrices (composed by the app with eng_math;
-// the renderer never owns camera concepts). Copies both; the per-frame set=0 UBO is
-// written from these at the start of every frame, so a non-moving camera costs one
-// memcpy per frame. Identity until first set (the quad then draws in raw NDC).
-void renderer_set_view_proj(Renderer* r, const mm::mat4* view, const mm::mat4* proj);
+// Frame submission is transactional: begin resets the current frame arena, submit
+// copies per-object items into it, and end sorts/coalesces and presents exactly once.
+bool renderer_begin_frame(Renderer* r, const FrameView* view,
+                          int fb_width, int fb_height, bool minimized);
+bool renderer_submit(Renderer* r, const DrawItem* items, uint32_t count);
+void renderer_end_frame(Renderer* r);
 
 // Render one frame AND read its pixels back (slow path — screenshots/visual tests).
 // On success fills `out` with a w*h*4 RGBA8 image (rows top-down) allocated from
@@ -47,5 +42,11 @@ typedef struct RendererCapture {
     int      width, height;
     uint8_t* rgba8;
 } RendererCapture;
-bool renderer_capture(Renderer* r, int fb_width, int fb_height, bool minimized,
-                      Allocator alloc, RendererCapture* out);
+bool renderer_end_frame_capture(Renderer* r, Allocator alloc, RendererCapture* out);
+RendererStats renderer_get_stats(const Renderer* r);
+
+void dbg_line(Renderer* r, mm::vec3 a, mm::vec3 b, uint32_t color_rgba8);
+void dbg_sphere(Renderer* r, mm::vec3 center, float radius, uint32_t color_rgba8);
+void dbg_aabb(Renderer* r, mm::vec3 min_corner, mm::vec3 max_corner, uint32_t color_rgba8);
+void dbg_text_2d(Renderer* r, float x, float y, float scale,
+                 uint32_t color_rgba8, const char* text);

@@ -6,17 +6,17 @@
 // fail here with a clear message, never crash opaquely mid-frame.
 #define VK_GLOBAL(field, name) do {                                              \
         vk->field = (PFN_##name)vk->GetInstanceProcAddr(nullptr, #name);         \
-        if (!vk->field) { platform_fatal("vk: global proc %s not found\n", #name); return false; } \
+        if (!vk->field) platform_fatal("vk: global proc %s not found\n", #name);  \
     } while (0)
 
 #define VK_INSTANCE(field, name) do {                                            \
         vk->field = (PFN_##name)vk->GetInstanceProcAddr(instance, #name);        \
-        if (!vk->field) { platform_fatal("vk: instance proc %s not found\n", #name); return false; } \
+        if (!vk->field) platform_fatal("vk: instance proc %s not found\n", #name); \
     } while (0)
 
 #define VK_DEVICE(field, name) do {                                              \
         vk->field = (PFN_##name)vk->GetDeviceProcAddr(device, #name);            \
-        if (!vk->field) { platform_fatal("vk: device proc %s not found\n", #name); return false; } \
+        if (!vk->field) platform_fatal("vk: device proc %s not found\n", #name);   \
     } while (0)
 
 bool vk_load_global(Vk* vk, PFN_vkGetInstanceProcAddr gipa) {
@@ -34,6 +34,7 @@ bool vk_load_instance(Vk* vk, VkInstance instance) {
     VK_INSTANCE(EnumeratePhysicalDevices,                vkEnumeratePhysicalDevices);
     VK_INSTANCE(GetPhysicalDeviceProperties,             vkGetPhysicalDeviceProperties);
     VK_INSTANCE(GetPhysicalDeviceFeatures2,              vkGetPhysicalDeviceFeatures2);
+    VK_INSTANCE(GetPhysicalDeviceFormatProperties,       vkGetPhysicalDeviceFormatProperties);
     VK_INSTANCE(GetPhysicalDeviceMemoryProperties,       vkGetPhysicalDeviceMemoryProperties);
     VK_INSTANCE(GetPhysicalDeviceQueueFamilyProperties,  vkGetPhysicalDeviceQueueFamilyProperties);
     VK_INSTANCE(EnumerateDeviceExtensionProperties,      vkEnumerateDeviceExtensionProperties);
@@ -126,6 +127,7 @@ bool vk_load_device(Vk* vk, VkDevice device) {
     VK_DEVICE(CmdBindVertexBuffers,       vkCmdBindVertexBuffers);
     VK_DEVICE(CmdBindIndexBuffer,         vkCmdBindIndexBuffer);
     VK_DEVICE(CmdBindDescriptorSets,      vkCmdBindDescriptorSets);
+    VK_DEVICE(CmdPushConstants,           vkCmdPushConstants);
     VK_DEVICE(CmdDrawIndexed,             vkCmdDrawIndexed);
     return true;
 }

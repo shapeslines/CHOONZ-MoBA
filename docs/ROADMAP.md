@@ -388,12 +388,13 @@ paths, not only the future block allocator); **HOST_COHERENT memory needs no flu
 ---
 
 ### M2.3 — Camera UBO + instanced meshes (the first "MOBA-looking" frame)  🔴  · L
+**Status:** implemented 2026-08-12; validation-clean scripted DoD complete.
 **Goal:** hundreds of instances of one mesh+material in **one** draw call.
 **Deliverables:** `set=0` per-frame view/proj UBO (persistently-mapped HOST_VISIBLE|HOST_COHERENT ring,
-written each frame, no staging); per-frame instance buffer; `DrawItem` sort by `(pipeline, mesh)` →
-coalesced `vkCmdDrawIndexed(instanceCount=N)`; model matrix via push constants (**account combined
-push-constant size across all stages** vs `maxPushConstantsSize` ≥128 — 64B model + `instance_base`
-u32 = 68B, fine). Mesh data still hardcoded/programmatic (real glTF arrives in Phase 4).
+written each frame, no staging); per-frame storage-buffer instance stream; public `DrawItem` sort by
+`(pipeline, material, mesh)` → coalesced `vkCmdDrawIndexed(instanceCount=N)`; model matrices live in
+the instance stream and the push constant is the 4-byte `instance_base`. Mesh data remains
+programmatic (real glTF arrives in Phase 4).
 **DoD:** 500+ instances of a cube render at vsync from one batched draw; moving the camera updates the
 UBO; frame time stable.
 **Risks:** instance data as storage buffer (`gl_InstanceIndex`) vs vertex-input — pick storage buffer
@@ -402,6 +403,7 @@ per the design; descriptor-pool sizing. **Exercises:** Renderer (the core perf m
 ---
 
 ### M2.4 — Debug-draw + minimal overlay  · M
+**Status:** implemented 2026-08-12; scripted visual DoD complete, F1 interaction owner-verifiable.
 **Goal:** the daily debugging workhorse, rendered last in the same pass.
 **Deliverables:** immediate-mode `dbg_line/sphere/aabb/text_2d` queued into a frame arena and drained by
 a flat-color `debug_line` pipeline + a `dbg_text_2d` path (placeholder font ok); F1 overlay showing
@@ -413,6 +415,7 @@ sim. **Exercises:** Tooling (debug systems), Renderer.
 ---
 
 ### M2.5 — Renderer seam audit + null backend  · S
+**Status:** implemented 2026-08-12; Vulkan and null backends build together and have headless coverage.
 **Goal:** prove the seam is real before sim/assets depend on it.
 **Deliverables:** confirm the game/sandbox includes only `renderer.h` (no `vulkan.h` on its include
 path — compiler-enforced via PRIVATE link); a stub **null backend** implementing the seam (validates

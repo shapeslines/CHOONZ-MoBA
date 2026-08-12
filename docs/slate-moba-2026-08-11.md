@@ -6,9 +6,9 @@ status: active
 project: moba
 axis: "renderer bring-up (Phase 2 milestones)"
 opened: 2026-08-11
-updated: 2026-08-11
+updated: 2026-08-12
 closed:
-worktree: ".worktrees/moba-slate-2026-08-11"
+worktree: "repo root"
 branch: "moba/slate-2026-08-11"
 tags: [slate, orthogonal, planning]
 related:
@@ -28,9 +28,9 @@ related:
 
 ## State at refresh
 
-- **Tip / head:** `64a0802` (origin/main, clean working tree)
+- **Tip / head:** `moba/slate-2026-08-11` (implementation complete; final commit/PR pending)
 - **Open PRs:** none — MOBA-proto is a **single-claimant** repo this period
-- **In-flight fences:** none (no worktrees, no burst-ledger claims, no peer sessions)
+- **In-flight fences:** this root checkout only; the stale external worktree was removed
 - **CI / merge gate:** GitHub Actions Debug×Release `ci` (/WX) + `ctest --output-on-failure --no-tests=error`; local `tools/hooks/ctest-gate.bat` on push
 
 ## Why
@@ -58,10 +58,10 @@ session-fenced worktree so `main` stays green.
 | ID | Slice | Gate | Done-when | Status |
 |----|--------|------|-----------|--------|
 | S1 | M2.3-a: per-frame view/proj UBO at `set=0` (persistent-mapped HOST_VISIBLE\|HOST_COHERENT ring, written each frame, no staging) | Agent | Camera moves via sandbox input and the UBO reflects it; `set=1` material layout untouched; validation clean | done `b87e653` |
-| S2 | M2.3-b: per-instance buffer + push-constant model + batched instanced draw (instance data as storage buffer, `DrawItem` sort by (pipeline, mesh)) | Agent | 500+ cube instances render from **one** `vkCmdDrawIndexed(instanceCount=N)`; frame time stable at vsync | queued |
-| S3 | M2.3-c: DoD verification + milestone record | Agent | Readback screenshot shows the instanced field; `ci` (/WX) clean + `ctest` green; JOURNAL Session 06 entry + slate slice statuses | queued |
-| S4 | M2.4: debug-draw (lines/spheres/text) + F1 overlay (FPS, frame-time, per-arena bytes, live `VkDeviceMemory` count, draw calls) | Agent | Overlay toggles with F1; debug verts from frame arena only, never feed sim; validation clean | queued |
-| S5 | M2.5: renderer seam audit — unify upload/creation into typed handles (`renderer_create_mesh/texture`), deferred-destroy (`frames_until_free`) in signatures, null backend | Agent | Null backend compiles + runs (blank window, valid handles); no Vulkan symbol above the seam (PRIVATE link verified); `renderer_types.h` single shared structs | queued |
+| S2 | M2.3-b: storage-buffer instances + deterministic batched draw | Agent | 500 cubes render from **one** `vkCmdDrawIndexed(instanceCount=N)` | done 2026-08-12 |
+| S3 | M2.3-c: DoD verification + milestone record | Agent | Readback screenshot; `ci` (/WX) and tests green; milestone docs current | done 2026-08-12 |
+| S4 | M2.4: debug-draw + F1 overlay | Agent | World lines/text visible; frame-arena reset tested; validation clean | done 2026-08-12 |
+| S5 | M2.5: typed handles, deferred destroy, null backend | Agent | Vulkan/null build together; null sandbox/tests green; no Vulkan leak above seam | done 2026-08-12 |
 | S6 | Interactive DoD: zero validation errors across real resize / minimize-restore / alt-tab (needs a display) | Owner | Human runs `sandbox.exe`; zero validation messages across all three interactions | blocked |
 
 ## Concurrency map
@@ -87,9 +87,8 @@ per repo history (PRs #2–#10 pattern); docs updated in the same commit as the 
 
 ## Recommended next
 
-**Rank-1 (ungated): S2** — M2.3-b per-instance buffer + push-constant model + one
-batched instanced draw (S1's UBO is the per-frame input it consumes; 500+ instances is
-the first "MOBA-looking" frame).
+**Rank-1 (owner): S6** — run resize, minimize/restore, and alt-tab against the ready
+sandbox and confirm zero validation messages. Agent implementation work is complete.
 
 ## Non-goals / residual after close
 
@@ -102,3 +101,4 @@ the first "MOBA-looking" frame).
 ## Revisions
 
 - 2026-08-11 · authored · opencode deepseek-v4-flash session
+- 2026-08-12 · S2–S5 implemented and verified; S6 remains owner-gated

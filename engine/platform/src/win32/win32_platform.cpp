@@ -454,7 +454,7 @@ void platform_log(const char* fmt, ...) {
     OutputDebugStringA(buf);
     fputs(buf, stderr);
 }
-void platform_fatal(const char* fmt, ...) {
+[[noreturn]] void platform_fatal(const char* fmt, ...) {
     char buf[1024];
     va_list ap; va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);

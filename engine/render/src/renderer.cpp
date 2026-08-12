@@ -1,5 +1,8 @@
 #include "render/renderer.h"
 #include "render/pipeline_cache_check.h"
+#include "render_batch.h"
+#include "render_debug_draw.h"
+#include "render_handle_table.h"
 #include "vk/vk.h"
 #include "platform/platform.h"          // platform_log / platform_fatal / file I/O / arena
 #include "platform/platform_vulkan.h"   // platform_vk_get_loader / platform_vk_create_surface
@@ -8,28 +11,48 @@
 #include <cstdio>
 #include <cmath>
 
-// M2.2: first real GPU memory traffic on top of the M2.1 pipeline path. The frame is
-// rendered with DYNAMIC RENDERING + SYNCHRONIZATION2 (ADR-0012): barrier2 to
-// COLOR_ATTACHMENT_OPTIMAL -> vkCmdBeginRendering (loadOp=CLEAR carries the animated
-// color) -> triangle -> textured quad (VB/IB + set=1 sampler descriptor) -> barrier2
-// to PRESENT_SRC -> QueueSubmit2. Buffers/images are DEVICE_LOCAL, filled through
-// HOST_COHERENT staging + one-shot submits at startup. Frame pacing is unchanged from
-// M2.0: frames-in-flight = 2, per-frame command buffer + image_available semaphore +
-// in_flight fence, per-SWAPCHAIN-IMAGE render_finished semaphore + images_in_flight
-// fence pointer.
+// Phase 2 renderer: dynamic rendering + synchronization2, typed DEVICE_LOCAL resources,
+// per-frame camera/instance/debug rings, depth-correct batched meshes, and debug overlay.
+// Startup uploads use HOST_COHERENT staging + one-shot submits. Frame pacing remains two
+// frames in flight with per-frame acquire/fence state and per-swapchain-image present state.
 #define FRAMES_IN_FLIGHT 2
 #define MAX_SC_IMAGES    8
+#define MAX_MESHES       256
+#define MAX_TEXTURES     256
+#define MAX_MATERIALS    512
+#define MAX_DRAW_ITEMS   4096
+#define MAX_DEBUG_VERTS  16384
+
+struct MeshResource {
+    VkBuffer vertex_buffer;
+    VkDeviceMemory vertex_memory;
+    VkBuffer index_buffer;
+    VkDeviceMemory index_memory;
+    uint32_t index_count;
+    VkIndexType index_type;
+};
+
+struct TextureResource {
+    VkImage image;
+    VkDeviceMemory memory;
+    VkImageView view;
+};
+
+struct MaterialResource {
+    VkDescriptorSet descriptor_set;
+    TextureHandle texture;
+};
 
 // ---- Static pipeline registry (roadmap M2.1) ----------------------------------
 // Pipelines the renderer owns, created at startup from offline-compiled SPIR-V
 // (ADR-0008: glslc -> ${build}/shaders, located via MOBA_SHADER_DIR).
 enum PipelineVertexLayout {
-    VERTEX_LAYOUT_NONE,        // verts hardcoded in the shader (M2.1 triangle)
-    VERTEX_LAYOUT_POS2_UV2,    // QuadVertex: vec2 pos + vec2 uv from a vertex buffer
+    VERTEX_LAYOUT_POS3_UV2,    // MeshVertex: vec3 pos + vec2 uv from a vertex buffer
+    VERTEX_LAYOUT_DEBUG,
 };
 enum PipelineLayoutKind {
-    LAYOUT_EMPTY,              // no descriptors (triangle)
-    LAYOUT_MATERIAL,           // set=0 empty placeholder + set=1 texture+sampler
+    LAYOUT_MATERIAL,           // set=0 frame data + set=1 texture/sampler material
+    LAYOUT_DEBUG,
 };
 struct PipelineDesc {
     const char* name;
@@ -37,27 +60,19 @@ struct PipelineDesc {
     const char* frag_spv;
     PipelineVertexLayout vertex_layout;
     PipelineLayoutKind   layout_kind;
+    VkPrimitiveTopology  topology;
+    bool                 depth_test;
+    bool                 depth_write;
 };
-enum { PIPELINE_TRIANGLE = 0, PIPELINE_QUAD = 1, PIPELINE_COUNT = 2 };
+enum { PIPELINE_MESH = 0, PIPELINE_DEBUG_WORLD = 1, PIPELINE_DEBUG_OVERLAY = 2, PIPELINE_COUNT = 3 };
 static const PipelineDesc k_pipeline_registry[PIPELINE_COUNT] = {
-    { "triangle", "triangle.vert.spv", "triangle.frag.spv", VERTEX_LAYOUT_NONE,     LAYOUT_EMPTY    },
-    { "quad",     "quad.vert.spv",     "quad.frag.spv",     VERTEX_LAYOUT_POS2_UV2, LAYOUT_MATERIAL },
+    { "mesh", "mesh.vert.spv", "mesh.frag.spv", VERTEX_LAYOUT_POS3_UV2, LAYOUT_MATERIAL, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, true, true },
+    { "debug_world", "debug_world.vert.spv", "debug.frag.spv", VERTEX_LAYOUT_DEBUG, LAYOUT_DEBUG, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, true, false },
+    { "debug_overlay", "debug_overlay.vert.spv", "debug.frag.spv", VERTEX_LAYOUT_DEBUG, LAYOUT_DEBUG, VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false, false },
 };
 
-// ---- Quad geometry (M2.2/M2.3) ----------------------------------------------------
-// NDC is Y-down; uv (0,0) is the texture's top-left texel (rows uploaded top-down),
-// so the top-left vertex carries uv (0,0) and the image appears upright. Since M2.3
-// the verts are WORLD-space XY (z=0) on the ground plane around the origin, warped by
-// the camera UBO — ±2.0 units reads well from the sandbox camera's default distance.
-struct QuadVertex { float x, y, u, v; };
-static const QuadVertex k_quad_verts[4] = {
-    { -2.0f, -2.0f, 0.0f, 0.0f },   // top-left
-    {  2.0f, -2.0f, 1.0f, 0.0f },   // top-right
-    {  2.0f,  2.0f, 1.0f, 1.0f },   // bottom-right
-    { -2.0f,  2.0f, 0.0f, 1.0f },   // bottom-left
-};
-static const uint16_t k_quad_indices[6] = { 0, 1, 2, 0, 2, 3 };
-
+// Public POS3_UV2 mesh ABI used to validate typed mesh descriptors.
+struct MeshVertex { float x, y, z, u, v; };
 // On-disk pipeline cache (DoD: appears after first run, primes the second). Lives in
 // the working directory until the asset/user-dir story lands (Phase 4).
 // The size bound keeps a corrupt/foreign file from ever reaching the renderer arena's
@@ -84,6 +99,10 @@ struct Renderer {
     uint32_t       sc_count;
     VkImage        sc_images[MAX_SC_IMAGES];
     VkImageView    sc_views[MAX_SC_IMAGES];          // color-attachment views (M2.1)
+    VkImage        depth_images[MAX_SC_IMAGES];
+    VkDeviceMemory depth_mem[MAX_SC_IMAGES];
+    VkImageView    depth_views[MAX_SC_IMAGES];
+    VkFormat       depth_format;
     VkSemaphore    render_finished[MAX_SC_IMAGES];   // per image
     VkFence        images_in_flight[MAX_SC_IMAGES];  // borrowed frame fence, or NULL
     bool           need_recreate;
@@ -91,26 +110,19 @@ struct Renderer {
 
     // pipelines (M2.1)
     VkPipelineCache  pipeline_cache;
-    VkPipelineLayout pipeline_layout;                // empty (triangle)
     VkPipeline       pipelines[PIPELINE_COUNT];
     VkFormat         pipelines_format;               // sc format they were built for
 
     // vk_alloc Phase 1 (M2.2): dedicated allocations, counted against the cap.
     uint32_t         alloc_count;
 
-    // textured quad (M2.2)
-    VkBuffer              quad_vb,  quad_ib;
-    VkDeviceMemory        quad_vb_mem, quad_ib_mem;
-    VkImage               texture;
-    VkDeviceMemory        texture_mem;
-    VkImageView           texture_view;
+    // material descriptors and shared sampler
     VkSampler             sampler;
     VkDescriptorSetLayout set0_layout;               // set=0: per-frame view/proj UBO (M2.3)
     VkDescriptorSetLayout material_layout;           // set=1: combined image sampler
     VkDescriptorPool      desc_pool;
-    VkDescriptorSet       material_set;
     VkPipelineLayout      material_pipeline_layout;  // [set0_layout, material_layout]
-    bool                  texture_ready;             // quad draws only once this is set
+    VkPipelineLayout      debug_pipeline_layout;
 
     // camera / per-frame UBO ring (M2.3): one persistently-mapped HOST_COHERENT buffer
     // + descriptor per frame slot. Written at the top of draw_frame — slot fr is safe
@@ -121,6 +133,33 @@ struct Renderer {
     VkDeviceMemory        ubo_mem[FRAMES_IN_FLIGHT];
     void*                 ubo_map[FRAMES_IN_FLIGHT];
     VkDescriptorSet       ubo_set[FRAMES_IN_FLIGHT];
+    VkBuffer              instance_buf[FRAMES_IN_FLIGHT];
+    VkDeviceMemory        instance_mem[FRAMES_IN_FLIGHT];
+    void*                 instance_map[FRAMES_IN_FLIGHT];
+    VkBuffer              debug_vertex_buf[FRAMES_IN_FLIGHT];
+    VkDeviceMemory        debug_vertex_mem[FRAMES_IN_FLIGHT];
+    void*                 debug_vertex_map[FRAMES_IN_FLIGHT];
+    RenderInstanceData*   instance_cpu;
+    uint32_t              instance_count;
+
+    RenderHandleTable mesh_handles;
+    RenderHandleTable texture_handles;
+    RenderHandleTable material_handles;
+    MeshResource meshes[MAX_MESHES];
+    TextureResource textures[MAX_TEXTURES];
+    MaterialResource materials[MAX_MATERIALS];
+
+    Arena frame_arenas[FRAMES_IN_FLIGHT];
+    DrawItem* draw_items;
+    uint32_t draw_count;
+    RenderBatchOutput batch_output;
+    RenderDebugList debug_draw;
+    bool debug_overlay_started;
+    int pending_fb_width;
+    int pending_fb_height;
+    bool pending_minimized;
+    bool frame_begun;
+    RendererStats stats;
 
     // per-frame
     VkCommandPool   cmd_pool;
@@ -295,6 +334,22 @@ static void free_image(Renderer* r, VkImage* img, VkDeviceMemory* mem) {
     if (*mem) { r->vk.FreeMemory(r->device, *mem, nullptr); *mem = VK_NULL_HANDLE; --r->alloc_count; }
 }
 
+static VkFormat choose_depth_format(Renderer* r) {
+    static const VkFormat candidates[] = {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM,
+    };
+    for (uint32_t i = 0; i < (uint32_t)(sizeof(candidates) / sizeof(candidates[0])); ++i) {
+        VkFormatProperties props{};
+        r->vk.GetPhysicalDeviceFormatProperties(r->phys, candidates[i], &props);
+        if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+            return candidates[i];
+    }
+    return VK_FORMAT_UNDEFINED;
+}
+
 // sync2 image barrier helper: one full-subresource color transition.
 static void image_barrier2(Renderer* r, VkCommandBuffer cb, VkImage image,
                            VkPipelineStageFlags2 src_stage, VkAccessFlags2 src_access,
@@ -312,6 +367,30 @@ static void image_barrier2(Renderer* r, VkCommandBuffer cb, VkImage image,
     b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     b.image               = image;
     b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    b.subresourceRange.levelCount = 1;
+    b.subresourceRange.layerCount = 1;
+    VkDependencyInfo dep{};
+    dep.sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep.imageMemoryBarrierCount = 1;
+    dep.pImageMemoryBarriers    = &b;
+    r->vk.CmdPipelineBarrier2(cb, &dep);
+}
+
+static void depth_barrier2(Renderer* r, VkCommandBuffer cb, VkImage image) {
+    VkImageMemoryBarrier2 b{};
+    b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    b.srcStageMask        = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    b.srcAccessMask       = VK_ACCESS_2_NONE;
+    b.dstStageMask        = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                            VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    b.dstAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    b.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+    b.newLayout           = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.image               = image;
+    b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     b.subresourceRange.levelCount = 1;
     b.subresourceRange.layerCount = 1;
     VkDependencyInfo dep{};
@@ -421,18 +500,19 @@ static bool build_pipelines(Renderer* r) {
         stages[1].module = frag;
         stages[1].pName  = "main";
 
-        // Vertex input per registry entry: the triangle keeps its empty input (verts
-        // hardcoded in the shader, M2.1); the quad streams QuadVertex (M2.2).
+        // Vertex input is selected by registry entry: textured mesh or packed debug line.
         VkVertexInputBindingDescription bind{};
         bind.binding   = 0;
-        bind.stride    = sizeof(QuadVertex);
+        bind.stride    = d->vertex_layout == VERTEX_LAYOUT_DEBUG ? sizeof(RenderDebugVertex) : sizeof(MeshVertex);
         bind.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
         VkVertexInputAttributeDescription attrs[2]{};
-        attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32_SFLOAT; attrs[0].offset = 0;                       // pos
-        attrs[1].location = 1; attrs[1].binding = 0; attrs[1].format = VK_FORMAT_R32G32_SFLOAT; attrs[1].offset = sizeof(float) * 2;       // uv
+        attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32B32_SFLOAT; attrs[0].offset = 0;
+        attrs[1].location = 1; attrs[1].binding = 0;
+        attrs[1].format = d->vertex_layout == VERTEX_LAYOUT_DEBUG ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R32G32_SFLOAT;
+        attrs[1].offset = sizeof(float) * 3;
         VkPipelineVertexInputStateCreateInfo vin{};
         vin.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        if (d->vertex_layout == VERTEX_LAYOUT_POS2_UV2) {
+        if (d->vertex_layout == VERTEX_LAYOUT_POS3_UV2 || d->vertex_layout == VERTEX_LAYOUT_DEBUG) {
             vin.vertexBindingDescriptionCount   = 1;
             vin.pVertexBindingDescriptions      = &bind;
             vin.vertexAttributeDescriptionCount = 2;
@@ -441,7 +521,7 @@ static bool build_pipelines(Renderer* r) {
 
         VkPipelineInputAssemblyStateCreateInfo ia{};
         ia.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        ia.topology = d->topology;
 
         VkPipelineViewportStateCreateInfo vp{};
         vp.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -451,13 +531,19 @@ static bool build_pipelines(Renderer* r) {
         VkPipelineRasterizationStateCreateInfo rs{};
         rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rs.polygonMode = VK_POLYGON_MODE_FILL;
-        rs.cullMode    = VK_CULL_MODE_NONE;    // first triangle: visible no matter the winding
+        rs.cullMode    = VK_CULL_MODE_NONE;
         rs.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rs.lineWidth   = 1.0f;
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo depth{};
+        depth.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depth.depthTestEnable  = d->depth_test ? VK_TRUE : VK_FALSE;
+        depth.depthWriteEnable = d->depth_write ? VK_TRUE : VK_FALSE;
+        depth.depthCompareOp   = VK_COMPARE_OP_LESS;
 
         VkPipelineColorBlendAttachmentState blend_att{};
         blend_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
@@ -479,6 +565,7 @@ static bool build_pipelines(Renderer* r) {
         rendering.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         rendering.colorAttachmentCount    = 1;
         rendering.pColorAttachmentFormats = &r->sc_format;
+        rendering.depthAttachmentFormat   = r->depth_format;
 
         VkGraphicsPipelineCreateInfo ci{};
         ci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -490,9 +577,10 @@ static bool build_pipelines(Renderer* r) {
         ci.pViewportState      = &vp;
         ci.pRasterizationState = &rs;
         ci.pMultisampleState   = &ms;
+        ci.pDepthStencilState  = &depth;
         ci.pColorBlendState    = &blend;
         ci.pDynamicState       = &dyn;
-        ci.layout              = d->layout_kind == LAYOUT_MATERIAL ? r->material_pipeline_layout : r->pipeline_layout;
+        ci.layout              = d->layout_kind == LAYOUT_MATERIAL ? r->material_pipeline_layout : r->debug_pipeline_layout;
         ci.renderPass          = VK_NULL_HANDLE;
 
         VkResult res = r->vk.CreateGraphicsPipelines(r->device, r->pipeline_cache, 1, &ci, nullptr, &r->pipelines[i]);
@@ -566,6 +654,8 @@ static void save_pipeline_cache(Renderer* r) {
 
 static void destroy_swapchain(Renderer* r) {
     for (uint32_t i = 0; i < r->sc_count; ++i) {
+        if (r->depth_views[i]) { r->vk.DestroyImageView(r->device, r->depth_views[i], nullptr); r->depth_views[i] = VK_NULL_HANDLE; }
+        free_image(r, &r->depth_images[i], &r->depth_mem[i]);
         if (r->sc_views[i])        { r->vk.DestroyImageView(r->device, r->sc_views[i], nullptr); r->sc_views[i] = VK_NULL_HANDLE; }
         if (r->render_finished[i]) { r->vk.DestroySemaphore(r->device, r->render_finished[i], nullptr); r->render_finished[i] = VK_NULL_HANDLE; }
     }
@@ -609,7 +699,7 @@ static bool create_swapchain(Renderer* r, uint32_t fb_w, uint32_t fb_h) {
     if (caps.maxImageCount > 0 && want > caps.maxImageCount) want = caps.maxImageCount;
 
     // M2.1 renders into the image (COLOR_ATTACHMENT, always supported for swapchains);
-    // TRANSFER_SRC is added when the surface allows it so renderer_capture can read
+    // TRANSFER_SRC is added when the surface allows an end-frame capture to read
     // pixels back. The M2.0 TRANSFER_DST clear usage is gone — loadOp clears now.
     VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     r->sc_can_transfer_src = (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
@@ -643,6 +733,13 @@ static bool create_swapchain(Renderer* r, uint32_t fb_w, uint32_t fb_h) {
     }
     r->sc_format = chosen.format;
     r->sc_extent = extent;
+    if (r->depth_format == VK_FORMAT_UNDEFINED) {
+        r->depth_format = choose_depth_format(r);
+        if (r->depth_format == VK_FORMAT_UNDEFINED) {
+            platform_log("renderer: no supported depth-attachment format\n");
+            return false;
+        }
+    }
 
     uint32_t cnt = 0; r->vk.GetSwapchainImagesKHR(r->device, r->swapchain, &cnt, nullptr);
     if (cnt > MAX_SC_IMAGES) platform_fatal("renderer: swapchain image count %u > MAX_SC_IMAGES\n", cnt);
@@ -661,6 +758,21 @@ static bool create_swapchain(Renderer* r, uint32_t fb_w, uint32_t fb_h) {
         vci.subresourceRange.layerCount     = 1;
         if (r->vk.CreateImageView(r->device, &vci, nullptr, &r->sc_views[i]) != VK_SUCCESS)
             platform_fatal("renderer: vkCreateImageView failed for swapchain image %u\n", i);
+
+        if (!alloc_image_2d(r, extent.width, extent.height, r->depth_format,
+                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                            &r->depth_images[i], &r->depth_mem[i]))
+            platform_fatal("renderer: depth image allocation failed for swapchain image %u\n", i);
+        VkImageViewCreateInfo dvi{};
+        dvi.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        dvi.image                           = r->depth_images[i];
+        dvi.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+        dvi.format                          = r->depth_format;
+        dvi.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+        dvi.subresourceRange.levelCount     = 1;
+        dvi.subresourceRange.layerCount     = 1;
+        if (r->vk.CreateImageView(r->device, &dvi, nullptr, &r->depth_views[i]) != VK_SUCCESS)
+            platform_fatal("renderer: depth image view failed for swapchain image %u\n", i);
         r->vk.CreateSemaphore(r->device, &sci, nullptr, &r->render_finished[i]);
         r->images_in_flight[i] = VK_NULL_HANDLE;
     }
@@ -696,6 +808,18 @@ Renderer* renderer_create(PlatformWindow* window) {
     if (!vk_load_global(&r->vk, gipa)) { free(r); return nullptr; }
 
     if (!platform_arena_reserve(&r->arena, 16u * 1024 * 1024)) { free(r); return nullptr; }
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
+        if (!platform_arena_reserve(&r->frame_arenas[i], 2u * 1024 * 1024)) {
+            renderer_destroy(r);
+            return nullptr;
+        }
+    }
+    if (!render_handle_table_init(&r->mesh_handles, &r->arena, MAX_MESHES) ||
+        !render_handle_table_init(&r->texture_handles, &r->arena, MAX_TEXTURES) ||
+        !render_handle_table_init(&r->material_handles, &r->arena, MAX_MATERIALS)) {
+        renderer_destroy(r);
+        return nullptr;
+    }
 
     const bool validation = has_layer(&r->vk, "VK_LAYER_KHRONOS_validation");
     const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
@@ -811,28 +935,21 @@ Renderer* renderer_create(PlatformWindow* window) {
         r->vk.CreateFence(r->device, &fci, nullptr, &r->in_flight[i]);
     }
 
-    // Pipeline layouts. The triangle's stays empty; the quad's is [set=0 empty
-    // placeholder, set=1 material] so M2.3's per-frame UBO can claim set=0 without
-    // renumbering anything (roadmap: material lives at set=1).
-    VkPipelineLayoutCreateInfo plci{};
-    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    if (r->vk.CreatePipelineLayout(r->device, &plci, nullptr, &r->pipeline_layout) != VK_SUCCESS) {
-        platform_log("renderer: vkCreatePipelineLayout failed\n"); renderer_destroy(r); return nullptr;
-    }
     {
-        // set=0: per-frame view/proj UBO (M2.3) — the slot M2.2 reserved empty. One
-        // binding: uniform buffer at 0, vertex stage only. The triangle's own layout
-        // stays truly empty (it has no descriptors); only the material pipeline
-        // carries [set0_layout, material_layout].
-        VkDescriptorSetLayoutBinding ubo_bind{};
-        ubo_bind.binding         = 0;
-        ubo_bind.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        ubo_bind.descriptorCount = 1;
-        ubo_bind.stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
+        // set=0: per-frame view/proj UBO at binding 0 and instance storage at binding 1.
+        VkDescriptorSetLayoutBinding frame_binds[2]{};
+        frame_binds[0].binding         = 0;
+        frame_binds[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        frame_binds[0].descriptorCount = 1;
+        frame_binds[0].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
+        frame_binds[1].binding         = 1;
+        frame_binds[1].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        frame_binds[1].descriptorCount = 1;
+        frame_binds[1].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
         VkDescriptorSetLayoutCreateInfo set0_ci{};
         set0_ci.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        set0_ci.bindingCount = 1;
-        set0_ci.pBindings    = &ubo_bind;
+        set0_ci.bindingCount = 2;
+        set0_ci.pBindings    = frame_binds;
 
         VkDescriptorSetLayoutBinding tex_bind{};
         tex_bind.binding         = 0;
@@ -847,39 +964,50 @@ Renderer* renderer_create(PlatformWindow* window) {
             r->vk.CreateDescriptorSetLayout(r->device, &mat_ci, nullptr, &r->material_layout) != VK_SUCCESS) {
             platform_log("renderer: vkCreateDescriptorSetLayout failed\n"); renderer_destroy(r); return nullptr;
         }
+        VkPushConstantRange debug_range{};
+        debug_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        debug_range.size = sizeof(float) * 2;
+        VkPipelineLayoutCreateInfo debug_plci{};
+        debug_plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        debug_plci.setLayoutCount = 1;
+        debug_plci.pSetLayouts = &r->set0_layout;
+        debug_plci.pushConstantRangeCount = 1;
+        debug_plci.pPushConstantRanges = &debug_range;
+        if (r->vk.CreatePipelineLayout(r->device, &debug_plci, nullptr, &r->debug_pipeline_layout) != VK_SUCCESS) {
+            platform_log("renderer: debug pipeline layout failed\n"); renderer_destroy(r); return nullptr;
+        }
         VkDescriptorSetLayout sets[2] = { r->set0_layout, r->material_layout };
         VkPipelineLayoutCreateInfo mat_plci{};
         mat_plci.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         mat_plci.setLayoutCount = 2;
         mat_plci.pSetLayouts    = sets;
+        VkPushConstantRange instance_base_range{};
+        instance_base_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        instance_base_range.offset     = 0;
+        instance_base_range.size       = sizeof(uint32_t);
+        mat_plci.pushConstantRangeCount = 1;
+        mat_plci.pPushConstantRanges    = &instance_base_range;
         if (r->vk.CreatePipelineLayout(r->device, &mat_plci, nullptr, &r->material_pipeline_layout) != VK_SUCCESS) {
             platform_log("renderer: material pipeline layout failed\n"); renderer_destroy(r); return nullptr;
         }
 
         // One pool for the whole descriptor life: FRAMES_IN_FLIGHT UBO sets (set=0) +
         // one material set (set=1). Sized up front; no per-frame allocation.
-        VkDescriptorPoolSize pool_sizes[2]{};
+        VkDescriptorPoolSize pool_sizes[3]{};
         pool_sizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         pool_sizes[0].descriptorCount = FRAMES_IN_FLIGHT;
         pool_sizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        pool_sizes[1].descriptorCount = 1;
+        pool_sizes[1].descriptorCount = MAX_MATERIALS;
+        pool_sizes[2].type            = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        pool_sizes[2].descriptorCount = FRAMES_IN_FLIGHT;
         VkDescriptorPoolCreateInfo pool_ci{};
         pool_ci.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        pool_ci.maxSets       = FRAMES_IN_FLIGHT + 1;
-        pool_ci.poolSizeCount = 2;
+        pool_ci.maxSets       = FRAMES_IN_FLIGHT + MAX_MATERIALS;
+        pool_ci.poolSizeCount = 3;
         pool_ci.pPoolSizes    = pool_sizes;
-        VkDescriptorSetAllocateInfo set_ai{};
         if (r->vk.CreateDescriptorPool(r->device, &pool_ci, nullptr, &r->desc_pool) != VK_SUCCESS) {
             platform_log("renderer: vkCreateDescriptorPool failed\n"); renderer_destroy(r); return nullptr;
         }
-        set_ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        set_ai.descriptorPool     = r->desc_pool;
-        set_ai.descriptorSetCount = 1;
-        set_ai.pSetLayouts        = &r->material_layout;
-        if (r->vk.AllocateDescriptorSets(r->device, &set_ai, &r->material_set) != VK_SUCCESS) {
-            platform_log("renderer: vkAllocateDescriptorSets failed\n"); renderer_destroy(r); return nullptr;
-        }
-
         // One fixed linear-repeat sampler — the "tiny fixed sampler set", population 1.
         VkSamplerCreateInfo samp_ci{};
         samp_ci.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -901,8 +1029,8 @@ Renderer* renderer_create(PlatformWindow* window) {
     // whose fence was just waited on, so a submitted frame never sees a mid-write UBO.
     {
         const VkDeviceSize ubo_bytes = sizeof(Renderer::CameraUBO);
-        VkDescriptorBufferInfo binfo{};
-        binfo.range = ubo_bytes;
+        const VkDeviceSize instance_bytes = sizeof(RenderInstanceData) * MAX_DRAW_ITEMS;
+        const VkDeviceSize debug_vertex_bytes = sizeof(RenderDebugVertex) * MAX_DEBUG_VERTS;
         for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
             if (!alloc_buffer(r, ubo_bytes, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -912,6 +1040,18 @@ Renderer* renderer_create(PlatformWindow* window) {
             if (r->vk.MapMemory(r->device, r->ubo_mem[i], 0, ubo_bytes, 0, &r->ubo_map[i]) != VK_SUCCESS) {
                 platform_log("renderer: UBO map failed\n"); renderer_destroy(r); return nullptr;
             }
+            if (!alloc_buffer(r, instance_bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                              &r->instance_buf[i], &r->instance_mem[i]) ||
+                r->vk.MapMemory(r->device, r->instance_mem[i], 0, instance_bytes, 0, &r->instance_map[i]) != VK_SUCCESS) {
+                platform_log("renderer: per-frame instance buffer alloc/map failed\n"); renderer_destroy(r); return nullptr;
+            }
+            if (!alloc_buffer(r, debug_vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                              &r->debug_vertex_buf[i], &r->debug_vertex_mem[i]) ||
+                r->vk.MapMemory(r->device, r->debug_vertex_mem[i], 0, debug_vertex_bytes, 0, &r->debug_vertex_map[i]) != VK_SUCCESS) {
+                platform_log("renderer: per-frame debug vertex buffer alloc/map failed\n"); renderer_destroy(r); return nullptr;
+            }
             VkDescriptorSetAllocateInfo set_ai{};
             set_ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             set_ai.descriptorPool     = r->desc_pool;
@@ -920,81 +1060,27 @@ Renderer* renderer_create(PlatformWindow* window) {
             if (r->vk.AllocateDescriptorSets(r->device, &set_ai, &r->ubo_set[i]) != VK_SUCCESS) {
                 platform_log("renderer: UBO descriptor set alloc failed\n"); renderer_destroy(r); return nullptr;
             }
-            binfo.buffer = r->ubo[i];
-            VkWriteDescriptorSet write{};
-            write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet          = r->ubo_set[i];
-            write.dstBinding      = 0;
-            write.descriptorCount = 1;
-            write.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            write.pBufferInfo     = &binfo;
-            r->vk.UpdateDescriptorSets(r->device, 1, &write, 0, nullptr);
+            VkDescriptorBufferInfo infos[2]{};
+            infos[0].buffer = r->ubo[i];
+            infos[0].range  = ubo_bytes;
+            infos[1].buffer = r->instance_buf[i];
+            infos[1].range  = instance_bytes;
+            VkWriteDescriptorSet writes[2]{};
+            for (uint32_t binding = 0; binding < 2; ++binding) {
+                writes[binding].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                writes[binding].dstSet          = r->ubo_set[i];
+                writes[binding].dstBinding      = binding;
+                writes[binding].descriptorCount = 1;
+                writes[binding].descriptorType  = binding == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                writes[binding].pBufferInfo     = &infos[binding];
+            }
+            r->vk.UpdateDescriptorSets(r->device, 2, writes, 0, nullptr);
         }
-        // Identity until the app hands a camera in (quad then draws in raw NDC).
+        // Identity until the app begins its first frame with a camera.
         r->camera_ubo.view = mm::mat4{};
         r->camera_ubo.view.m[0][0] = 1; r->camera_ubo.view.m[1][1] = 1;
         r->camera_ubo.view.m[2][2] = 1; r->camera_ubo.view.m[3][3] = 1;
         r->camera_ubo.proj = r->camera_ubo.view;
-    }
-
-    // Quad VB/IB: DEVICE_LOCAL, filled through ONE staging buffer (verts then indices)
-    // and a one-shot copy. The one-shot ends with buffer barriers2 into
-    // VERTEX_ATTRIBUTE_INPUT/INDEX_INPUT so every later frame submission sees the data
-    // (the fence only tells the HOST it finished).
-    {
-        const VkDeviceSize vb_bytes = sizeof(k_quad_verts);
-        const VkDeviceSize ib_bytes = sizeof(k_quad_indices);
-        VkBuffer staging = VK_NULL_HANDLE; VkDeviceMemory staging_mem = VK_NULL_HANDLE;
-        bool ok = alloc_buffer(r, vb_bytes + ib_bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                               &staging, &staging_mem) &&
-                  alloc_buffer(r, vb_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->quad_vb, &r->quad_vb_mem) &&
-                  alloc_buffer(r, ib_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &r->quad_ib, &r->quad_ib_mem);
-        void* mapped = nullptr;
-        if (ok) ok = r->vk.MapMemory(r->device, staging_mem, 0, VK_WHOLE_SIZE, 0, &mapped) == VK_SUCCESS;
-        if (ok) {
-            memcpy(mapped, k_quad_verts, (size_t)vb_bytes);
-            memcpy((uint8_t*)mapped + vb_bytes, k_quad_indices, (size_t)ib_bytes);
-            r->vk.UnmapMemory(r->device, staging_mem);   // HOST_COHERENT: no flush needed
-
-            VkCommandBuffer cb = begin_one_shot(r);
-            ok = cb != VK_NULL_HANDLE;
-            if (ok) {
-                VkBufferCopy vb_copy{}; vb_copy.srcOffset = 0;        vb_copy.size = vb_bytes;
-                VkBufferCopy ib_copy{}; ib_copy.srcOffset = vb_bytes; ib_copy.size = ib_bytes;
-                r->vk.CmdCopyBuffer(cb, staging, r->quad_vb, 1, &vb_copy);
-                r->vk.CmdCopyBuffer(cb, staging, r->quad_ib, 1, &ib_copy);
-
-                VkBufferMemoryBarrier2 bb[2]{};
-                bb[0].sType         = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-                bb[0].srcStageMask  = VK_PIPELINE_STAGE_2_COPY_BIT;
-                bb[0].srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                bb[0].dstStageMask  = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
-                bb[0].dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-                bb[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bb[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                bb[0].buffer        = r->quad_vb;
-                bb[0].size          = VK_WHOLE_SIZE;
-                bb[1] = bb[0];
-                bb[1].dstStageMask  = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
-                bb[1].dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT;
-                bb[1].buffer        = r->quad_ib;
-                VkDependencyInfo dep{};
-                dep.sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-                dep.bufferMemoryBarrierCount = 2;
-                dep.pBufferMemoryBarriers    = bb;
-                r->vk.CmdPipelineBarrier2(cb, &dep);
-                ok = end_one_shot(r, cb);
-            }
-        }
-        free_buffer(r, &staging, &staging_mem);
-        if (!ok) {
-            platform_log("renderer: quad vertex/index upload failed\n");
-            renderer_destroy(r);
-            return nullptr;
-        }
     }
 
     create_pipeline_cache(r);
@@ -1003,7 +1089,7 @@ Renderer* renderer_create(PlatformWindow* window) {
     create_swapchain(r, (uint32_t)(w > 0 ? w : 1), (uint32_t)(h > 0 ? h : 1));
 
     // Pipelines need the swapchain format; if the window started minimized the build
-    // is deferred to the first successful (re)create inside renderer_draw.
+    // is deferred to the first successful (re)create inside the frame path.
     if (r->swapchain && !build_pipelines(r)) {
         platform_log("renderer: pipeline build failed — no renderer\n");
         renderer_destroy(r);
@@ -1018,131 +1104,240 @@ Renderer* renderer_create(PlatformWindow* window) {
     return r;
 }
 
-// M2.2 (provisional seam — unified into typed handles at M2.5): staging upload of the
-// quad's texture. Blocking by design; this is a startup path.
-bool renderer_upload_texture(Renderer* r, int width, int height, const void* rgba8) {
-    if (!r || !rgba8 || width <= 0 || height <= 0) return false;
-    // vkCreateImage with extent > maxImageDimension2D is invalid usage (UB), not a
-    // graceful error — the app layer can't query the limit through the seam, so the
-    // guarantee that bad input yields false-(logged) has to live here.
-    const uint32_t max_dim = r->props.limits.maxImageDimension2D;
-    if ((uint32_t)width > max_dim || (uint32_t)height > max_dim) {
-        platform_log("renderer: texture %dx%d exceeds maxImageDimension2D (%u)\n", width, height, max_dim);
-        return false;
-    }
+static void release_mesh_slot(void* user, uint32_t index) {
+    Renderer* r = (Renderer*)user;
+    MeshResource* mesh = &r->meshes[index];
+    free_buffer(r, &mesh->vertex_buffer, &mesh->vertex_memory);
+    free_buffer(r, &mesh->index_buffer, &mesh->index_memory);
+    mesh->index_count = 0;
+}
 
-    // Replacing an existing texture: nothing in flight may still sample it.
-    if (r->texture) {
-        r->vk.DeviceWaitIdle(r->device);
-        r->texture_ready = false;
-        if (r->texture_view) { r->vk.DestroyImageView(r->device, r->texture_view, nullptr); r->texture_view = VK_NULL_HANDLE; }
-        free_image(r, &r->texture, &r->texture_mem);
-    }
+static void release_texture_slot(void* user, uint32_t index) {
+    Renderer* r = (Renderer*)user;
+    TextureResource* texture = &r->textures[index];
+    if (texture->view) r->vk.DestroyImageView(r->device, texture->view, nullptr);
+    texture->view = VK_NULL_HANDLE;
+    free_image(r, &texture->image, &texture->memory);
+}
 
-    const uint32_t w = (uint32_t)width, h = (uint32_t)height;
-    const VkDeviceSize bytes = (VkDeviceSize)w * h * 4;
+static void release_material_slot(void* user, uint32_t index) {
+    Renderer* r = (Renderer*)user;
+    r->materials[index].texture = TextureHandle{HANDLE_NULL};
+}
 
-    VkBuffer staging = VK_NULL_HANDLE; VkDeviceMemory staging_mem = VK_NULL_HANDLE;
-    bool ok = alloc_image_2d(r, w, h, VK_FORMAT_R8G8B8A8_SRGB,
-                             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                             &r->texture, &r->texture_mem) &&
-              alloc_buffer(r, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+MeshHandle renderer_create_mesh(Renderer* r, const MeshDesc* desc) {
+    MeshHandle result{HANDLE_NULL};
+    if (!r || !desc || !desc->vertices || !desc->indices || desc->vertex_count == 0 ||
+        desc->index_count == 0 || desc->vertex_layout != RENDERER_VERTEX_POS3_UV2 ||
+        desc->vertex_stride < sizeof(MeshVertex)) return result;
+
+    const VkDeviceSize vertex_bytes = (VkDeviceSize)desc->vertex_count * desc->vertex_stride;
+    const uint32_t index_stride = desc->index_type == RENDERER_INDEX_U16 ? 2u : 4u;
+    const VkDeviceSize index_bytes = (VkDeviceSize)desc->index_count * index_stride;
+    const Handle raw = render_handle_alloc(&r->mesh_handles);
+    if (handle_is_null(raw)) return result;
+    MeshResource* mesh = &r->meshes[handle_index(raw)];
+    mesh->index_count = desc->index_count;
+    mesh->index_type = desc->index_type == RENDERER_INDEX_U16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+    bool ok = alloc_buffer(r, vertex_bytes + index_bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                           &staging, &staging_mem);
+                           &staging, &staging_memory) &&
+              alloc_buffer(r, vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->vertex_buffer, &mesh->vertex_memory) &&
+              alloc_buffer(r, index_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->index_buffer, &mesh->index_memory);
     void* mapped = nullptr;
-    if (ok) ok = r->vk.MapMemory(r->device, staging_mem, 0, VK_WHOLE_SIZE, 0, &mapped) == VK_SUCCESS;
+    if (ok) ok = r->vk.MapMemory(r->device, staging_memory, 0, VK_WHOLE_SIZE, 0, &mapped) == VK_SUCCESS;
     if (ok) {
-        memcpy(mapped, rgba8, (size_t)bytes);
-        r->vk.UnmapMemory(r->device, staging_mem);   // HOST_COHERENT: no flush needed
-
+        memcpy(mapped, desc->vertices, (size_t)vertex_bytes);
+        memcpy((uint8_t*)mapped + vertex_bytes, desc->indices, (size_t)index_bytes);
+        r->vk.UnmapMemory(r->device, staging_memory);
         VkCommandBuffer cb = begin_one_shot(r);
         ok = cb != VK_NULL_HANDLE;
         if (ok) {
-            // UNDEFINED -> TRANSFER_DST -> copy -> SHADER_READ_ONLY (fragment sampling).
-            image_barrier2(r, cb, r->texture,
-                           VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
+            VkBufferCopy copies[2]{};
+            copies[0].size = vertex_bytes;
+            copies[1].srcOffset = vertex_bytes;
+            copies[1].size = index_bytes;
+            r->vk.CmdCopyBuffer(cb, staging, mesh->vertex_buffer, 1, &copies[0]);
+            r->vk.CmdCopyBuffer(cb, staging, mesh->index_buffer, 1, &copies[1]);
+            VkBufferMemoryBarrier2 barriers[2]{};
+            for (uint32_t i = 0; i < 2; ++i) {
+                barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+                barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                barriers[i].srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barriers[i].size = VK_WHOLE_SIZE;
+            }
+            barriers[0].dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
+            barriers[0].dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+            barriers[0].buffer = mesh->vertex_buffer;
+            barriers[1].dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+            barriers[1].dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT;
+            barriers[1].buffer = mesh->index_buffer;
+            VkDependencyInfo dep{};
+            dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+            dep.bufferMemoryBarrierCount = 2;
+            dep.pBufferMemoryBarriers = barriers;
+            r->vk.CmdPipelineBarrier2(cb, &dep);
+            ok = end_one_shot(r, cb);
+        }
+    }
+    free_buffer(r, &staging, &staging_memory);
+    if (!ok) {
+        release_mesh_slot(r, handle_index(raw));
+        render_handle_retire(&r->mesh_handles, raw, 0);
+        render_handle_collect(&r->mesh_handles, 0, nullptr, nullptr);
+        return result;
+    }
+    result.h = raw;
+    return result;
+}
+
+TextureHandle renderer_create_texture(Renderer* r, const TextureDesc* desc) {
+    TextureHandle result{HANDLE_NULL};
+    if (!r || !desc || !desc->pixels || desc->width == 0 || desc->height == 0 ||
+        desc->format != RENDERER_TEXTURE_RGBA8_SRGB ||
+        desc->width > r->props.limits.maxImageDimension2D || desc->height > r->props.limits.maxImageDimension2D)
+        return result;
+    const Handle raw = render_handle_alloc(&r->texture_handles);
+    if (handle_is_null(raw)) return result;
+    TextureResource* texture = &r->textures[handle_index(raw)];
+    const VkDeviceSize bytes = (VkDeviceSize)desc->width * desc->height * 4u;
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+    bool ok = alloc_image_2d(r, desc->width, desc->height, VK_FORMAT_R8G8B8A8_SRGB,
+                             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                             &texture->image, &texture->memory) &&
+              alloc_buffer(r, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                           &staging, &staging_memory);
+    void* mapped = nullptr;
+    if (ok) ok = r->vk.MapMemory(r->device, staging_memory, 0, VK_WHOLE_SIZE, 0, &mapped) == VK_SUCCESS;
+    if (ok) {
+        memcpy(mapped, desc->pixels, (size_t)bytes);
+        r->vk.UnmapMemory(r->device, staging_memory);
+        VkCommandBuffer cb = begin_one_shot(r);
+        ok = cb != VK_NULL_HANDLE;
+        if (ok) {
+            image_barrier2(r, cb, texture->image, VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
                            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             VkBufferImageCopy region{};
             region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             region.imageSubresource.layerCount = 1;
-            region.imageExtent = { w, h, 1 };
-            r->vk.CmdCopyBufferToImage(cb, staging, r->texture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-            image_barrier2(r, cb, r->texture,
-                           VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            region.imageExtent = {desc->width, desc->height, 1};
+            r->vk.CmdCopyBufferToImage(cb, staging, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            image_barrier2(r, cb, texture->image, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             ok = end_one_shot(r, cb);
         }
     }
-    free_buffer(r, &staging, &staging_mem);
-
+    free_buffer(r, &staging, &staging_memory);
     if (ok) {
-        VkImageViewCreateInfo vci{};
-        vci.sType                       = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        vci.image                       = r->texture;
-        vci.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
-        vci.format                      = VK_FORMAT_R8G8B8A8_SRGB;
-        vci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        vci.subresourceRange.levelCount = 1;
-        vci.subresourceRange.layerCount = 1;
-        ok = r->vk.CreateImageView(r->device, &vci, nullptr, &r->texture_view) == VK_SUCCESS;
+        VkImageViewCreateInfo view_ci{};
+        view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        view_ci.image = texture->image;
+        view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        view_ci.format = VK_FORMAT_R8G8B8A8_SRGB;
+        view_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        view_ci.subresourceRange.levelCount = 1;
+        view_ci.subresourceRange.layerCount = 1;
+        ok = r->vk.CreateImageView(r->device, &view_ci, nullptr, &texture->view) == VK_SUCCESS;
     }
-    if (ok) {
-        VkDescriptorImageInfo img_info{};
-        img_info.sampler     = r->sampler;
-        img_info.imageView   = r->texture_view;
-        img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        VkWriteDescriptorSet write{};
-        write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet          = r->material_set;
-        write.dstBinding      = 0;
-        write.descriptorCount = 1;
-        write.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.pImageInfo      = &img_info;
-        r->vk.UpdateDescriptorSets(r->device, 1, &write, 0, nullptr);
-        r->texture_ready = true;
-        platform_log("renderer: texture uploaded (%dx%d, sRGB) | %u dedicated allocation(s) live\n",
-                     width, height, r->alloc_count);
-        return true;
+    if (!ok) {
+        release_texture_slot(r, handle_index(raw));
+        render_handle_retire(&r->texture_handles, raw, 0);
+        render_handle_collect(&r->texture_handles, 0, nullptr, nullptr);
+        return result;
     }
-
-    platform_log("renderer: texture upload failed (%dx%d)\n", width, height);
-    if (r->texture_view) { r->vk.DestroyImageView(r->device, r->texture_view, nullptr); r->texture_view = VK_NULL_HANDLE; }
-    free_image(r, &r->texture, &r->texture_mem);
-    return false;
+    result.h = raw;
+    return result;
 }
 
-// M2.3: camera in from the app — stored once, copied into the UBO ring per frame.
-void renderer_set_view_proj(Renderer* r, const mm::mat4* view, const mm::mat4* proj) {
-    if (!r || !view || !proj) return;
-    r->camera_ubo.view = *view;
-    r->camera_ubo.proj = *proj;
+MaterialHandle renderer_create_material(Renderer* r, const MaterialDesc* desc) {
+    MaterialHandle result{HANDLE_NULL};
+    if (!r || !desc || desc->sampler != RENDERER_SAMPLER_LINEAR_REPEAT ||
+        !render_handle_valid(&r->texture_handles, desc->albedo.h)) return result;
+    const Handle raw = render_handle_alloc(&r->material_handles);
+    if (handle_is_null(raw)) return result;
+    MaterialResource* material = &r->materials[handle_index(raw)];
+    if (!material->descriptor_set) {
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorPool = r->desc_pool;
+        ai.descriptorSetCount = 1;
+        ai.pSetLayouts = &r->material_layout;
+        if (r->vk.AllocateDescriptorSets(r->device, &ai, &material->descriptor_set) != VK_SUCCESS) {
+            render_handle_retire(&r->material_handles, raw, 0);
+            render_handle_collect(&r->material_handles, 0, nullptr, nullptr);
+            return result;
+        }
+    }
+    TextureResource* texture = &r->textures[handle_index(desc->albedo.h)];
+    VkDescriptorImageInfo image_info{};
+    image_info.sampler = r->sampler;
+    image_info.imageView = texture->view;
+    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = material->descriptor_set;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &image_info;
+    r->vk.UpdateDescriptorSets(r->device, 1, &write, 0, nullptr);
+    material->texture = desc->albedo;
+    result.h = raw;
+    return result;
+}
+
+static uint64_t retire_after(const Renderer* r, uint32_t frames_until_free) {
+    const uint32_t delay = frames_until_free < FRAMES_IN_FLIGHT ? FRAMES_IN_FLIGHT : frames_until_free;
+    return r->frame_count + delay;
+}
+
+void renderer_destroy_mesh(Renderer* r, MeshHandle h, uint32_t delay) {
+    if (r) render_handle_retire(&r->mesh_handles, h.h, retire_after(r, delay));
+}
+void renderer_destroy_texture(Renderer* r, TextureHandle h, uint32_t delay) {
+    if (r) render_handle_retire(&r->texture_handles, h.h, retire_after(r, delay));
+}
+void renderer_destroy_material(Renderer* r, MaterialHandle h, uint32_t delay) {
+    if (r) render_handle_retire(&r->material_handles, h.h, retire_after(r, delay));
 }
 
 void renderer_destroy(Renderer* r) {
     if (!r) return;
     if (r->device) r->vk.DeviceWaitIdle(r->device);
+    if (r->device) {
+        render_handle_release_all(&r->material_handles, release_material_slot, r);
+        render_handle_release_all(&r->texture_handles, release_texture_slot, r);
+        render_handle_release_all(&r->mesh_handles, release_mesh_slot, r);
+    }
     if (r->device) save_pipeline_cache(r);   // before anything GPU-side is torn down
     destroy_pipelines(r);
-    if (r->pipeline_layout) r->vk.DestroyPipelineLayout(r->device, r->pipeline_layout, nullptr);
     if (r->pipeline_cache)  r->vk.DestroyPipelineCache(r->device, r->pipeline_cache, nullptr);
-
-    // M2.2 quad resources.
-    if (r->texture_view)             r->vk.DestroyImageView(r->device, r->texture_view, nullptr);
-    free_image(r, &r->texture, &r->texture_mem);
-    free_buffer(r, &r->quad_vb, &r->quad_vb_mem);
-    free_buffer(r, &r->quad_ib, &r->quad_ib_mem);
     // M2.3 per-frame UBO ring (descriptor sets die with the pool).
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
         if (r->ubo_map[i]) r->vk.UnmapMemory(r->device, r->ubo_mem[i]);
         free_buffer(r, &r->ubo[i], &r->ubo_mem[i]);
+        if (r->instance_map[i]) r->vk.UnmapMemory(r->device, r->instance_mem[i]);
+        free_buffer(r, &r->instance_buf[i], &r->instance_mem[i]);
+        if (r->debug_vertex_map[i]) r->vk.UnmapMemory(r->device, r->debug_vertex_mem[i]);
+        free_buffer(r, &r->debug_vertex_buf[i], &r->debug_vertex_mem[i]);
     }
     if (r->sampler)                  r->vk.DestroySampler(r->device, r->sampler, nullptr);
-    if (r->desc_pool)                r->vk.DestroyDescriptorPool(r->device, r->desc_pool, nullptr);   // frees material_set
+    if (r->desc_pool)                r->vk.DestroyDescriptorPool(r->device, r->desc_pool, nullptr);
+    if (r->material_pipeline_layout) r->vk.DestroyPipelineLayout(r->device, r->material_pipeline_layout, nullptr);
+    if (r->debug_pipeline_layout)    r->vk.DestroyPipelineLayout(r->device, r->debug_pipeline_layout, nullptr);
     if (r->set0_layout)              r->vk.DestroyDescriptorSetLayout(r->device, r->set0_layout, nullptr);
     if (r->material_layout)          r->vk.DestroyDescriptorSetLayout(r->device, r->material_layout, nullptr);
-    if (r->material_pipeline_layout) r->vk.DestroyPipelineLayout(r->device, r->material_pipeline_layout, nullptr);
 
     destroy_swapchain(r);
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i) {
@@ -1155,12 +1350,14 @@ void renderer_destroy(Renderer* r) {
     if (r->debug && r->vk.DestroyDebugUtilsMessengerEXT) r->vk.DestroyDebugUtilsMessengerEXT(r->instance, r->debug, nullptr);
     if (r->instance) r->vk.DestroyInstance(r->instance, nullptr);
     platform_arena_release(&r->arena);
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+        platform_arena_release(&r->frame_arenas[i]);
     free(r);
 }
 
 // ---- Frame -------------------------------------------------------------------------
 
-// Pending readback for the frame being recorded (renderer_capture's slow path).
+// Pending readback for the frame being recorded (end-frame capture slow path).
 struct CaptureState {
     VkBuffer       buffer;
     VkDeviceMemory memory;
@@ -1187,6 +1384,9 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
 
     uint32_t fr = r->frame;
     r->vk.WaitForFences(r->device, 1, &r->in_flight[fr], VK_TRUE, UINT64_MAX);
+    render_handle_collect(&r->material_handles, r->frame_count, release_material_slot, r);
+    render_handle_collect(&r->texture_handles, r->frame_count, release_texture_slot, r);
+    render_handle_collect(&r->mesh_handles, r->frame_count, release_mesh_slot, r);
 
     uint32_t img = 0;
     VkResult acq = r->vk.AcquireNextImageKHR(r->device, r->swapchain, UINT64_MAX, r->image_available[fr], VK_NULL_HANDLE, &img);
@@ -1225,6 +1425,10 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
     // Per-frame UBO (M2.3): slot fr is free (fence just waited) — write the camera
     // in. HOST_COHERENT: visible to the GPU without a flush.
     memcpy(r->ubo_map[fr], &r->camera_ubo, sizeof(Renderer::CameraUBO));
+    if (r->instance_count > 0)
+        memcpy(r->instance_map[fr], r->instance_cpu, sizeof(RenderInstanceData) * r->instance_count);
+    if (r->debug_draw.count > 0)
+        memcpy(r->debug_vertex_map[fr], r->debug_draw.vertices, sizeof(RenderDebugVertex) * r->debug_draw.count);
 
     VkCommandBuffer cb = r->cmd[fr];
     r->vk.ResetCommandBuffer(cb, 0);
@@ -1237,6 +1441,7 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_NONE,
                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                    VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    depth_barrier2(r, cb, r->depth_images[img]);
 
     VkRenderingAttachmentInfo color{};
     color.sType            = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -1246,12 +1451,21 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
     color.storeOp          = VK_ATTACHMENT_STORE_OP_STORE;
     color.clearValue       = clear;
 
+    VkRenderingAttachmentInfo depth{};
+    depth.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depth.imageView   = r->depth_views[img];
+    depth.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depth.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth.storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth.clearValue.depthStencil.depth = 1.0f;
+
     VkRenderingInfo ri{};
     ri.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
     ri.renderArea.extent    = r->sc_extent;
     ri.layerCount           = 1;
     ri.colorAttachmentCount = 1;
     ri.pColorAttachments    = &color;
+    ri.pDepthAttachment     = &depth;
     r->vk.CmdBeginRendering(cb, &ri);
 
     VkViewport vp{};
@@ -1263,19 +1477,47 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
     r->vk.CmdSetViewport(cb, 0, 1, &vp);
     r->vk.CmdSetScissor(cb, 0, 1, &scissor);
 
-    r->vk.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[PIPELINE_TRIANGLE]);
-    r->vk.CmdDraw(cb, 3, 1, 0, 0);   // 3 verts hardcoded in triangle.vert
+    r->stats.scene_draw_calls = 0;
 
-    if (r->texture_ready) {          // M2.2: the textured quad, painted over the triangle
+    for (uint32_t batch_index = 0; batch_index < r->batch_output.batch_count; ++batch_index) {
+        const RenderBatch* batch = &r->batch_output.batches[batch_index];
+        const MeshResource* mesh = &r->meshes[handle_index(batch->mesh.h)];
+        const MaterialResource* material = &r->materials[handle_index(batch->material.h)];
         VkDeviceSize vb_offset = 0;
-        r->vk.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[PIPELINE_QUAD]);
-        r->vk.CmdBindVertexBuffers(cb, 0, 1, &r->quad_vb, &vb_offset);
-        r->vk.CmdBindIndexBuffer(cb, r->quad_ib, 0, VK_INDEX_TYPE_UINT16);
+        r->vk.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[PIPELINE_MESH]);
+        r->vk.CmdBindVertexBuffers(cb, 0, 1, &mesh->vertex_buffer, &vb_offset);
+        r->vk.CmdBindIndexBuffer(cb, mesh->index_buffer, 0, mesh->index_type);
         // set=0 per-frame view/proj UBO (M2.3) + set=1 material — both sets at once.
-        VkDescriptorSet sets[2] = { r->ubo_set[fr], r->material_set };
+        VkDescriptorSet sets[2] = { r->ubo_set[fr], material->descriptor_set };
         r->vk.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->material_pipeline_layout,
                                     0, 2, sets, 0, nullptr);
-        r->vk.CmdDrawIndexed(cb, 6, 1, 0, 0, 0);
+        const uint32_t instance_base = batch->instance_base;
+        r->vk.CmdPushConstants(cb, r->material_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT,
+                               0, sizeof(instance_base), &instance_base);
+        r->vk.CmdDrawIndexed(cb, mesh->index_count, batch->instance_count, 0, 0, 0);
+        ++r->stats.scene_draw_calls;
+    }
+    r->stats.total_draw_calls = r->stats.scene_draw_calls;
+
+    if (r->debug_draw.world_count > 0) {
+        const VkDeviceSize offset = 0;
+        r->vk.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[PIPELINE_DEBUG_WORLD]);
+        r->vk.CmdBindVertexBuffers(cb, 0, 1, &r->debug_vertex_buf[fr], &offset);
+        r->vk.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->debug_pipeline_layout,
+                                    0, 1, &r->ubo_set[fr], 0, nullptr);
+        r->vk.CmdDraw(cb, r->debug_draw.world_count, 1, 0, 0);
+        ++r->stats.total_draw_calls;
+    }
+    const uint32_t overlay_count = r->debug_draw.count - r->debug_draw.world_count;
+    if (overlay_count > 0) {
+        const VkDeviceSize offset = 0;
+        const float viewport_size[2] = {(float)r->sc_extent.width, (float)r->sc_extent.height};
+        r->vk.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[PIPELINE_DEBUG_OVERLAY]);
+        r->vk.CmdBindVertexBuffers(cb, 0, 1, &r->debug_vertex_buf[fr], &offset);
+        r->vk.CmdPushConstants(cb, r->debug_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT,
+                               0, sizeof(viewport_size), viewport_size);
+        r->vk.CmdDraw(cb, overlay_count, 1, r->debug_draw.world_count, 0);
+        ++r->stats.total_draw_calls;
     }
 
     r->vk.CmdEndRendering(cb);
@@ -1346,12 +1588,8 @@ static bool draw_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
     return true;
 }
 
-void renderer_draw(Renderer* r, int fb_width, int fb_height, bool minimized) {
-    draw_frame(r, fb_width, fb_height, minimized, nullptr);
-}
-
-bool renderer_capture(Renderer* r, int fb_width, int fb_height, bool minimized,
-                      Allocator alloc, RendererCapture* out) {
+static bool capture_frame(Renderer* r, int fb_width, int fb_height, bool minimized,
+                          Allocator alloc, RendererCapture* out) {
     if (!r || !out) return false;
     if (!r->sc_can_transfer_src) {
         platform_log("renderer: capture unsupported (swapchain has no TRANSFER_SRC)\n");
@@ -1402,4 +1640,106 @@ bool renderer_capture(Renderer* r, int fb_width, int fb_height, bool minimized,
     }
     free_buffer(r, &cap.buffer, &cap.memory);
     return ok;
+}
+
+static bool resolve_draw(void* user, const DrawItem* item, uint32_t* pipeline_key) {
+    Renderer* r = (Renderer*)user;
+    if (!r || !item || !pipeline_key ||
+        !render_handle_valid(&r->mesh_handles, item->mesh.h) ||
+        !render_handle_valid(&r->material_handles, item->material.h)) return false;
+    const MaterialResource* material = &r->materials[handle_index(item->material.h)];
+    if (!render_handle_valid(&r->texture_handles, material->texture.h)) return false;
+    *pipeline_key = PIPELINE_MESH;
+    return true;
+}
+
+bool renderer_begin_frame(Renderer* r, const FrameView* view,
+                          int fb_width, int fb_height, bool minimized) {
+    if (!r || !view || r->frame_begun) return false;
+    Arena* arena = &r->frame_arenas[r->frame];
+    arena_reset(arena);
+    r->draw_items = ARENA_PUSH_ARRAY(arena, DrawItem, MAX_DRAW_ITEMS);
+    if (!r->draw_items || !render_debug_begin(&r->debug_draw, arena, MAX_DEBUG_VERTS)) return false;
+    r->draw_count = 0;
+    r->batch_output = {};
+    r->instance_cpu = nullptr;
+    r->instance_count = 0;
+    r->debug_overlay_started = false;
+    r->camera_ubo.view = view->view;
+    r->camera_ubo.proj = view->proj;
+    r->pending_fb_width = fb_width;
+    r->pending_fb_height = fb_height;
+    r->pending_minimized = minimized;
+    r->frame_begun = true;
+    return true;
+}
+
+bool renderer_submit(Renderer* r, const DrawItem* items, uint32_t count) {
+    if (!r || !r->frame_begun || (!items && count > 0) || count > MAX_DRAW_ITEMS - r->draw_count)
+        return false;
+    if (count > 0) memcpy(r->draw_items + r->draw_count, items, sizeof(DrawItem) * count);
+    r->draw_count += count;
+    return true;
+}
+
+static bool prepare_submitted_frame(Renderer* r) {
+    if (!r || !r->frame_begun) return false;
+    Arena* arena = &r->frame_arenas[r->frame];
+    if (!render_build_batches(r->draw_items, r->draw_count, MAX_DRAW_ITEMS, arena,
+                              resolve_draw, r, &r->batch_output)) {
+        platform_log("renderer: rejected invalid or over-capacity draw submission\n");
+        r->frame_begun = false;
+        return false;
+    }
+    r->instance_cpu = r->batch_output.instances;
+    r->instance_count = r->batch_output.instance_count;
+    if (!r->debug_overlay_started) render_debug_end_world(&r->debug_draw);
+    r->stats.submitted_objects = r->draw_count;
+    r->stats.scene_batches = r->batch_output.batch_count;
+    r->stats.frame_arena_bytes = arena->offset;
+    r->stats.frame_arena_high_water = arena->high_water;
+    r->stats.persistent_arena_bytes = r->arena.offset;
+    r->stats.persistent_arena_high_water = r->arena.high_water;
+    r->stats.live_device_allocations = r->alloc_count;
+    r->frame_begun = false;
+    return true;
+}
+
+void renderer_end_frame(Renderer* r) {
+    if (!prepare_submitted_frame(r)) return;
+    draw_frame(r, r->pending_fb_width, r->pending_fb_height, r->pending_minimized, nullptr);
+}
+
+bool renderer_end_frame_capture(Renderer* r, Allocator alloc, RendererCapture* out) {
+    if (!prepare_submitted_frame(r)) return false;
+    return capture_frame(r, r->pending_fb_width, r->pending_fb_height,
+                         r->pending_minimized, alloc, out);
+}
+
+RendererStats renderer_get_stats(const Renderer* r) {
+    return r ? r->stats : RendererStats{};
+}
+
+void dbg_line(Renderer* r, mm::vec3 a, mm::vec3 b, uint32_t color) {
+    if (r && r->frame_begun && !r->debug_overlay_started)
+        render_debug_line(&r->debug_draw, a, b, color);
+}
+
+void dbg_sphere(Renderer* r, mm::vec3 center, float radius, uint32_t color) {
+    if (r && r->frame_begun && !r->debug_overlay_started)
+        render_debug_sphere(&r->debug_draw, center, radius, color, 24);
+}
+
+void dbg_aabb(Renderer* r, mm::vec3 lo, mm::vec3 hi, uint32_t color) {
+    if (r && r->frame_begun && !r->debug_overlay_started)
+        render_debug_aabb(&r->debug_draw, lo, hi, color);
+}
+
+void dbg_text_2d(Renderer* r, float x, float y, float scale, uint32_t color, const char* text) {
+    if (!r || !r->frame_begun) return;
+    if (!r->debug_overlay_started) {
+        render_debug_end_world(&r->debug_draw);
+        r->debug_overlay_started = true;
+    }
+    render_debug_text_2d(&r->debug_draw, x, y, scale, color, text);
 }

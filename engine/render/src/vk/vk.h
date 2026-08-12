@@ -33,6 +33,7 @@ struct Vk {
     PFN_vkEnumeratePhysicalDevices                   EnumeratePhysicalDevices;
     PFN_vkGetPhysicalDeviceProperties                GetPhysicalDeviceProperties;
     PFN_vkGetPhysicalDeviceFeatures2                 GetPhysicalDeviceFeatures2;        // 1.3 feature gate (ADR-0012)
+    PFN_vkGetPhysicalDeviceFormatProperties          GetPhysicalDeviceFormatProperties; // depth-format selection
     PFN_vkGetPhysicalDeviceMemoryProperties          GetPhysicalDeviceMemoryProperties; // readback staging
     PFN_vkGetPhysicalDeviceQueueFamilyProperties     GetPhysicalDeviceQueueFamilyProperties;
     PFN_vkEnumerateDeviceExtensionProperties         EnumerateDeviceExtensionProperties;
@@ -123,6 +124,7 @@ struct Vk {
     PFN_vkCmdBindVertexBuffers        CmdBindVertexBuffers;
     PFN_vkCmdBindIndexBuffer          CmdBindIndexBuffer;
     PFN_vkCmdBindDescriptorSets       CmdBindDescriptorSets;
+    PFN_vkCmdPushConstants            CmdPushConstants;
     PFN_vkCmdDrawIndexed              CmdDrawIndexed;
 };
 
