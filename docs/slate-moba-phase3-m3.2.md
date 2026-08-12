@@ -71,7 +71,7 @@ both 10,000-tick runs retain the M3.1 golden, and the controlled divergence rema
 | S1 | Ordered iteration cache | membership churn rebuilds a unique ascending entity-index view; dense reorder cannot affect it | done 2026-08-12 |
 | S2 | Typed event queues | fixed-capacity double buffers append/drain deterministically and reject overflow atomically | done 2026-08-12 |
 | S3 | Plain systems | movement and damage-resolution systems consume typed views/events with no storage-order dependency | done 2026-08-12 |
-| S4 | Explicit schedule | one literal `sim_tick` order runs commands, movement, damage, cleanup, RNG, and tick-boundary destruction | queued |
+| S4 | Explicit schedule | one literal `sim_tick` order runs commands, movement, damage, cleanup, RNG, and tick-boundary destruction | done 2026-08-12 |
 | S5 | Determinism migration | canonical hash/diff covers authoritative queues/system state; 10,000 ticks and exact mutation proof pass in Debug/Release | queued |
 | S6 | Close M3.2 | full `/WX` matrix, all CTest, boundary scan, docs, independent acceptance, and GitHub gates are green | queued |
 
@@ -99,3 +99,8 @@ Debug/Release replay oracle and boundary gates remain green. M3.3 stays a separa
   Focused tests prove command/event order, identical movement across divergent dense layouts, and
   whole-read-phase combat validation before damage mutation. The affected Debug targets, destruction
   suite, sim boundary, unchanged 10,000-tick golden, and exact divergence diagnostic remain green.
+- **S4:** `sim_tick` now names the literal schedule directly: validate, apply commands, ordered
+  movement, publish damage, combat resolve, consume, cooldown, RNG, deferred destruction, tick
+  increment. Schedule tests distinguish same-tick command/movement and damage/cooldown order, prove
+  one event-buffer swap and RNG advance per tick, retain end-boundary destruction, and reject event
+  overflow byte-for-byte before an earlier velocity command can mutate state.
