@@ -1,34 +1,34 @@
 # MOBA-proto — next session
 
-## State · `moba/slate-2026-08-11` · 2026-08-12
+## State · `moba/slate-phase3-determinism` · 2026-08-12
 
-Phase 2 M2.3–M2.5 is complete on the slate branch. The Vulkan renderer now shows a
-depth-correct 20×25 cube field from one batch/draw, camera UBO motion, debug world geometry and a
-5×7 stroke F1 overlay. The public seam is typed resource creation/destruction plus
-begin/submit/end-frame; deferred destruction and a real null backend are covered headlessly.
+Phase 3 M3.0 is complete on PR #14. The branch contains the 30 Hz shared configuration,
+allocation-free little-endian codec, platform-free 64-slot placeholder simulation, canonical
+FNV-1a state hash and first-field diff, version-locked replay format, and the `moba_replay`
+record/inspect/verify CLI. M3.1 ECS has not started.
 
 ## Verified
 
-- MSVC `ci` preset (`/WX`) builds Vulkan, null backend, both sandboxes, and tests.
-- 9/9 CTest suites green.
-- Validation-layer readback run: zero warnings/errors; 500 objects, one batch, one scene draw,
-  three total draws, 12 live dedicated allocations.
-- Owner S6 run passed: resize, minimize/restore, alt-tab focus loss/return, and F1 off/on were
-  event-logged; validation remained clean through shutdown.
-- `sandbox_null --frames 5` opens, creates valid typed handles, runs blank, and exits cleanly.
+- MSVC `ci` preset (`/WX`) builds all Debug and Release targets.
+- 18/18 CTest entries pass in both configurations.
+- Independent 10,000-tick replay hash streams match; final hash `0xb85d4b632571948c`.
+- Controlled mutation reports exactly `tick=4321 field=position_x unit=7`.
+- CLI record → inspect → verify passes through atomic platform-file persistence; corrupt and
+  incompatible variants return the specified exit classes.
+- `eng_sim` source boundary is clean and links only core, math, and serialize.
 
 ## First action
 
-Review and squash-merge PR #13. Do not start Phase 3 implementation on the renderer branch.
+Review and merge PR #14 once GitHub CI and CodeQL are green. Merge remains owner-approved and is not
+part of the implementation slate.
 
-## Phase 3 handoff
+## M3.1 handoff
 
-Create `moba/slate-phase3-determinism` from the updated `main` and execute the queued
-[`M3.0 determinism slate`](slate-moba-phase3-m3.0.md). It restores the missing shared sim constants,
-then builds the platform-free placeholder sim, canonical state hash, replay path, and 10,000-tick
-exact-divergence proof. Keep M3.1 ECS in its own later slate; do not pull Phase 4 assets, allocator
-Phase 2, or Vulkan-in-hosted-CI into M3.0.
+After PR #14 lands, create `moba/slate-phase3-ecs` from updated `main` and execute
+[`M3.1 ECS slate`](slate-moba-phase3-m3.1.md). Preserve the M3.0 replay format and 10,000-tick hash
+stream as the regression oracle. M3.1 owns entity lifecycle and sparse-set SoA storage only; keep
+M3.2 systems/scheduling, M3.3 fixed-loop/presentation, assets, networking, and gameplay out.
 
-## Residual owner gates
+## Residual owner gate
 
 - Vulkan SDK installation in hosted CI before changing `find_package(Vulkan)` to `REQUIRED`.

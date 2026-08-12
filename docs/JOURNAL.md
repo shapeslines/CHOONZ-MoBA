@@ -8,6 +8,47 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 07 — 2026-08-12 — M3.0: deterministic simulation oracle and replay CLI
+
+**Scope:** build the Phase 3 desync detector before starting the real ECS.
+**Outcome:** M3.0 is complete on PR #14. A fixed-capacity, platform-free Q16.16 simulation now has
+one canonical hash/diff order, a version-locked replay container, and a runnable recorder,
+inspector, and verifier. M3.1 remains unstarted and is queued on its own slate.
+
+### What landed
+
+- `core/sim_config.h` owns the 30 Hz cadence and accumulator constants; sim derives the Q16.16
+  timestep where core and math first meet.
+- `eng_serialize` provides bounded, sticky, allocation-free little-endian reads/writes for signed
+  and unsigned 8/16/32/64-bit values.
+- `eng_sim` owns the 64-slot placeholder `SimWorld`, PCG32 state, canonical command validation,
+  fixed-order tick, FNV-1a/64 state hash, and first-field comparator.
+- Replay format `1` uses `MOBARPLY` and logic hash `0xf1b4e2b29b1e9643`; each tick records the
+  expected post-tick hash and canonical commands. `moba_replay record|inspect|verify` persists via
+  the atomic platform file seam with exit classes for I/O, invalid input, and divergence.
+- A dedicated test target records/replays 10,000 ticks and a CTest boundary scan rejects float,
+  libm, wall-clock, platform/render/Vulkan imports, and unordered containers under `engine/sim`.
+
+### Verification
+
+- MSVC `ci` preset with `/WX`: full Debug and Release builds clean.
+- **18/18 CTest entries green** in both configurations.
+- The independent replay matches every recorded post-tick hash; final hash
+  `0xb85d4b632571948c`.
+- Controlled mutation: `tick=4321 field=position_x unit=7` in Debug and Release, with 47,301
+  determinism checks per configuration.
+- Replay CLI fixture: 10,000 ticks, 923 commands, 134,812 bytes; record, inspect, and verify pass.
+  Corrupt/incompatible variants return exit 2, divergence returns 3, and usage/I/O returns 1.
+- `sim_boundary`: seven sim headers/sources clean; direct link seam is core + math + serialize.
+
+### Next
+
+Review and merge PR #14 after GitHub CI/CodeQL are green. Then create
+`moba/slate-phase3-ecs` from updated `main` and execute the queued M3.1 slate. The M3.0 replay hash
+stream is the regression oracle; do not fold M3.2 scheduling or M3.3 presentation work into M3.1.
+
+---
+
 ## Session 06 — 2026-08-12 — M2.3–M2.5: instanced field, debug workhorse, real renderer seam
 
 **Scope:** finish the Phase 2 pickup slate from camera UBO through the renderer seam audit.

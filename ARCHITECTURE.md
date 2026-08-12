@@ -6,14 +6,14 @@
 
 **Layer:** Game · standalone C++/Vulkan engine — **off-spine**, a separate universe from the Shapes//Lines data spine
 **Role:** Custom from-scratch MOBA/RTS-hybrid game engine (C++17, raw Vulkan 1.3, own ECS, netcode, and math); no shared auth, no database, no GromDB relation — isolation is by design.
-**Status:** Phase 2 complete — M2.0–M2.5 cover Vulkan bring-up through depth-correct 500-cube instancing, debug draw/F1 overlay, typed resources with deferred destruction, and an always-built null backend. The owner-run resize/minimize/alt-tab/F1 gate passed validation-clean on 2026-08-12; Phase 3 begins with the queued M3.0 determinism harness in `docs/slate-moba-phase3-m3.0.md`.
+**Status:** Phase 3 M3.0 complete on PR #14. The engine now has a platform-free 30 Hz Q16.16 placeholder simulation, canonical state hash/diff oracle, version-locked replay codec, `moba_replay` record/inspect/verify CLI, and an exact 10,000-tick determinism proof. M3.1 ECS is queued separately in `docs/slate-moba-phase3-m3.1.md`.
 
 **Canonical deep-dive:** https://github.com/shapeslines/System-Architecture/blob/main/projects/moba.md
 &nbsp;&nbsp;(local sibling: `../System-Architecture/projects/moba.md`)
 **Library:** [whitepaper](https://github.com/shapeslines/System-Architecture/blob/main/whitepaper.md) · [system-map](https://github.com/shapeslines/System-Architecture/blob/main/system-map.md) · [patterns](https://github.com/shapeslines/System-Architecture/tree/main/patterns) · [decisions (ADRs 0001–0009)](https://github.com/shapeslines/System-Architecture/tree/main/decisions)
 
 ## House patterns instanced
-- **determinism-contract** — the one house pattern MOBA-proto instances, and it instances it globally: Q16.16 fixed-point everywhere in `eng_sim`, a 30 Hz fixed tick (ADR-0001), `pcg32` inside `SimWorld` (hashed + snapshotted), a per-tick `sim_hash` with run-twice self-check, a `float`/`double` grep-lint in CI, and full `eng_sim` isolation via `eng_core_group`. The **sim / present seam** is its concrete shape: `fixed→float` happens in exactly one place (the present glue), and nothing downstream can feed back into the sim.
+- **determinism-contract** — the one house pattern MOBA-proto instances, and it instances it globally: Q16.16 fixed-point everywhere in `eng_sim`, a 30 Hz fixed tick (ADR-0001), `pcg32` inside `SimWorld` (hashed + replayed), a per-tick canonical FNV-1a hash with run-twice self-check, a sim-boundary CTest, and direct `eng_sim → core + math + serialize` isolation. The **sim / present seam** is its concrete shape: `fixed→float` happens in exactly one place (the present glue), and nothing downstream can feed back into the sim.
 
 *Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0012):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
 

@@ -3,7 +3,7 @@
 A multiplayer online battle arena built **from scratch in C++**, on a custom
 RTS-class game engine.
 
-> 🚧 **Status:** Early development. **Phases 0–2 complete.** Build spine, ADRs,
+> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0 complete.** Build spine, ADRs,
 > Win32 window, memory arenas, float/fixed-point
 > math, containers, and a self-registering test harness on CTest + a pre-push gate
 > (determinism golden across `/fp:precise` + `/fp:fast`), plus GitHub Actions CI
@@ -15,7 +15,11 @@ RTS-class game engine.
 > debug draw/F1 overlay, and an always-built null backend. An in-process
 > readback (`sandbox --screenshot out.bmp`) captures what it rendered, **validation-
 > clean** (verified on an RTX 4070 Ti), including an owner-run resize, minimize/restore,
-> alt-tab, and F1-overlay interaction check. **Next: Phase 3 M3.0 determinism harness.**
+> alt-tab, and F1-overlay interaction check. The M3.0 harness adds a platform-free fixed-point
+> `SimWorld`, canonical state hashing/diffing, a version-locked replay format, and the
+> `moba_replay` record/inspect/verify CLI. Its 10,000-tick self-check is bit-identical in Debug and
+> Release, and the mutation proof reports exactly `tick=4321 field=position_x unit=7`.
+> **Next: Phase 3 M3.1 sparse-set ECS, on its own slate.**
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -65,11 +69,15 @@ cmake --build build-ci --config Debug
 ctest --test-dir build-ci -C Debug --output-on-failure
 ```
 
-Suites are `mem`, `math`, `containers`, `platform` (file I/O), `render` (pipeline-
-cache blob checker), `tga` (direct TGA decode) — all Vulkan-free and headless — and
-the determinism golden hash built twice (`det_precise` `/fp:precise` + `det_fast`
-`/fp:fast` — both must match). To run one binary directly: `engine_tests.exe --suite
-math` (or `--filter`, `--list`).
+CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, `sim`, `render`,
+`render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
+the sim-boundary scan, and replay CLI fixtures. To run the replay tool directly:
+
+```bat
+build-ci\tools\replay\Debug\moba_replay.exe record --out match.mbr
+build-ci\tools\replay\Debug\moba_replay.exe inspect match.mbr
+build-ci\tools\replay\Debug\moba_replay.exe verify match.mbr
+```
 
 A **pre-push hook** runs the same `/WX` build + `ctest` and blocks the push on red.
 Activate it once per clone (it shells out to `vcvars` so it works from any shell):

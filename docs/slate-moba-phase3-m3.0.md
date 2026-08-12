@@ -2,12 +2,12 @@
 type: record
 title: "SLATE - Phase 3 M3.0 determinism harness"
 kind: slate
-status: active
+status: complete
 project: moba
 axis: "simulation determinism"
 opened: 2026-08-12
 updated: 2026-08-12
-closed:
+closed: 2026-08-12
 worktree: "repo root"
 branch: "moba/slate-phase3-determinism"
 tags: [slate, determinism, simulation]
@@ -17,11 +17,13 @@ related:
   - "docs/DECISIONS/0002-fixed-point-sim-math.md"
   - "docs/DECISIONS/0007-sim-rng.md"
   - "PR #13 / Phase 2 closeout"
+  - "PR #14 / M3.0 implementation"
+  - "docs/slate-moba-phase3-m3.1.md"
 ---
 
 # Slate - Phase 3 M3.0 determinism harness
 
-**Status:** active on merged `main` baseline `6a21920`.
+**Status:** complete on PR #14 from merged `main` baseline `6a21920`.
 
 ## Goal
 
@@ -73,7 +75,7 @@ green, so changes to entity storage are immediately measurable against an establ
 | S2 | Add canonical state hashing and first-field diffing | FNV-1a hashes every live gameplay field and RNG word byte-wise in documented order; changes to each field affect the hash; padding/capacity do not; diagnostics name the first field and unit | done 2026-08-12 |
 | S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | done 2026-08-12 |
 | S4 | Prove 10,000-tick determinism and exact divergence | Two same-seed/input runs match every tick in Debug and Release; a controlled perturbation at tick N reports N as the first divergence | done 2026-08-12 |
-| S5 | Enforce the boundary and close M3.0 | Debug/Release `/WX` and CTest pass; sim source has no float, unordered iteration, wall-clock, platform, or renderer dependency; ROADMAP/JOURNAL/next-session are current | queued |
+| S5 | Enforce the boundary and close M3.0 | Debug/Release `/WX` and CTest pass; sim source has no float, unordered iteration, wall-clock, platform, or renderer dependency; ROADMAP/JOURNAL/next-session are current | done 2026-08-12 |
 
 ## Verification matrix
 
@@ -105,6 +107,10 @@ separate M3.1 ECS slate that uses this hash stream as its regression oracle.
   post-tick mutation reported exactly `tick=4321 field=position_x unit=7`. The CTest boundary scan
   found all seven `engine/sim` source/header files clean and confirmed the direct link seam is
   `eng_core + eng_math + eng_serialize` only.
+- **S5:** A fresh `cmake --preset ci` completed the full `/WX` Debug and Release builds; all 18
+  CTest entries passed in both configurations. ROADMAP, architecture, journal, next-session, and
+  this record now reflect the observed M3.0 result. M3.1 is queued separately in
+  `docs/slate-moba-phase3-m3.1.md`; no ECS implementation entered this branch.
 
 ## Residuals
 
