@@ -68,7 +68,7 @@ both 10,000-tick runs retain the M3.1 golden, and the controlled divergence rema
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
 | S0 | Land and rebaseline | branch starts at merged PR #15 and the untouched M3.1 Debug/Release oracle is recorded | done 2026-08-12 |
-| S1 | Ordered iteration cache | membership churn rebuilds a unique ascending entity-index view; dense reorder cannot affect it | queued |
+| S1 | Ordered iteration cache | membership churn rebuilds a unique ascending entity-index view; dense reorder cannot affect it | done 2026-08-12 |
 | S2 | Typed event queues | fixed-capacity double buffers append/drain deterministically and reject overflow atomically | queued |
 | S3 | Plain systems | movement and damage-resolution systems consume typed views/events with no storage-order dependency | queued |
 | S4 | Explicit schedule | one literal `sim_tick` order runs commands, movement, damage, cleanup, RNG, and tick-boundary destruction | queued |
@@ -80,3 +80,11 @@ both 10,000-tick runs retain the M3.1 golden, and the controlled divergence rema
 M3.2 closes only when movement and damage events run through the explicit schedule, every
 order-sensitive traversal is ascending by entity index, event overflow is atomic, and the complete
 Debug/Release replay oracle and boundary gates remain green. M3.3 stays a separate slate.
+
+## Slice evidence
+
+- **S1:** `ComponentPool` now owns an arena-backed derived `EntityId` cache. Successful membership
+  changes mark it dirty; the ordered-view API validates the complete sparse/dense mapping before an
+  atomic rebuild by ascending sparse index. Focused Debug tests cover divergent dense layouts,
+  swap-remove/re-add churn, stable clean-cache reads, and failure atomicity. The affected sim targets,
+  M3.1 golden stream, exact tick-4321 diagnostic, and sim-boundary test remain green.

@@ -13,9 +13,12 @@
 typedef struct ComponentPool {
     uint32_t* sparse;
     EntityId* dense_entities;
+    EntityId* ordered_entities;
     uint32_t entity_capacity;
     uint32_t capacity;
     uint32_t count;
+    uint32_t ordered_count;
+    uint8_t ordered_dirty;
 } ComponentPool;
 
 typedef struct ComponentPoolRemoveResult {
@@ -23,6 +26,14 @@ typedef struct ComponentPoolRemoveResult {
     uint32_t moved_from_dense;
     EntityId moved_entity;
 } ComponentPoolRemoveResult;
+
+// Derived query view. The cache is rebuilt by ascending sparse index only after
+// membership changes, so swap-remove history can never define system order.
+// Cache bytes and dirty state are not authoritative simulation state.
+typedef struct ComponentPoolOrderedView {
+    const EntityId* entities;
+    uint32_t count;
+} ComponentPoolOrderedView;
 
 size_t component_pool_memory_required(uint32_t entity_capacity, uint32_t capacity);
 
@@ -38,3 +49,7 @@ uint32_t component_pool_dense_index(const ComponentPool* pool, EntityId entity);
 bool component_pool_add(ComponentPool* pool, EntityId entity, uint32_t* dense_index);
 bool component_pool_remove(ComponentPool* pool, EntityId entity,
                            ComponentPoolRemoveResult* result);
+
+// Lazily rebuilds the derived cache when dirty. Failure leaves both the cache
+// and caller output unchanged.
+bool component_pool_ordered_view(ComponentPool* pool, ComponentPoolOrderedView* view);
