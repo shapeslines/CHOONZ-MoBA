@@ -3,7 +3,7 @@
 A multiplayer online battle arena built **from scratch in C++**, on a custom
 RTS-class game engine.
 
-> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0 complete.** Build spine, ADRs,
+> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0–M3.1 complete.** Build spine, ADRs,
 > Win32 window, memory arenas, float/fixed-point
 > math, containers, and a self-registering test harness on CTest + a pre-push gate
 > (determinism golden across `/fp:precise` + `/fp:fast`), plus GitHub Actions CI
@@ -15,11 +15,13 @@ RTS-class game engine.
 > debug draw/F1 overlay, and an always-built null backend. An in-process
 > readback (`sandbox --screenshot out.bmp`) captures what it rendered, **validation-
 > clean** (verified on an RTX 4070 Ti), including an owner-run resize, minimize/restore,
-> alt-tab, and F1-overlay interaction check. The M3.0 harness adds a platform-free fixed-point
-> `SimWorld`, canonical state hashing/diffing, a version-locked replay format, and the
+> alt-tab, and F1-overlay interaction check. The Phase 3 simulation now has an arena-backed
+> generational entity manager, typed sparse-set SoA Transform/Velocity/Health pools, stable replay
+> unit slots, deferred boundary destruction, canonical ECS state hashing/diffing, and the
 > `moba_replay` record/inspect/verify CLI. Its 10,000-tick self-check is bit-identical in Debug and
-> Release, and the mutation proof reports exactly `tick=4321 field=position_x unit=7`.
-> **Next: Phase 3 M3.1 sparse-set ECS, on its own slate.**
+> Release at `0x981212877a575730`, and the mutation proof reports exactly
+> `tick=4321 field=position_x entity=7`.
+> **Next: Phase 3 M3.2 systems and ordered scheduling, on its own slate.**
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -69,7 +71,7 @@ cmake --build build-ci --config Debug
 ctest --test-dir build-ci -C Debug --output-on-failure
 ```
 
-CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, `sim`, `render`,
+CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, entity/component/sim suites, `render`,
 `render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
 the sim-boundary scan, and replay CLI fixtures. To run the replay tool directly:
 
@@ -95,7 +97,7 @@ engine/        the engine, one static lib per module (the CMake link graph = the
   serialize/   bounded little-endian byte readers/writers              (leaf-up)
   platform/    the OS seam (Win32): window, input, timing, files, sockets, Vulkan surface
   render/      raw Vulkan behind a thin renderer seam; GLSL sources in render/shaders/
-  sim/         fixed-point placeholder simulation; ECS arrives in M3.1
+  sim/         arena-backed deterministic entity/component simulation + replay codec
   (assets / net arrive in their phases)
 cmake/         CompilerWarnings, EngineOptions, CompileShaders helpers
 game/ tools/   the game exe, sandbox, asset cooker

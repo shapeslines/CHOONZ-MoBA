@@ -16,6 +16,8 @@ related:
   - "docs/DECISIONS/0003-handle-abi.md"
   - "docs/slate-moba-phase3-m3.0.md"
   - "PR #14 / M3.0 determinism harness"
+  - "PR #15 / M3.1 implementation"
+  - "docs/slate-moba-phase3-m3.2.md"
 ---
 
 # Slate - Phase 3 M3.1 entity model and sparse-set SoA
@@ -63,7 +65,7 @@ component pools while preserving the established replay/hash stream as the regre
 | S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | done 2026-08-12 |
 | S4 | Integrate deferred destruction into `SimWorld` | queued destroys commit once at the tick boundary, remove all components, invalidate stale IDs, and cannot partially mutate on failure | done 2026-08-12 |
 | S5 | Migrate canonical hash/diff and replay oracle | all authoritative entity/pool fields have an explicit LE order; logic hash is deliberately bumped; run-twice and exact-divergence tests stay green | done 2026-08-12 |
-| S6 | Close M3.1 | full `/WX` Debug/Release CTest and boundary gates pass; docs are current; M3.2 gets a separate slate | queued |
+| S6 | Close M3.1 | full `/WX` Debug/Release CTest and boundary gates pass; docs are current; M3.2 gets a separate slate | active |
 
 ## Exit gate
 
@@ -118,3 +120,9 @@ and Release. M3.2 scheduling remains a separate decision and implementation slat
   the stream. Replay v1 rejects the exact M3.0 logic hash. Debug and Release independently produce
   the pinned 10,000-tick M3.1 golden `0x981212877a575730`, with first controlled divergence exactly
   `tick=4321 field=position_x entity=7`; CLI record/inspect/verify and error classes remain green.
+- **S6 local gate:** Complete `ci`-preset `/WX` builds pass in Debug and Release, and all 22 CTest
+  entries pass in both configurations. The 13-file sim boundary scan remains clean and the direct
+  `eng_sim` link seam remains core + math + serialize. Architecture, ROADMAP, journal, next-session,
+  and README now describe the observed ECS result; M3.2 is queued separately in
+  `docs/slate-moba-phase3-m3.2.md`. GitHub CI/CodeQL and fresh independent acceptance remain before
+  this slate and PR #15 can be marked ready.

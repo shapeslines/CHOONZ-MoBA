@@ -1,33 +1,34 @@
 # MOBA-proto — next session
 
-## State · `moba/slate-phase3-determinism` · 2026-08-12
+## State · `moba/slate-phase3-ecs` · PR #15 · 2026-08-12
 
-Phase 3 M3.0 is complete on PR #14. The branch contains the 30 Hz shared configuration,
-allocation-free little-endian codec, platform-free 64-slot placeholder simulation, canonical
-FNV-1a state hash and first-field diff, version-locked replay format, and the `moba_replay`
-record/inspect/verify CLI. M3.1 ECS has not started.
+Phase 3 M3.1 is implementation-complete. The branch replaces M3.0's fixed arrays with an
+arena-backed generational entity manager, sparse-set SoA Transform/Velocity/Health pools, stable
+64-slot replay mappings, deferred tick-boundary destruction, and canonical semantic ECS hashing.
+M3.2 scheduling/events have not started.
 
 ## Verified
 
-- MSVC `ci` preset (`/WX`) builds all Debug and Release targets.
-- 18/18 CTest entries pass in both configurations.
-- Independent 10,000-tick replay hash streams match; final hash `0xb85d4b632571948c`.
-- Controlled mutation reports exactly `tick=4321 field=position_x unit=7`.
-- CLI record → inspect → verify passes through atomic platform-file persistence; corrupt and
-  incompatible variants return the specified exit classes.
-- `eng_sim` source boundary is clean and links only core, math, and serialize.
+- MSVC `ci` preset (`/WX`) builds every Debug and Release target.
+- 22/22 CTest entries pass in both configurations.
+- Independent 10,000-tick streams match at every tick and end at `0x981212877a575730`.
+- Controlled mutation reports exactly `tick=4321 field=position_x entity=7`.
+- Replay v1 remains byte-exact with logic hash `0x7902599e173f87a6`; the old M3.0 hash is rejected.
+- CLI record → inspect → verify and all public exit classes pass through platform-file persistence.
+- `eng_sim` is clean under the 13-file boundary scan and directly links only core, math, serialize.
 
 ## First action
 
-Review and merge PR #14 once GitHub CI and CodeQL are green. Merge remains owner-approved and is not
-part of the implementation slate.
+Confirm PR #15 GitHub CI/CodeQL and the independent acceptance verdict, then owner-review and merge.
+Merge remains separately owner-approved.
 
-## M3.1 handoff
+## M3.2 handoff
 
-After PR #14 lands, create `moba/slate-phase3-ecs` from updated `main` and execute
-[`M3.1 ECS slate`](slate-moba-phase3-m3.1.md). Preserve the M3.0 replay format and 10,000-tick hash
-stream as the regression oracle. M3.1 owns entity lifecycle and sparse-set SoA storage only; keep
-M3.2 systems/scheduling, M3.3 fixed-loop/presentation, assets, networking, and gameplay out.
+After PR #15 lands, create `moba/slate-phase3-systems` from updated `main` and execute
+[`M3.2 systems slate`](slate-moba-phase3-m3.2.md). Use the M3.1 command generator, run-twice hash
+stream, and tick-4321 field diff as the regression oracle. M3.2 owns ordered iteration caches,
+typed append-only event queues, plain systems, and the explicit schedule only; keep M3.3 platform
+accumulator/presentation, gameplay, networking, assets, and renderer work out.
 
 ## Residual owner gate
 
