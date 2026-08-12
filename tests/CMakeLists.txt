@@ -23,6 +23,7 @@ add_executable(engine_tests
     containers/container_tests.cpp
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
+    sim/entity_tests.cpp
     sim/sim_config_tests.cpp
     sim/sim_hash_tests.cpp
     sim/replay_tests.cpp
@@ -67,6 +68,7 @@ add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
 add_test(NAME platform    COMMAND engine_tests --suite platform)  # file I/O (M2.1)
 add_test(NAME serialize   COMMAND engine_tests --suite serialize)
+add_test(NAME sim_entity  COMMAND engine_tests --suite sim_entity)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)

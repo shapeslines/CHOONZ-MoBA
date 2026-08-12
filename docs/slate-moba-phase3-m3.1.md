@@ -58,7 +58,7 @@ component pools while preserving the established replay/hash stream as the regre
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
 | S0 | Rebaseline and specify storage contracts | M3.0 10,000-tick Debug/Release oracle captured; capacities, failure behavior, generation wrap policy, and canonical hash migration are written down | done 2026-08-12 |
-| S1 | Add arena-backed `EntityManager` | create/alive/destroy/recycle tests pass; stale IDs fail; exhaustion is explicit; generation zero is never issued | queued |
+| S1 | Add arena-backed `EntityManager` | create/alive/destroy/recycle tests pass; stale IDs fail; exhaustion is explicit; generation zero is never issued | done 2026-08-12 |
 | S2 | Add generic sparse/dense membership core | add/remove/has/dense lookup stay O(1); swap-remove repairs sparse and back-reference maps under adversarial sequences | queued |
 | S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | queued |
 | S4 | Integrate deferred destruction into `SimWorld` | queued destroys commit once at the tick boundary, remove all components, invalidate stale IDs, and cannot partially mutate on failure | queued |
@@ -79,3 +79,9 @@ and Release. M3.2 scheduling remains a separate decision and implementation slat
   `tick=4321 field=position_x unit=7` diagnostic. M3.1 is locked to runtime capacity configuration
   (default 16,384), replay-v1 stable unit slots, a temporary cooldown field in `HealthPool`, and
   logic hash `0x7902599e173f87a6`.
+- **S1:** Added the dedicated arena-backed `EntityManager` with 16-bit generations, explicit
+  liveness, ascending fresh allocation, LIFO recycling, and atomic exhaustion/stale failure.
+  `sim_entity` and the affected `sim` suite pass under the `ci` preset in Debug and Release;
+  Release explicitly proves deterministic generation wrap to one. The Debug sim-boundary scan
+  remains green, and initialization tests prove invalid and under-budget attempts preserve both
+  the output object and arena offset.
