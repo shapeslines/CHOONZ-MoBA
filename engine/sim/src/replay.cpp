@@ -28,6 +28,42 @@ static ReplayStatus reader_fail(ByteReader* reader, ReplayStatus status) {
     return status;
 }
 
+static uint64_t mix64(uint64_t value) {
+    value ^= value >> 30;
+    value *= 0xbf58476d1ce4e5b9ULL;
+    value ^= value >> 27;
+    value *= 0x94d049bb133111ebULL;
+    return value ^ (value >> 31);
+}
+
+uint32_t replay_generate_placeholder_commands(uint64_t seed, uint64_t tick,
+                                              uint32_t player_count,
+                                              SimCommand* out_commands) {
+    if (!out_commands || player_count == 0 || player_count > SIM_MAX_PLAYERS) return 0;
+    uint32_t count = 0;
+    uint64_t bits = mix64(seed ^ (tick + 0x9e3779b97f4a7c15ULL));
+    if ((tick % 30) == 0) {
+        SimCommand command{};
+        command.kind = SIM_COMMAND_SET_VELOCITY;
+        command.player_id = static_cast<uint8_t>((bits >> 8) % player_count);
+        command.unit_index = static_cast<uint16_t>(bits % SIM_MAX_UNITS);
+        int32_t x = static_cast<int32_t>((bits >> 16) % 7) - 3;
+        int32_t y = static_cast<int32_t>((bits >> 24) % 7) - 3;
+        command.value_x = mm::fix_from_int(x);
+        command.value_y = mm::fix_from_int(y);
+        out_commands[count++] = command;
+    }
+    if ((tick % 17) == 0) {
+        SimCommand command{};
+        command.kind = SIM_COMMAND_DAMAGE;
+        command.player_id = static_cast<uint8_t>((bits >> 32) % player_count);
+        command.unit_index = static_cast<uint16_t>((bits >> 40) % SIM_MAX_UNITS);
+        command.amount = static_cast<int32_t>((bits >> 48) % 9) + 1;
+        out_commands[count++] = command;
+    }
+    return count;
+}
+
 ReplayHeader replay_header_make(uint64_t seed, uint32_t player_count, uint64_t tick_count) {
     ReplayHeader header{};
     header.format_version = REPLAY_FORMAT_VERSION;

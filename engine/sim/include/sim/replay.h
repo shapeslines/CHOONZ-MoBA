@@ -18,6 +18,7 @@ static const uint64_t REPLAY_MAX_TICKS = 1000000ULL; // >9 hours at 30 Hz
 static const size_t REPLAY_HEADER_ENCODED_SIZE = 44;
 static const size_t REPLAY_TICK_BASE_ENCODED_SIZE = 12;
 static const size_t REPLAY_COMMAND_ENCODED_SIZE = 16;
+static const uint32_t REPLAY_PLACEHOLDER_MAX_COMMANDS = 2;
 
 typedef struct ReplayHeader {
     uint32_t format_version;
@@ -44,6 +45,9 @@ typedef enum ReplayStatus : uint8_t {
 } ReplayStatus;
 
 ReplayHeader replay_header_make(uint64_t seed, uint32_t player_count, uint64_t tick_count);
+uint32_t replay_generate_placeholder_commands(uint64_t seed, uint64_t tick,
+                                              uint32_t player_count,
+                                              SimCommand* out_commands);
 ReplayStatus replay_write_header(ByteWriter* writer, const ReplayHeader* header);
 ReplayStatus replay_read_header(ByteReader* reader, ReplayHeader* out_header);
 ReplayStatus replay_write_tick(ByteWriter* writer, uint32_t player_count,

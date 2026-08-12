@@ -15,7 +15,6 @@ static const uint64_t DEFAULT_TICKS = 10000;
 static const uint64_t DEFAULT_SEED = 1;
 static const uint32_t DEFAULT_PLAYERS = 2;
 static const size_t MAX_REPLAY_FILE_BYTES = static_cast<size_t>(256) * 1024 * 1024;
-static const uint32_t PLACEHOLDER_COMMANDS_PER_TICK = 2;
 
 enum CliExit {
     CLI_SUCCESS = 0,
@@ -42,45 +41,10 @@ static bool parse_u64(const char* text, uint64_t* out) {
     return true;
 }
 
-static uint64_t mix64(uint64_t value) {
-    value ^= value >> 30;
-    value *= 0xbf58476d1ce4e5b9ULL;
-    value ^= value >> 27;
-    value *= 0x94d049bb133111ebULL;
-    return value ^ (value >> 31);
-}
-
-static uint32_t generate_placeholder_commands(uint64_t seed, uint64_t tick,
-                                              uint32_t player_count,
-                                              SimCommand* out_commands) {
-    uint32_t count = 0;
-    uint64_t bits = mix64(seed ^ (tick + 0x9e3779b97f4a7c15ULL));
-    if ((tick % 30) == 0) {
-        SimCommand command{};
-        command.kind = SIM_COMMAND_SET_VELOCITY;
-        command.player_id = static_cast<uint8_t>((bits >> 8) % player_count);
-        command.unit_index = static_cast<uint16_t>(bits % SIM_MAX_UNITS);
-        int32_t x = static_cast<int32_t>((bits >> 16) % 7) - 3;
-        int32_t y = static_cast<int32_t>((bits >> 24) % 7) - 3;
-        command.value_x = mm::fix_from_int(x);
-        command.value_y = mm::fix_from_int(y);
-        out_commands[count++] = command;
-    }
-    if ((tick % 17) == 0) {
-        SimCommand command{};
-        command.kind = SIM_COMMAND_DAMAGE;
-        command.player_id = static_cast<uint8_t>((bits >> 32) % player_count);
-        command.unit_index = static_cast<uint16_t>((bits >> 40) % SIM_MAX_UNITS);
-        command.amount = static_cast<int32_t>((bits >> 48) % 9) + 1;
-        out_commands[count++] = command;
-    }
-    return count;
-}
-
 static bool record_capacity(uint64_t tick_count, size_t* out_capacity) {
     if (!out_capacity) return false;
     const size_t tick_bytes = REPLAY_TICK_BASE_ENCODED_SIZE +
-                              PLACEHOLDER_COMMANDS_PER_TICK * REPLAY_COMMAND_ENCODED_SIZE;
+                              REPLAY_PLACEHOLDER_MAX_COMMANDS * REPLAY_COMMAND_ENCODED_SIZE;
     if (tick_count > static_cast<uint64_t>((SIZE_MAX - REPLAY_HEADER_ENCODED_SIZE) / tick_bytes))
         return false;
     *out_capacity = REPLAY_HEADER_ENCODED_SIZE + static_cast<size_t>(tick_count) * tick_bytes;
@@ -150,8 +114,9 @@ static int command_record(int argc, char** argv) {
     SimWorld world;
     sim_init(&world, seed);
     for (uint64_t tick = 0; tick < tick_count && status == REPLAY_STATUS_OK; ++tick) {
-        SimCommand commands[PLACEHOLDER_COMMANDS_PER_TICK]{};
-        uint32_t command_count = generate_placeholder_commands(seed, tick, player_count, commands);
+        SimCommand commands[REPLAY_PLACEHOLDER_MAX_COMMANDS]{};
+        uint32_t command_count =
+            replay_generate_placeholder_commands(seed, tick, player_count, commands);
         SimCommandBuffer command_buffer{commands, command_count};
         if (!sim_tick(&world, &command_buffer)) {
             std::fprintf(stderr, "record: internal command validation failed at tick %" PRIu64 "\n",
@@ -337,4 +302,3 @@ int main(int argc, char** argv) {
     print_usage();
     return CLI_USAGE_OR_IO;
 }
-

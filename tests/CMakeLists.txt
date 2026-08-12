@@ -54,6 +54,12 @@ target_include_directories(det_tests_fastfp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(det_tests_fastfp PRIVATE eng::math moba_warnings moba_options)
 target_compile_options(det_tests_fastfp PRIVATE /fp:fast)
 
+# M3.0 integration proof links eng_sim directly, so the executable itself demonstrates
+# that the 10,000-tick oracle needs no platform, window, renderer, or Vulkan target.
+add_executable(sim_determinism_tests test_main.cpp sim/sim_determinism_tests.cpp)
+target_include_directories(sim_determinism_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(sim_determinism_tests PRIVATE eng::sim moba_warnings moba_options)
+
 # --- CTest registration: one entry per suite so a red test names the right module.
 # enable_testing() lives at the top level (required for add_test to register).
 add_test(NAME mem         COMMAND engine_tests --suite mem)
@@ -67,6 +73,13 @@ add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
 add_test(NAME det_precise COMMAND det_tests)        # /fp:precise golden hash
 add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (must match)
+add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)
+set_tests_properties(sim_determinism PROPERTIES
+    PASS_REGULAR_EXPRESSION "controlled divergence tick=4321 field=position_x unit=7")
+
+add_test(NAME sim_boundary
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_boundary.cmake")
 
 # --- replay CLI: one fixture records a real file; consumers independently inspect,
 #     verify, and exercise exact public exit classes before cleanup runs.

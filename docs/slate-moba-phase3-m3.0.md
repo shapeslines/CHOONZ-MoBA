@@ -72,7 +72,7 @@ green, so changes to entity storage are immediately measurable against an establ
 | S1 | Scaffold bounded `eng_serialize` plus platform-free `eng_sim` and placeholder world | CMake exposes `eng::serialize` and `eng::sim`; bounded LE I/O is sticky/atomic; `SimWorld` owns fixed-order SoA position/velocity/health/cooldown arrays plus tick and PCG32 state; invalid command buffers do not mutate it | done 2026-08-12 |
 | S2 | Add canonical state hashing and first-field diffing | FNV-1a hashes every live gameplay field and RNG word byte-wise in documented order; changes to each field affect the hash; padding/capacity do not; diagnostics name the first field and unit | done 2026-08-12 |
 | S3 | Add replay codec and platform-file persistence seam | Header and per-tick commands round-trip byte-exactly; malformed/truncated/oversized input is rejected; a focused tool or integration test writes and reads through the platform file API | done 2026-08-12 |
-| S4 | Prove 10,000-tick determinism and exact divergence | Two same-seed/input runs match every tick in Debug and Release; a controlled perturbation at tick N reports N as the first divergence | queued |
+| S4 | Prove 10,000-tick determinism and exact divergence | Two same-seed/input runs match every tick in Debug and Release; a controlled perturbation at tick N reports N as the first divergence | done 2026-08-12 |
 | S5 | Enforce the boundary and close M3.0 | Debug/Release `/WX` and CTest pass; sim source has no float, unordered iteration, wall-clock, platform, or renderer dependency; ROADMAP/JOURNAL/next-session are current | queued |
 
 ## Verification matrix
@@ -99,6 +99,12 @@ separate M3.1 ECS slate that uses this hash stream as its regression oracle.
   final hash `0xb85d4b632571948c`). The CLI error test observed exit `1` for usage/I/O, exit `2` for
   corrupt magic/version/logic/rate, truncation, invalid command/player/unit and trailing bytes, and
   exit `3` for a changed post-tick hash. The in-memory codec re-encoded byte-identically.
+- **S4:** The dedicated platform-free `sim_determinism_tests` target passed Debug and Release with
+  `47,301` checks in each configuration. The independently replayed 10,000-tick hash stream matched
+  the recorded stream at every tick; the pinned final hash is `0xb85d4b632571948c`. A controlled
+  post-tick mutation reported exactly `tick=4321 field=position_x unit=7`. The CTest boundary scan
+  found all seven `engine/sim` source/header files clean and confirmed the direct link seam is
+  `eng_core + eng_math + eng_serialize` only.
 
 ## Residuals
 
