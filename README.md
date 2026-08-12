@@ -3,8 +3,7 @@
 A multiplayer online battle arena built **from scratch in C++**, on a custom
 RTS-class game engine.
 
-> 🚧 **Status:** Early development. **Phases 0–1 complete; Phase 2 implementation
-> complete (interactive resize/minimize/alt-tab gate pending).** Build spine, ADRs,
+> 🚧 **Status:** Early development. **Phases 0–2 complete.** Build spine, ADRs,
 > Win32 window, memory arenas, float/fixed-point
 > math, containers, and a self-registering test harness on CTest + a pre-push gate
 > (determinism golden across `/fp:precise` + `/fp:fast`), plus GitHub Actions CI
@@ -15,7 +14,8 @@ RTS-class game engine.
 > camera/instance buffers, typed resources, deterministic batching, deferred destruction,
 > debug draw/F1 overlay, and an always-built null backend. An in-process
 > readback (`sandbox --screenshot out.bmp`) captures what it rendered, **validation-
-> clean** (verified on an RTX 4070 Ti). **Next: close the owner interaction gate, then Phase 3.**
+> clean** (verified on an RTX 4070 Ti), including an owner-run resize, minimize/restore,
+> alt-tab, and F1-overlay interaction check. **Next: Phase 3 M3.0 determinism harness.**
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).

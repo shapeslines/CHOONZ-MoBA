@@ -21,7 +21,7 @@ related:
 
 # Slate - Phase 3 M3.0 determinism harness
 
-**Status:** queued behind the Phase 2 S6 owner gate and PR #13 landing.
+**Status:** queued behind PR #13 landing. The Phase 2 S6 owner gate passed on 2026-08-12.
 
 ## Goal
 
@@ -34,9 +34,9 @@ green, so changes to entity storage are immediately measurable against an establ
 
 ## Entry gate
 
-- Phase 2 S6 passes with zero Vulkan validation messages.
-- PR #13 is ready and lands on `main`.
-- Create `moba/slate-phase3-determinism` from the updated `main`; do not stack simulation work on
+- [x] Phase 2 S6 passes with zero Vulkan validation messages.
+- [ ] PR #13 lands on `main`.
+- [ ] Create `moba/slate-phase3-determinism` from the updated `main`; do not stack simulation work on
   the renderer branch.
 
 ## Fence

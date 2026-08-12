@@ -2,12 +2,12 @@
 type: record
 title: "SLATE — Phase 2 pickup: M2.3–M2.5 (instanced meshes → seam audit)"
 kind: slate
-status: active
+status: closed
 project: moba
 axis: "renderer bring-up (Phase 2 milestones)"
 opened: 2026-08-11
 updated: 2026-08-12
-closed:
+closed: 2026-08-12
 worktree: "repo root"
 branch: "moba/slate-2026-08-11"
 tags: [slate, orthogonal, planning]
@@ -22,14 +22,14 @@ related:
 > One orthogonal slate = a ranked set of **fence-disjoint** slices for one period/axis.
 > Altitude: charter ⊇ **slate** ⊇ slice ⊇ TaskSpec. One writer per fence; owner gates named, never skipped.
 
-**Opened:** 2026-08-11 · **Status:** active
+**Opened:** 2026-08-11 · **Closed:** 2026-08-12 · **Status:** closed
 **Axis:** renderer bring-up — M2.3 (camera UBO + instanced meshes) → M2.4 (debug-draw + overlay) → M2.5 (seam audit + null backend)
 **Orthogonal to:** Phase 3+ (sim), Phase 4 (assets), netcode; no other session touches this repo.
 
 ## State at refresh
 
-- **Tip / head:** `moba/slate-2026-08-11` (implementation complete; final commit/PR pending)
-- **Open PRs:** none — MOBA-proto is a **single-claimant** repo this period
+- **Tip / head:** `moba/slate-2026-08-11` (implementation and validation complete)
+- **Open PR:** #13 — all slate gates complete; ready for review/merge
 - **In-flight fences:** this root checkout only; the stale external worktree was removed
 - **CI / merge gate:** GitHub Actions Debug×Release `ci` (/WX) + `ctest --output-on-failure --no-tests=error`; local `tools/hooks/ctest-gate.bat` on push
 
@@ -62,20 +62,20 @@ session-fenced worktree so `main` stays green.
 | S3 | M2.3-c: DoD verification + milestone record | Agent | Readback screenshot; `ci` (/WX) and tests green; milestone docs current | done 2026-08-12 |
 | S4 | M2.4: debug-draw + F1 overlay | Agent | World lines/text visible; frame-arena reset tested; validation clean | done 2026-08-12 |
 | S5 | M2.5: typed handles, deferred destroy, null backend | Agent | Vulkan/null build together; null sandbox/tests green; no Vulkan leak above seam | done 2026-08-12 |
-| S6 | Interactive DoD: zero validation errors across real resize / minimize-restore / alt-tab (needs a display) | Owner | Human runs `sandbox.exe`; zero validation messages across all three interactions | blocked |
+| S6 | Interactive DoD: zero validation errors across real resize / minimize-restore / alt-tab and F1 toggle | Owner | Event log captures every transition; validation-enabled run exits cleanly with zero messages | done 2026-08-12 |
 
 ## Concurrency map
 
 - **Immediately, in parallel:** none — one writer, one repo, sequential renderer surface.
 - **Sequenced:** S1 → S2 → S3 (same TU surface, rungs of one milestone) → S4 → S5 (M2.5 folds the provisional M2.2 upload seam) → S6 anytime after S2 (owner).
-- **Owner-gated (await):** S6 (display), plus CI SDK flip and any vault-PM mutation.
+- **Owner-gated (residual):** CI SDK flip and any vault-PM mutation. S6 is complete.
 - **Ordering rule:** Phase 2 rungs are strictly ordered by ROADMAP dependency; do not start S2 until S1's done-when is observably true.
 
 ## Owner gates
 
 | Item | OWNER |
 |------|-------|
-| S6 interactive DoD (resize / minimize / alt-tab on a real display) | Carson |
+| S6 interactive DoD (resize / minimize / alt-tab / F1 on a real display) | Carson — passed 2026-08-12 |
 | Vulkan SDK install in CI → `find_package(Vulkan) REQUIRED` | Carson |
 | Any ADR-level decision (new DECISIONS file) surfaced mid-slate | Carson |
 
@@ -87,18 +87,18 @@ per repo history (PRs #2–#10 pattern); docs updated in the same commit as the 
 
 ## Recommended next
 
-**Rank-1 (owner): S6** — run resize, minimize/restore, and alt-tab against the ready
-sandbox and confirm zero validation messages. Agent implementation work is complete.
+Review and squash-merge PR #13. Then create `moba/slate-phase3-determinism` from updated `main` and
+execute `docs/slate-moba-phase3-m3.0.md`; do not stack Phase 3 implementation on this branch.
 
 ## Non-goals / residual after close
 
 - Phase 3+ milestones (sim, assets, netcode) — later phases, own slates
 - Vulkan SDK in CI (`find_package` → REQUIRED) — deferred, owner-gated
 - `plat_mem_*` split out of the Win32 window TU; clang-cl/UBSan determinism run; Debug-ASan preset; OpenCppCoverage HTML
-- Interactive DoD for M2.0–M2.2 (same owner-display gate, S6 pattern)
 - M4.2+ (own PNG inflate), hot-reload, `.mba` container — Phase 4
 
 ## Revisions
 
 - 2026-08-11 · authored · opencode deepseek-v4-flash session
 - 2026-08-12 · S2–S5 implemented and verified; S6 remains owner-gated
+- 2026-08-12 · S6 passed with explicit resize/minimize/restore/focus/F1 events and zero validation messages; slate closed

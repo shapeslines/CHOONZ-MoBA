@@ -160,6 +160,10 @@ int main(int argc, char** argv) {
     bool quit_requested = false;
     bool overlay_visible = true;
     bool f1_was_down = false;
+    int32_t last_width = desc.width;
+    int32_t last_height = desc.height;
+    bool last_focused = true;
+    bool last_minimized = false;
 
     DrawItem cubes[500]{};
     for (uint32_t z = 0, i = 0; z < 25; ++z) {
@@ -187,6 +191,21 @@ int main(int argc, char** argv) {
         prev = now;
         ++frame;
 
+        if (in.fb_width != last_width || in.fb_height != last_height) {
+            std::printf("sandbox: event resize %dx%d -> %dx%d\n",
+                        last_width, last_height, in.fb_width, in.fb_height);
+            last_width = in.fb_width;
+            last_height = in.fb_height;
+        }
+        if (in.window_focused != last_focused) {
+            std::printf("sandbox: event focus %s\n", in.window_focused ? "gained" : "lost");
+            last_focused = in.window_focused;
+        }
+        if (in.window_minimized != last_minimized) {
+            std::printf("sandbox: event window %s\n", in.window_minimized ? "minimized" : "restored");
+            last_minimized = in.window_minimized;
+        }
+
         since_print += dt;
         if (since_print >= 0.25) {   // ~4 status lines/sec
             std::printf("  frame %ld  dt=%.2fms  size=%dx%d  focus=%d  min=%d  cam=(%.2f, %.2f, %.2f)\n",
@@ -196,7 +215,10 @@ int main(int argc, char** argv) {
         }
 
         if (in.keyboard.down[KEY_ESCAPE]) { std::printf("  Esc -> quit\n"); quit_requested = true; }
-        if (in.keyboard.down[KEY_F1] && !f1_was_down) overlay_visible = !overlay_visible;
+        if (in.keyboard.down[KEY_F1] && !f1_was_down) {
+            overlay_visible = !overlay_visible;
+            std::printf("sandbox: event F1 overlay %s\n", overlay_visible ? "on" : "off");
+        }
         f1_was_down = in.keyboard.down[KEY_F1];
         if (max_frames >= 0 && frame >= max_frames) {
             std::printf("  reached %d frames -> quit\n", max_frames);

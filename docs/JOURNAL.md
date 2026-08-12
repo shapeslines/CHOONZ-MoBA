@@ -11,11 +11,11 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 ## Session 06 — 2026-08-12 — M2.3–M2.5: instanced field, debug workhorse, real renderer seam
 
 **Scope:** finish the Phase 2 pickup slate from camera UBO through the renderer seam audit.
-**Outcome:** agent-owned Phase 2 implementation is complete. A 20×25 programmatic cube field renders
+**Outcome:** Phase 2 is complete. A 20×25 programmatic cube field renders
 depth-correctly as one scene batch/draw; immediate world lines and 5×7 stroke text render last; the
 sandbox F1 overlay reports FPS, frame time, arena bytes, live device allocations, and draw calls; and
-Vulkan/null backends implement the same typed-handle frame contract. The real interaction gate
-(resize, minimize/restore, alt-tab) remains owner-only.
+Vulkan/null backends implement the same typed-handle frame contract. The owner interaction gate
+passed with explicit resize, minimize/restore, focus loss/return, and F1 overlay transitions.
 
 ### What landed
 
@@ -41,12 +41,15 @@ Vulkan/null backends implement the same typed-handle frame contract. The real in
 - Validation-layer orbit/readback run: zero warnings/errors; screenshot shows the cube field, debug
   geometry, and overlay. Stats: 500 objects, one batch, one scene draw, three total draws, 12 live
   dedicated allocations.
+- Owner S6 run (76.00s): event log captured resize, minimize/restore, alt-tab focus loss/return, and
+  F1 overlay off/on; validation enabled on the RTX 4070 Ti; zero validation warnings/errors; clean
+  exit with the same 500-object/one-batch/three-draw/12-allocation stats.
 - Seam grep: no Vulkan identifiers/includes in the sandbox, tests, or public renderer headers.
 
 ### Next
 
-Owner runs S6 interactions. If clean, squash the slate PR and start a fresh Phase 3 determinism/ECS
-slate; Vulkan-in-hosted-CI remains separately owner-gated.
+Review and squash-merge PR #13, then create the queued M3.0 determinism branch from updated `main`.
+Vulkan-in-hosted-CI remains separately owner-gated.
 
 ---
 

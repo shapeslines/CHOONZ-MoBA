@@ -313,11 +313,14 @@ Win32/Vulkan-free or headless testing breaks. **Exercises:** Tooling, Build (the
 
 # PHASE 2 — Vulkan Bring-up  🔴 (the first long pole)
 
+**Status:** complete 2026-08-12. The scripted and owner-interactive Vulkan validation gates passed
+with zero warnings/errors; Phase 3 is next.
+
 **Goal:** the milestone ladder that takes raw Vulkan from nothing to "hundreds of instanced units on
 screen." Each rung is a runnable program and a learning checkpoint. The renderer is behind the thin
 seam (`renderer.h`, opaque handles, `DrawItem[]`) from the very first rung.
 
-> **Now:** M2.0 → M2.5 strictly in order. **Next:** Phase 3. **Later:** Phase 4.
+> **Complete:** M2.0 → M2.5. **Now:** Phase 3. **Later:** Phase 4.
 > 🔴 **This whole phase is the #1 technical-risk cluster.** Synchronization correctness and the
 > custom allocator are the sub-poles. Keep **validation + synchronization-validation on, always, in
 > dev.**
@@ -403,7 +406,7 @@ per the design; descriptor-pool sizing. **Exercises:** Renderer (the core perf m
 ---
 
 ### M2.4 — Debug-draw + minimal overlay  · M
-**Status:** implemented 2026-08-12; scripted visual DoD complete, F1 interaction owner-verifiable.
+**Status:** complete 2026-08-12; scripted visual DoD and owner F1 interaction verified.
 **Goal:** the daily debugging workhorse, rendered last in the same pass.
 **Deliverables:** immediate-mode `dbg_line/sphere/aabb/text_2d` queued into a frame arena and drained by
 a flat-color `debug_line` pipeline + a `dbg_text_2d` path (placeholder font ok); F1 overlay showing
