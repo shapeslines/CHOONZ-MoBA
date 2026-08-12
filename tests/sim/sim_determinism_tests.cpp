@@ -16,7 +16,7 @@ static const size_t DETERMINISM_REPLAY_CAPACITY =
     (REPLAY_TICK_BASE_ENCODED_SIZE +
      REPLAY_PLACEHOLDER_MAX_COMMANDS * REPLAY_COMMAND_ENCODED_SIZE);
 static uint8_t g_determinism_replay[DETERMINISM_REPLAY_CAPACITY];
-static const size_t DETERMINISM_WORLD_CAPACITY = 8192u;
+static const size_t DETERMINISM_WORLD_CAPACITY = 2u * 1024u * 1024u;
 alignas(16) static uint8_t g_record_world_storage[DETERMINISM_WORLD_CAPACITY];
 alignas(16) static uint8_t g_replay_world_storage[DETERMINISM_WORLD_CAPACITY];
 alignas(16) static uint8_t g_expected_world_storage[DETERMINISM_WORLD_CAPACITY];
@@ -27,7 +27,7 @@ static_assert(SIM_LOGIC_HASH == 0x7902599e173f87a6ULL,
 static bool init_determinism_world(SimWorld* world, Arena* arena, uint8_t* storage,
                                    uint64_t seed) {
     arena_init_fixed(arena, storage, DETERMINISM_WORLD_CAPACITY);
-    return sim_init(world, arena, seed, SimWorldConfig{SIM_MAX_UNITS, SIM_MAX_UNITS});
+    return sim_init(world, arena, seed, sim_world_config_default());
 }
 
 static size_t record_determinism_replay(uint64_t* out_final_hash) {
@@ -64,7 +64,7 @@ TEST(sim_determinism, recorded_hash_stream_matches_independent_replay_for_10000_
     uint64_t recorded_final_hash = 0;
     size_t size = record_determinism_replay(&recorded_final_hash);
     CHECK(size == 134812);
-    CHECK(recorded_final_hash == 0xb85d4b632571948cULL);
+    CHECK(recorded_final_hash == 0x981212877a575730ULL); // pins M3.1 canonical order + behavior
     if (size == 0) return;
 
     ByteReader reader;
@@ -97,7 +97,7 @@ TEST(sim_determinism, recorded_hash_stream_matches_independent_replay_for_10000_
     CHECK(replayed_final_hash == recorded_final_hash);
 }
 
-TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_unit_7) {
+TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_entity_7) {
     size_t size = record_determinism_replay(nullptr);
     CHECK(size > 0);
     if (size == 0) return;
@@ -140,12 +140,12 @@ TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_unit_7) {
         }
     }
 
-    std::printf("controlled divergence tick=%llu field=%s unit=%u\n",
+    std::printf("controlled divergence tick=%llu field=%s entity=%u\n",
                 static_cast<unsigned long long>(first_divergent_tick),
-                sim_state_field_name(first_diff.field), first_diff.unit_index);
+                sim_state_field_name(first_diff.field), first_diff.index);
     CHECK(first_divergent_tick == MUTATION_TICK);
     CHECK(first_diff.field == SIM_STATE_FIELD_POSITION_X);
     CHECK(std::strcmp(sim_state_field_name(first_diff.field), "position_x") == 0);
-    CHECK(first_diff.unit_index == 7);
+    CHECK(first_diff.index == 7u);
     CHECK(first_diff.expected_value != first_diff.actual_value);
 }

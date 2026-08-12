@@ -62,7 +62,7 @@ component pools while preserving the established replay/hash stream as the regre
 | S2 | Add generic sparse/dense membership core | add/remove/has/dense lookup stay O(1); swap-remove repairs sparse and back-reference maps under adversarial sequences | done 2026-08-12 |
 | S3 | Add Transform, Velocity, and Health SoA pools | all component data is arena-backed and indexed through validated `EntityId`; capacity and duplicate/missing operations are covered | done 2026-08-12 |
 | S4 | Integrate deferred destruction into `SimWorld` | queued destroys commit once at the tick boundary, remove all components, invalidate stale IDs, and cannot partially mutate on failure | done 2026-08-12 |
-| S5 | Migrate canonical hash/diff and replay oracle | all authoritative entity/pool fields have an explicit LE order; logic hash is deliberately bumped; run-twice and exact-divergence tests stay green | queued |
+| S5 | Migrate canonical hash/diff and replay oracle | all authoritative entity/pool fields have an explicit LE order; logic hash is deliberately bumped; run-twice and exact-divergence tests stay green | done 2026-08-12 |
 | S6 | Close M3.1 | full `/WX` Debug/Release CTest and boundary gates pass; docs are current; M3.2 gets a separate slate | queued |
 
 ## Exit gate
@@ -109,3 +109,12 @@ and Release. M3.2 scheduling remains a separate decision and implementation slat
   recycling. A rejected tick preserves its pending queue byte-for-byte, while componentless
   unmapped live entities also destroy cleanly. Debug/Release affected suites, replay fixtures,
   10,000-tick oracle, and boundary scan remain green under the `ci` preset.
+- **S5:** Replaced the transitional unit projection with canonical FNV-1a/64 encoding over explicit
+  little-endian config, RNG, entity-manager scalars, generations/liveness, free-stack order, all
+  64 mappings, pending order, and typed-pool membership/values in ascending entity-index order.
+  `sim_diff_state` mirrors the same order and index domains. Tests prove pointer, padding-by-
+  construction, unused-capacity, allocator, and repaired sparse/dense order exclusion; lifecycle,
+  mapping, queue, membership, facing, health maximum, and every other authoritative value affect
+  the stream. Replay v1 rejects the exact M3.0 logic hash. Debug and Release independently produce
+  the pinned 10,000-tick M3.1 golden `0x981212877a575730`, with first controlled divergence exactly
+  `tick=4321 field=position_x entity=7`; CLI record/inspect/verify and error classes remain green.

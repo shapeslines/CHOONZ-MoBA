@@ -83,7 +83,7 @@ add_test(NAME det_precise COMMAND det_tests)        # /fp:precise golden hash
 add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (must match)
 add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)
 set_tests_properties(sim_determinism PROPERTIES
-    PASS_REGULAR_EXPRESSION "controlled divergence tick=4321 field=position_x unit=7")
+    PASS_REGULAR_EXPRESSION "controlled divergence tick=4321 field=position_x entity=7")
 
 add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
