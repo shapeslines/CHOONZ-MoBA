@@ -9,7 +9,7 @@ static uint16_t read_u16le(const uint8_t* p) {
 }
 
 bool tga_decode(const void* bytes, size_t size, Allocator alloc, TgaImage* out) {
-    if (!bytes || !out || size < 18) return false;
+    if (!bytes || !out || !alloc.fn || size < 18) return false;
     const uint8_t* p = (const uint8_t*)bytes;
 
     const uint8_t  id_length  = p[0];
