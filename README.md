@@ -47,8 +47,11 @@ RTS-class game engine.
   Studio does not bundle it in every install, so install it explicitly:
   `winget install Ninja-build.Ninja`.
 - The **LunarG Vulkan SDK** (sets `VULKAN_SDK`) — needed for the real renderer and
-  the shader build (`glslc`). Without it the build still works but produces the
-  **null render backend** (blank window; this is what CI builds for now).
+  the shader build (`glslc`). **Pinned at 1.4.357.0** for this project
+  (`winget install KhronosGroup.VulkanSDK`); the code gate is Vulkan API 1.3
+  (`dynamicRendering` + `synchronization2`, ADR-0012). Without it the build still
+  works but produces the **null render backend** (blank window; CI installs the SDK
+  and builds the real backend).
 
 **Build** — `cl`, `cmake`, and `ninja` must be on `PATH`, so build from a *Developer*
 shell (or `call vcvars64.bat` first):

@@ -19,6 +19,14 @@
       "inherits": "dev",
       "binaryDir": "${sourceDir}/build-ci",
       "cacheVariables": { "MOBA_WERROR": "ON" }
+    },
+    {
+      "name": "debug-asan",
+      "displayName": "Debug — AddressSanitizer (MSVC)",
+      "description": "Debug with /fsanitize=address; activates the arena poison/unpoison hooks in arena.cpp (G10). Run the full ctest suite under this preset to prove memory safety.",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build-asan",
+      "cacheVariables": { "MOBA_WERROR": "OFF", "MOBA_ASAN": "ON" }
     }
   ],
   "buildPresets": [
