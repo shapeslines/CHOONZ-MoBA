@@ -216,7 +216,23 @@ In progress. This section must account for every source diff before ready state.
   Debug and `/WX` Debug/Release CTest pass 2/2 in each configuration.
 - Full dev Debug: all targets build and CTest remains 39/39 with determinism, replay, boundaries,
   fresh-walk contracts, and shader declarations unchanged.
-- S6 disposition: PASS pending checkpoint publication.
+- Published checkpoint: `4ef49f3`.
+- S6 disposition: PASS.
+
+### S7 - Provenance and exact-head acceptance
+
+- `/WX` build matrix: Debug, RelWithDebInfo, and Release pass.
+- Configuration matrix: all 39 CTest entries pass in Debug, RelWithDebInfo, and Release.
+- Debug-ASan repair: the first 38/39 run exposed exit `0xC0000135` for the visualizer child because
+  that executable alone did not stage the MSVC ASan runtime. Applying the existing
+  `moba_stage_asan_runtime()` helper to the target preserves production behavior and makes the full
+  Debug-ASan suite pass 39/39.
+- clang-cl/UBSan: capability tripwire and all six structural/determinism entries pass.
+- Direct determinism: 10,000 ticks retain final `0x637628abff59c823`, stream
+  `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`; the controlled mutation first diverges at
+  tick 4321 on `position_x`, entity 7 (178,690 checks).
+- S7 disposition: in progress pending fresh-walk, Vulkan, full hunk provenance, independent reviews,
+  and exact-head GitHub checks.
 
 ## NEXT
 

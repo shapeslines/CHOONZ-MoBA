@@ -125,7 +125,7 @@ Goal: reconcile PRs #44/#45.
 Done means: valid draws are unchanged; first/last/full/overflow-adjacent and corrupt-state cases fail
 without item reads or count mutation.
 
-Status: complete locally. Debug-line and AABB capacity checks now use checked subtraction, and sphere
+Status: complete and published at `4ef49f3`. Debug-line and AABB capacity checks now use checked subtraction, and sphere
 segment multiplication is guarded before evaluation. Exact first/last/full and forged
 overflow-adjacent states are covered without count or vertex mutation. The null renderer rejects
 over-capacity and corrupt draw counts before touching a deliberately unreadable item pointer, while
@@ -140,7 +140,12 @@ Goal: account for every source hunk and prove the full permanent regression batt
 Done means: retained/repaired/superseded map is complete, all local gates pass, two fresh reviews pass,
 and exact-head CI/CodeQL are green before ready state.
 
-Status: pending.
+Status: in progress. The `/WX` Debug/RelWithDebInfo/Release builds and all 39 CTest entries in each
+configuration are green. Debug-ASan initially exposed that the visualizer negative fixture could not
+start because its executable directory lacked the repository's app-local MSVC ASan runtime; the
+shared staging helper is now applied there and the complete Debug-ASan suite passes 39/39. The
+clang-cl/UBSan gate passes 6/6, and the unchanged direct oracle plus controlled-divergence proof pass.
+Fresh-walk, final Vulkan evidence, provenance reconciliation, reviews, and exact-head checks remain.
 
 ### S8 — Owner-gated landing and retirement
 
