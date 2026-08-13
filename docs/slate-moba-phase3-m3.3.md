@@ -7,8 +7,8 @@ project: moba
 axis: "simulation presentation boundary"
 queued: 2026-08-12
 updated: 2026-08-13
-worktree: "gap worktree"
-branch: "moba/gap-close-w6"
+worktree: "build/m33-acceptance"
+branch: "codex/m3.3-acceptance-repair"
 tags: [slate, simulation, platform, presentation, determinism]
 related:
   - "docs/ROADMAP.md M3.3"
@@ -18,9 +18,9 @@ related:
 
 # Slate - Phase 3 M3.3 fixed tick and presentation boundary
 
-**Status:** active acceptance repair. PRs #21 and #22 are merged; PR #23 records the
-input/backpressure decision and ownership amendments only. Runtime M3.3 implementation
-remains in PR #24 and is not complete until its acceptance slate closes.
+**Status:** active acceptance repair. PRs #21–#24 merged in order, but #23/#24 were
+externally merged before acceptance corrections landed. This non-rewriting corrective
+branch keeps M3.3 open until cadence/presentation contracts and final evidence are green.
 
 ## Goal
 
@@ -60,12 +60,12 @@ presentation state or timing to feed back into `eng_sim`.
 
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
-| S0 | Land and rebaseline | branch starts at merged PR #17 and the untouched M3.2 oracle is recorded | queued |
-| S1 | Snapshot storage | arena-backed fixed-only prev/curr snapshots size and initialize transactionally | queued |
-| S2 | Snapshot extraction | ascending entity extraction produces stable IDs and exact fixed fields without mutating world | queued |
-| S3 | Platform accumulator | variable frame deltas call exactly the expected whole 30 Hz ticks under the catch-up clamp | in progress — window-free helper and focused tests green at `f46d344`; sandbox migration remains |
-| S4 | Present glue | interpolation and the single fixed→float conversion build renderer inputs without a sim dependency in render | queued |
-| S5 | Runtime integration | normal, high, low, and minimized render rates preserve one sim hash stream and smooth snapshots | queued |
+| S0 | Land and rebaseline | branch starts at merged PR #17 and the untouched M3.2 oracle is recorded | complete — oracle `0x637628abff59c823` retained |
+| S1 | Snapshot storage | arena-backed fixed-only prev/curr snapshots size and initialize transactionally | complete — under-budget state/arena atomicity covered |
+| S2 | Snapshot extraction | ascending entity extraction produces stable IDs and exact fixed fields without mutating world | complete — const view, 64 stable slots, actual live count, hash neutrality covered |
+| S3 | Platform accumulator | variable frame deltas call exactly the expected whole 30 Hz ticks under the catch-up clamp | complete — window-free helper drives sandbox; consume follows successful tick/capture |
+| S4 | Present glue | interpolation and the single fixed→float conversion build renderer inputs without a sim dependency in render | complete — previous→current and EntityId-change cases covered |
+| S5 | Runtime integration | normal, high, low, and minimized render rates preserve one sim hash stream and smooth snapshots | in progress — headless cadence/hash tests green; 90-frame hardware run pending |
 | S6 | Close M3.3 | full matrix, tests, boundary gates, owner interaction check if needed, docs, acceptance, and GitHub gates are green | queued |
 
 ## Exit gate

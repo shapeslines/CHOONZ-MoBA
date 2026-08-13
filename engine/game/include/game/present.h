@@ -1,20 +1,10 @@
 #pragma once
-// The SIM/PRESENTATION snapshot boundary (M3.3; ARCHITECTURE §2.1) — owned by the
-// game/present glue (G37). The rules, in one header:
-//
-//  - RenderSnapshot is the ONLY thing that crosses sim -> presentation: fixed-point
-//    presentation fields + stable identities, extracted by snapshot_extract(), which
-//    never mutates SimWorld (const) and never feeds anything back.
-//  - present_advance() owns the fixed-tick accumulator (wall-clock, clamped by
-//    SIM_MAX_CATCHUP_S) and the double-buffered prev/curr snapshots. sim_tick stays
-//    wall-clock-free; grouping ticks differently (render rate) never changes the
-//    sim's hash stream — only WHEN sim_tick is called changes.
-//  - present_build_draw_items() is the single fixed->float conversion and
-//    interpolation owner (ARCHITECTURE §2.1). The renderer receives only DrawItem[]
-//    plus FrameView and never sees SimWorld.
-//
-// This module never writes to SimWorld except through sim_tick (via present_advance).
 
+// The one-way SIM/PRESENTATION boundary (M3.3). eng_game owns fixed-only snapshot
+// extraction, previous/current storage, interpolation, and the sole fixed->float
+// conversion. Platform owns wall-clock cadence; the renderer never sees SimWorld.
+
+#include <stddef.h>
 #include <stdint.h>
 
 #include "core/mem.h"
@@ -23,40 +13,42 @@
 #include "sim/sim.h"
 
 typedef struct RenderSnapshotUnit {
-    EntityId entity;             // stable identity; HANDLE_NULL marks a dead slot
-    mm::fix  x;                  // world units, fixed-point (Q16.16)
+    EntityId entity; // HANDLE_NULL marks an empty unit slot
+    mm::fix  x;
     mm::fix  y;
-    mm::fix  facing;             // radians, fixed-point
+    mm::fix  facing;
 } RenderSnapshotUnit;
 
 typedef struct RenderSnapshot {
-    uint32_t tick;                          // sim tick this snapshot was extracted at
-    uint32_t count;                         // entries valid (up to the last live slot + 1)
-    RenderSnapshotUnit units[SIM_MAX_UNITS];  // SLOT-indexed: interpolation pairs
-                                              // prev.units[i] with curr.units[i]
+    uint64_t tick;
+    uint32_t live_count; // actual live mapped units, not the last occupied slot + 1
+    RenderSnapshotUnit* units; // always SIM_MAX_UNITS entries, indexed by replay unit slot
 } RenderSnapshot;
 
 typedef struct PresentState {
-    double accumulator;                     // seconds of pending sim time (presentation wall clock)
-    RenderSnapshot prev, curr;              // prev = tick-1, curr = latest tick
-    double alpha;                           // [0,1) interpolation fraction for the current frame
+    RenderSnapshot previous;
+    RenderSnapshot current;
 } PresentState;
 
-void present_init(PresentState* p);
+// Upper bound independent of arena base alignment. Storage is two fixed 64-slot
+// arrays; no heap allocation or allocator state is retained.
+size_t present_memory_required(void);
 
-// Extracts the current sim state into a fixed-only snapshot. Non-mutating: the world
-// hash is untouched. Returns the number of valid entries written (<= SIM_MAX_UNITS).
-uint32_t snapshot_extract(const SimWorld* world, RenderSnapshot* out);
+// Transactional: failure leaves both state and arena offset unchanged. Both snapshots
+// start at initial_world, so the pre-first-tick frame never interpolates from zero.
+bool present_init(PresentState* state, Arena* arena, const SimWorld* initial_world);
 
-// Accumulates frame_delta seconds (clamped to SIM_MAX_CATCHUP_S), runs the whole
-// ticks owed (sim_tick + double-buffered snapshot extraction), and computes alpha.
-// Returns the number of ticks run. Commands are passed through to sim_tick verbatim
-// (atomic-reject semantics per ADR-0014: a rejected buffer applies nothing).
-uint32_t present_advance(PresentState* p, double frame_delta, SimWorld* world,
-                         const SimCommandBuffer* commands);
+// Writes all 64 stable unit slots and the actual live count. Failure is explicit and
+// leaves out unchanged. The const Transform view keeps extraction read-only by type.
+bool snapshot_extract(const SimWorld* world, RenderSnapshot* out);
 
-// Interpolates prev -> curr at p->alpha and builds DrawItems. THE single fixed->float
-// conversion point. Returns items written (<= out_capacity).
-uint32_t present_build_draw_items(const PresentState* p, const MeshHandle mesh,
-                                  const MaterialHandle material, Arena* frame_arena,
+// Captures a successfully completed tick. The old current snapshot becomes previous;
+// current is extracted into the other arena-backed buffer.
+bool present_capture(PresentState* state, const SimWorld* world);
+
+// Builds renderer inputs at platform-computed alpha. Same-identity slots interpolate
+// previous -> current; a changed EntityId uses current directly to avoid generation
+// blending. Returns items written (<= out_capacity).
+uint32_t present_build_draw_items(const PresentState* state, double alpha,
+                                  MeshHandle mesh, MaterialHandle material,
                                   DrawItem* out_items, uint32_t out_capacity);

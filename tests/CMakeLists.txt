@@ -35,7 +35,7 @@ add_executable(engine_tests
     sim/schedule_tests.cpp
     sim/sim_tests.cpp
     sim/systems_tests.cpp
-    present/present_tests.cpp          # M3.3: snapshots, accumulator, fixed->float glue
+    present/present_tests.cpp          # M3.3: cadence integration + snapshot/present glue
     render/render_tests.cpp
     tga/tga_tests.cpp
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
@@ -84,7 +84,7 @@ add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
 add_test(NAME sim_systems COMMAND engine_tests --suite sim_systems)
-add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 snapshots/accumulator/glue
+add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 cadence/snapshot/glue
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
@@ -97,6 +97,10 @@ set_tests_properties(sim_determinism PROPERTIES
 add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_boundary.cmake")
+
+add_test(NAME present_boundary
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/present/check_present_boundary.cmake")
 
 # --- replay CLI: one fixture records a real file; consumers independently inspect,
 #     verify, and exercise exact public exit classes before cleanup runs.

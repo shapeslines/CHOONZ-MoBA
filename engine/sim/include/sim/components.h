@@ -12,6 +12,12 @@ typedef struct TransformView {
     mm::fix* facing;
 } TransformView;
 
+typedef struct ConstTransformView {
+    const mm::fix* position_x;
+    const mm::fix* position_y;
+    const mm::fix* facing;
+} ConstTransformView;
+
 typedef struct TransformPool {
     ComponentPool membership;
     mm::fix* position_x;
@@ -27,6 +33,8 @@ bool transform_pool_add(TransformPool* pool, EntityId entity,
 bool transform_pool_remove(TransformPool* pool, EntityId entity);
 bool transform_pool_has(const TransformPool* pool, EntityId entity);
 bool transform_pool_get(TransformPool* pool, EntityId entity, TransformView* view);
+bool transform_pool_get_const(const TransformPool* pool, EntityId entity,
+                              ConstTransformView* view);
 
 typedef struct VelocityView {
     mm::fix* velocity_x;
