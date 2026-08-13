@@ -71,8 +71,8 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
 | S0 | Land and rebaseline | branch starts at merged PR #28 and untouched M3.3 matrix/oracle/boundaries are recorded | complete — exact `11662ae`; 28/28 in Debug, RelWithDebInfo, Release |
-| S1 | Central compiler policy | one CMake-owned deterministic policy applies to every `eng_sim` source in every configuration, with a test that detects drift | complete — `moba_sim_determinism`; 8 sources x 3 configs audited |
-| S2 | Binary-path parity | test and runnable game paths consume the same sim library and replay the same commands to the exact M3.3 hash stream | queued |
+| S1 | Central compiler policy | one CMake-owned deterministic policy applies to every `eng_sim` source in every configuration, with a test that detects drift | complete — `moba_sim_determinism`; all 9 current sources x 3 configs audited |
+| S2 | Binary-path parity | test and runnable game paths consume the same sim library and replay the same commands to the exact M3.3 hash stream | complete — probe + Vulkan/null sandboxes match the pinned stream digest |
 | S3 | Strong isolation lint | source, include, link, compile-command, and accidental-source-recompile checks fail on forbidden sim/platform/render/presentation coupling | queued |
 | S4 | Second-toolchain stretch | clang-cl config builds the oracle and UBSan runs where supported, with exact capability/evidence recorded | queued |
 | S5 | Close M3.4 | `/WX` matrix, ASan, parity, boundary scans, fresh walk, docs, independent acceptance, and exact-head GitHub gates are green | queued |
@@ -108,6 +108,22 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
   RelWithDebInfo, and Release. The complete Debug build then passed 30/30 CTest entries.
 - The 10,000-tick oracle remains `0x637628abff59c823`; `SIM_LOGIC_HASH` remains
   `0xab96814425ba80a4`. No authoritative simulation source or replay layout changed.
+
+## S2 evidence
+
+- `sim_oracle_run` is a platform-free `eng_sim` function that takes caller-owned fixed storage and
+  runs the unchanged seed-1, two-player, 10,000-tick placeholder command stream. It observed 923
+  commands, final state hash `0x637628abff59c823`, and little-endian hash-stream digest
+  `0x6f381609f7e59f0c` under unchanged logic hash `0xab96814425ba80a4`.
+- The direct `sim_oracle_probe`, the Vulkan-linked `sandbox`, and `sandbox_null` all call that same
+  archive function through `--sim-self-check`, before window or renderer initialization. Their exact
+  outputs matched in Debug, RelWithDebInfo, and Release.
+- `sim_binary_parity` pins tick count, command count, final hash, stream digest, and logic hash while
+  comparing all three outputs byte-for-byte. The generated compiler-policy check expanded
+  automatically from 8 to all 9 current sim sources and still proves only `eng_sim` compiles them.
+- The five-test determinism/parity/policy/boundary set passed in all three `/WX` configurations; the
+  complete Debug build passed 31/31 CTest entries. No replay bytes, schedule, command, or state hash
+  ordering changed.
 
 ## Exit gate
 

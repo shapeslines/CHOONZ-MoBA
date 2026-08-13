@@ -69,6 +69,9 @@ add_executable(sim_determinism_tests test_main.cpp sim/sim_determinism_tests.cpp
 target_include_directories(sim_determinism_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sim_determinism_tests PRIVATE eng::sim moba_warnings moba_options)
 
+add_executable(sim_oracle_probe sim/sim_oracle_probe.cpp)
+target_link_libraries(sim_oracle_probe PRIVATE eng::sim moba_warnings moba_options)
+
 # App-local MSVC ASan runtime for every test executable in this output directory.
 moba_stage_asan_runtime()
 
@@ -96,6 +99,13 @@ add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (m
 add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)
 set_tests_properties(sim_determinism PROPERTIES
     PASS_REGULAR_EXPRESSION "controlled divergence tick=4321 field=position_x entity=7")
+
+add_test(NAME sim_binary_parity
+    COMMAND ${CMAKE_COMMAND}
+            -DTEST_EXE=$<TARGET_FILE:sim_oracle_probe>
+            -DGAME_EXE=$<TARGET_FILE:sandbox>
+            -DGAME_NULL_EXE=$<TARGET_FILE:sandbox_null>
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_binary_parity.cmake")
 
 add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}

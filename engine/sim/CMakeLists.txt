@@ -5,6 +5,7 @@ add_library(eng_sim STATIC
     src/components.cpp
     src/entity.cpp
     src/events.cpp
+    src/oracle.cpp
     src/replay.cpp
     src/sim.cpp
     src/sim_hash.cpp

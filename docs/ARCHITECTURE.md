@@ -77,8 +77,10 @@ links sim, and `eng_game` never calls `sim_tick`.
 links `eng_platform` because that executable owns the OS-page-arena and platform-file suites, so it is
 not the proof of simulation isolation. The stronger M3.0 proof is the dedicated
 `sim_determinism_tests` executable, which links `eng_sim` directly, plus the `sim_boundary` CTest that
-checks both source imports and `engine/sim/CMakeLists.txt`. `eng_sim` itself resolves only to
-`eng_core`, `eng_math`, and `eng_serialize`.
+checks both source imports and `engine/sim/CMakeLists.txt`. M3.4 also links a tiny
+`sim_oracle_probe` and both runnable sandbox variants to that same `eng_sim` archive. Their headless
+self-checks must report the identical 10,000-tick hash-stream digest before any window or renderer
+initialization. `eng_sim` itself resolves only to `eng_core`, `eng_math`, and `eng_serialize`.
 
 ### 1.4 Module responsibilities
 
@@ -1001,7 +1003,8 @@ the direct CMake link seam, while `present_boundary` rejects presentation-owned 
 heap allocation, renderer→sim coupling, and platform→game/sim coupling. `sim_determinism` replays
 10,000 ticks in Debug, RelWithDebInfo, Release, and Debug-ASan. M3.4's named
 `moba_sim_determinism` policy now pins every generated sim compile command to `/fp:precise` from one
-owner. **Deferred within M3.4:** game/test binary parity and stronger generated-build isolation.
+owner. The `sim_binary_parity` gate now compares the direct test probe, Vulkan sandbox, and null
+sandbox through the same canonical command stream. **Deferred within M3.4:** stronger generated-build isolation.
 **Later deferrals:** archetypes, multithreaded systems/job system
 (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
 first), rollback machinery, generic query DSL, reflection/serialization codegen, and
@@ -1043,6 +1046,12 @@ record|inspect|verify` exposes the same
 codec through atomic platform-file persistence; malformed or incompatible files are classified
 separately from deterministic divergence.
 
+M3.4 adds `sim_oracle_run`, a platform-free, caller-storage-backed probe over the unchanged
+seed-1/two-player placeholder stream. It folds all 10,000 post-tick hashes into the pinned digest
+`0x6f381609f7e59f0c`. The direct test probe and both runnable sandbox binaries call that function from
+the same `eng_sim` archive and must emit an identical line containing 923 commands, final state hash
+`0x637628abff59c823`, the stream digest, and logic hash `0xab96814425ba80a4`.
+
 ### 10.2 Unit test harness
 
 A small `tests/test.h` harness (doctest-shaped, **no exceptions, no STL**, self-registering
@@ -1054,7 +1063,10 @@ add_executable(engine_tests test_main.cpp ...)
 target_link_libraries(engine_tests PRIVATE engine_core_group)
 add_executable(sim_determinism_tests test_main.cpp sim/sim_determinism_tests.cpp)
 target_link_libraries(sim_determinism_tests PRIVATE eng::sim)
+add_executable(sim_oracle_probe sim/sim_oracle_probe.cpp)
+target_link_libraries(sim_oracle_probe PRIVATE eng::sim)
 add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)
+add_test(NAME sim_binary_parity COMMAND cmake -P tests/sim/check_sim_binary_parity.cmake)
 add_test(NAME sim_boundary COMMAND cmake -P tests/sim/check_sim_boundary.cmake)
 ```
 
