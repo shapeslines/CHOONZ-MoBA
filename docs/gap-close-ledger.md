@@ -35,6 +35,19 @@ is the execution ledger.
 | Wave | Branch | PR | Merged as | Notes |
 |---|---|---|---|---|
 | — | `moba/gap-close` | — | — | worktree ledger base |
+| 1 | `moba/gap-close-w1` | #18 | merged 2026-08-13 | doc truth, LICENSE, templates, retrospectives |
+| 2a | `moba/gap-close-w2a` | #19 | merged 2026-08-13 | ASan preset, /guard:cf, SDK pin |
+| 2b | `moba/gap-close-w2b` | #20 | open (checks re-run after SDK-path fix) | Vulkan in CI, RelWithDebInfo, perf, fresh-walk |
+| 3 | `moba/gap-close-w3` | #21 | open (checks re-run) | determinism guards, ADR-0013, window-free TUs |
+| 4 | `moba/gap-close-w4` | #22 | open (checks re-run) | renderer robustness |
+| 5 | `moba/gap-close-w5` | #23 | open (checks re-run) | ADR-0014, ownership amendments |
+| 6 | `moba/gap-close-w6` | #24 | open (checks re-run) | M3.3 complete (eng_game present glue) |
+
+**CI incident (logged):** the first w2b CI run failed all jobs — the workflow probed
+`C:\Program Files\VulkanSDK\<ver>` but the winget package installs to
+`C:\VulkanSDK\<ver>`. Fixed by probing the winget default root first (ci.yml), then
+cherry-picked onto every stacked branch (w2b-w6 each carry their own ci.yml). Ledger
+lesson: hardcoded install-path assumptions are a CI-failure class; probe, don't assume.
 
 ## Gap status
 
