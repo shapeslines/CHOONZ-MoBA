@@ -13,6 +13,7 @@
 #include "render/renderer.h"
 #include "math/math.h"
 #include "tga_direct.h"
+#include <windows.h>       // SetProcessDpiAwarenessContext (G28)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -74,6 +75,13 @@ static bool write_bmp24(const char* path, const uint8_t* rgba8, int w, int h) {
 }
 
 int main(int argc, char** argv) {
+    // G28: DPI awareness, before any window exists. Without it Windows scales the
+    // window bitmap and overlay text + input coordinates are wrong on scaled
+    // displays. SYSTEM_AWARE: one scale, physical pixels everywhere. PER_MONITOR_V2
+    // (per-monitor rescale) additionally needs WM_DPICHANGED handling in the
+    // platform — a documented follow-up, not silently assumed.
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+
     int max_frames = -1;
     const char* screenshot_path = nullptr;
     bool orbit = false;
