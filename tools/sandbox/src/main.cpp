@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 
     PlatformWindowDesc desc;
-    desc.title = "MOBA - sandbox (Phase 4 M4.0 assets; F1 overlay)";
+    desc.title = "MOBA - sandbox (Phase 4 M4.1 cooker; F1 overlay)";
     desc.width = 1280; desc.height = 720;
     desc.resizable = true; desc.fullscreen = false;
 
@@ -210,8 +210,9 @@ int main(int argc, char** argv) {
         mesh = renderer_create_mesh(rnd, &mesh_desc);
     }
 
-    // M4.0 loose TGA -> AssetRegistry -> renderer upload callback. The registry owns
-    // the texture handle and level lifetime; the sandbox owns only its material.
+    // S4 procedural bridge: the runtime registry is already baked-only, while S5
+    // wires the generated catalog/content target into this executable. The registry
+    // still owns the texture handle and level lifetime; no source-file fallback exists.
     if (rnd) {
         AssetRegistryConfig asset_config = asset_registry_config_default(MOBA_ASSET_DIR);
         asset_config.capacity = 64u;
@@ -230,8 +231,14 @@ int main(int argc, char** argv) {
             asset_registry_init(&asset_registry, &asset_persistent_arena,
                                 &asset_level_arena, &asset_global_arena,
                                 &asset_io_arena, asset_renderer, asset_config)) {
-            AssetHandle texture_asset = asset_load_texture_tga(
-                &asset_registry, "uv_test.tga", ASSET_LIFETIME_LEVEL);
+            static const uint8_t bridge_pixels[] = {
+                255u, 255u, 255u, 255u, 32u, 32u, 32u, 255u,
+                32u, 32u, 32u, 255u, 255u, 255u, 255u, 255u,
+            };
+            AssetTextureSource bridge_source{bridge_pixels, 2u, 2u};
+            AssetHandle texture_asset = asset_register_texture(
+                &asset_registry, "uv_test.tga", ASSET_LIFETIME_LEVEL,
+                bridge_source);
             AssetTextureView texture_view{};
             if (asset_get_texture(&asset_registry, texture_asset, &texture_view)) {
                 texture = texture_view.gpu;

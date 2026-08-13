@@ -21,7 +21,9 @@ endforeach()
 
 file(READ "${SOURCE_DIR}/engine/assets/src/assets.cpp" asset_runtime)
 if(NOT asset_runtime MATCHES "platform_file_read_rooted" OR
-   asset_runtime MATCHES "platform_file_size[ \t\r\n]*\\(")
+   asset_runtime MATCHES "platform_file_size[ \t\r\n]*\\(" OR
+   asset_runtime MATCHES "asset_load_(texture_tga|sound_wav)" OR
+   asset_runtime MATCHES "#[ \t]*include[ \t]*[<\"]assets/(tga|wav)\\.h")
     message(FATAL_ERROR "asset loads must use the single-handle rooted read seam")
 endif()
 
@@ -31,10 +33,10 @@ if(EXISTS "${SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp" OR
 endif()
 
 file(READ "${SOURCE_DIR}/tools/sandbox/src/main.cpp" sandbox)
-if(NOT sandbox MATCHES "asset_load_texture_tga" OR
-   NOT sandbox MATCHES "asset_registry_shutdown" OR
+if(NOT sandbox MATCHES "asset_registry_shutdown" OR
+   sandbox MATCHES "asset_load_(texture_tga|sound_wav)" OR
    sandbox MATCHES "tga_decode[ \t\r\n]*\\(")
-    message(FATAL_ERROR "sandbox does not exclusively use the AssetRegistry texture path")
+    message(FATAL_ERROR "sandbox bypasses the baked/procedural AssetRegistry path")
 endif()
 
 message(STATUS "asset boundary: core/platform only, no Vulkan/render/sim dependency")

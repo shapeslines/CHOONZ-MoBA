@@ -24,6 +24,7 @@ typedef struct AssetRegistryConfig {
     uint32_t    capacity;
     size_t      max_file_bytes;
     const char* asset_root;
+    AssetCatalog catalog;
 } AssetRegistryConfig;
 
 typedef TextureHandle (*AssetCreateTextureFn)(void* user, const uint8_t* rgba8,
@@ -109,6 +110,7 @@ typedef struct AssetRegistry {
     size_t io_base_offset;
     size_t max_file_bytes;
     AssetRendererApi renderer;
+    AssetCatalog catalog;
     char asset_root[ASSET_PATH_MAX];
     uint16_t asset_root_length;
     uint8_t initialized;
@@ -128,13 +130,12 @@ AssetHandle asset_register_texture(AssetRegistry* registry, const char* path,
 AssetHandle asset_register_sound(AssetRegistry* registry, const char* path,
                                  AssetLifetime lifetime, AssetSoundSource source);
 
-// Loose-file M4.0 path. Files are bounded before and during the platform read,
-// decoded in the dedicated I/O arena, copied into the selected lifetime arena,
-// then the I/O arena is rewound. Failures leave the registry/lifetime unchanged.
-AssetHandle asset_load_texture_tga(AssetRegistry* registry, const char* path,
-                                   AssetLifetime lifetime);
-AssetHandle asset_load_sound_wav(AssetRegistry* registry, const char* path,
-                                 AssetLifetime lifetime);
+// Baked-only runtime path. The ID must exist in the validated generated catalog;
+// the corresponding `.mba` is read beneath `asset_root` and its ID/type verified
+// before durable allocation, renderer callbacks, or registry mutation. The I/O
+// arena is rewound on every outcome.
+AssetHandle asset_load(AssetRegistry* registry, AssetId id,
+                       AssetLifetime lifetime);
 
 AssetHandle asset_registry_find(const AssetRegistry* registry, AssetId id);
 AssetHandle asset_registry_find_path(const AssetRegistry* registry, const char* path);

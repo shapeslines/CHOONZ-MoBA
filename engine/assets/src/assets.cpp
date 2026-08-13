@@ -1,7 +1,6 @@
 #include "assets/assets.h"
 
-#include "assets/tga.h"
-#include "assets/wav.h"
+#include "assets/mba.h"
 #include "core/assert.h"
 #include "platform/platform.h"
 
@@ -39,6 +38,7 @@ AssetRegistryConfig asset_registry_config_default(const char* asset_root) {
     config.capacity = 256u;
     config.max_file_bytes = 24u * 1024u * 1024u;
     config.asset_root = asset_root;
+    config.catalog = AssetCatalog{};
     return config;
 }
 
@@ -94,6 +94,88 @@ static bool ranges_overlap(AddressRange a, AddressRange b) {
     return a.begin < b.end && b.begin < a.end;
 }
 
+static bool external_memory_is_disjoint(const void* data, size_t bytes,
+                                        const AssetRegistry* registry,
+                                        const Arena* const arenas[4]) {
+    AddressRange candidate{};
+    if (!make_range(data, bytes, &candidate)) return false;
+    for (uint32_t i = 0u; i < 4u; ++i) {
+        AddressRange backing{};
+        if (!make_range(arenas[i]->base, arenas[i]->reserved, &backing) ||
+            ranges_overlap(candidate, backing)) return false;
+    }
+    AddressRange control{};
+    if (!make_range(registry, sizeof(*registry), &control) ||
+        ranges_overlap(candidate, control)) return false;
+    for (uint32_t i = 0u; i < 4u; ++i) {
+        if (!make_range(arenas[i], sizeof(*arenas[i]), &control) ||
+            ranges_overlap(candidate, control)) return false;
+    }
+    return true;
+}
+
+static bool bounded_string_length(const char* text, size_t capacity,
+                                  size_t* out_length) {
+    if (!text || !out_length || capacity == 0u) return false;
+    for (size_t i = 0u; i < capacity; ++i) {
+        if (text[i] == '\0') {
+            *out_length = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool catalog_is_valid(AssetCatalog catalog,
+                             const AssetRegistry* registry,
+                             const Arena* const arenas[4]) {
+    if (catalog.count == 0u) return catalog.entries == nullptr;
+    if (!catalog.entries || catalog.count > SIZE_MAX / sizeof(AssetCatalogEntry) ||
+        !external_memory_is_disjoint(catalog.entries,
+                                     (size_t)catalog.count * sizeof(AssetCatalogEntry),
+                                     registry, arenas)) return false;
+
+    AssetId previous = ASSET_ID_NULL;
+    for (uint32_t i = 0u; i < catalog.count; ++i) {
+        const AssetCatalogEntry* entry = &catalog.entries[i];
+        if (entry->id == ASSET_ID_NULL || entry->id <= previous ||
+            (entry->type != ASSET_TYPE_TEXTURE && entry->type != ASSET_TYPE_SOUND))
+            return false;
+
+        size_t logical_length = 0u;
+        size_t baked_length = 0u;
+        if (!bounded_string_length(entry->logical_path, ASSET_PATH_MAX,
+                                   &logical_length) ||
+            !bounded_string_length(entry->baked_path, ASSET_PATH_MAX,
+                                   &baked_length) || logical_length == 0u ||
+            logical_length > ASSET_PATH_MAX - 5u ||
+            baked_length != logical_length + 4u ||
+            !external_memory_is_disjoint(entry->logical_path, logical_length + 1u,
+                                         registry, arenas) ||
+            !external_memory_is_disjoint(entry->baked_path, baked_length + 1u,
+                                         registry, arenas)) return false;
+
+        char normalized[ASSET_PATH_MAX];
+        size_t normalized_length = 0u;
+        if (!asset_path_normalize(entry->logical_path, normalized,
+                                  sizeof(normalized), &normalized_length) ||
+            normalized_length != logical_length ||
+            memcmp(normalized, entry->logical_path, logical_length + 1u) != 0 ||
+            asset_id_normalized_bytes(entry->logical_path, logical_length) != entry->id ||
+            memcmp(entry->baked_path, entry->logical_path, logical_length) != 0 ||
+            memcmp(entry->baked_path + logical_length, ".mba", 5u) != 0)
+            return false;
+
+        if (!asset_path_normalize(entry->baked_path, normalized,
+                                  sizeof(normalized), &normalized_length) ||
+            normalized_length != baked_length ||
+            memcmp(normalized, entry->baked_path, baked_length + 1u) != 0)
+            return false;
+        previous = entry->id;
+    }
+    return true;
+}
+
 static bool registry_memory_is_disjoint(const AssetRegistry* registry,
                                         const Arena* const arenas[4]) {
     AddressRange backing[4];
@@ -118,8 +200,9 @@ static bool registry_memory_is_disjoint(const AssetRegistry* registry,
 
 static bool copy_asset_root(const char* root, char* out, uint16_t* out_length) {
     if (!root || !out || !out_length) return false;
-    size_t length = strlen(root);
-    if (length == 0u || length >= ASSET_PATH_MAX) return false;
+    size_t length = 0u;
+    if (!bounded_string_length(root, ASSET_PATH_MAX, &length) ||
+        length == 0u || length >= ASSET_PATH_MAX) return false;
     while (length > 1u && (root[length - 1u] == '/' || root[length - 1u] == '\\')) {
         if (length == 3u && root[1] == ':') break;
         --length;
@@ -140,7 +223,8 @@ bool asset_registry_init(AssetRegistry* registry, Arena* persistent_arena,
         persistent_arena == io_arena || level_arena == global_arena ||
         level_arena == io_arena || global_arena == io_arena) return false;
     const Arena* arenas[4] = {persistent_arena, level_arena, global_arena, io_arena};
-    if (!registry_memory_is_disjoint(registry, arenas)) return false;
+    if (!registry_memory_is_disjoint(registry, arenas) ||
+        !catalog_is_valid(config.catalog, registry, arenas)) return false;
 
     const size_t required = asset_registry_memory_required(config);
     const uint32_t map_capacity = asset_map_capacity(config.capacity);
@@ -188,6 +272,7 @@ bool asset_registry_init(AssetRegistry* registry, Arena* persistent_arena,
     next.io_base_offset = io_arena->offset;
     next.max_file_bytes = config.max_file_bytes;
     next.renderer = renderer;
+    next.catalog = config.catalog;
     next.initialized = 1u;
     *registry = next;
     return true;
@@ -433,81 +518,67 @@ static void* bounded_arena_allocate(void* state, void* ptr, size_t old_size,
     return arena_push(bounded->arena, new_size, alignment);
 }
 
-static AssetHandle begin_file_load(AssetRegistry* registry, const char* path,
-                                   AssetType type, AssetLifetime lifetime,
-                                   char* normalized, size_t* normalized_length,
-                                   bool* out_finished) {
-    *out_finished = true;
-    if (!registry || !registry->initialized || lifetime > ASSET_LIFETIME_GLOBAL ||
-        !asset_path_normalize(path, normalized, ASSET_PATH_MAX, normalized_length))
-        return null_asset_handle();
-    const AssetId id = asset_id_normalized_bytes(normalized, *normalized_length);
-    bool found = false;
-    AssetHandle existing = existing_asset(registry, id, normalized,
-                                          *normalized_length, type, lifetime, &found);
-    if (found) return existing;
-    *out_finished = false;
-    return null_asset_handle();
-}
-
-AssetHandle asset_load_texture_tga(AssetRegistry* registry, const char* path,
-                                   AssetLifetime lifetime) {
-    char normalized[ASSET_PATH_MAX];
-    size_t normalized_length = 0u;
-    bool finished = false;
-    AssetHandle cached = begin_file_load(registry, path, ASSET_TYPE_TEXTURE, lifetime,
-                                         normalized, &normalized_length, &finished);
-    if (finished) return cached;
-
-    registry->io_arena->offset = registry->io_base_offset;
-    BoundedArenaAlloc bounded{registry->io_arena, registry->max_file_bytes};
-    Allocator file_allocator{bounded_arena_allocate, &bounded, ALLOC_ARENA};
-    PlatformFile file{};
-    AssetHandle result = null_asset_handle();
-    if (platform_file_read_rooted(registry->asset_root, normalized,
-                                  registry->max_file_bytes, file_allocator, &file) &&
-        file.size != 0u) {
-        uint32_t width = 0u;
-        uint32_t height = 0u;
-        size_t decoded_bytes = 0u;
-        if (tga_inspect(file.data, file.size, &width, &height, &decoded_bytes) &&
-            arena_has_room(registry->io_arena, decoded_bytes, 0u)) {
-            TgaImage image{};
-            if (tga_decode(file.data, file.size, arena_allocator(registry->io_arena), &image)) {
-                AssetTextureSource source{image.rgba8, image.width, image.height};
-                result = asset_register_texture(registry, normalized, lifetime, source);
-            }
+static const AssetCatalogEntry* catalog_find(const AssetCatalog* catalog,
+                                             AssetId id) {
+    if (!catalog || !catalog->entries || id == ASSET_ID_NULL) return nullptr;
+    uint32_t first = 0u;
+    uint32_t count = catalog->count;
+    while (count != 0u) {
+        const uint32_t step = count / 2u;
+        const uint32_t middle = first + step;
+        if (catalog->entries[middle].id < id) {
+            first = middle + 1u;
+            count -= step + 1u;
+        } else {
+            count = step;
         }
     }
-    registry->io_arena->offset = registry->io_base_offset;
-    return result;
+    return first < catalog->count && catalog->entries[first].id == id
+        ? &catalog->entries[first] : nullptr;
 }
 
-AssetHandle asset_load_sound_wav(AssetRegistry* registry, const char* path,
-                                 AssetLifetime lifetime) {
-    char normalized[ASSET_PATH_MAX];
-    size_t normalized_length = 0u;
-    bool finished = false;
-    AssetHandle cached = begin_file_load(registry, path, ASSET_TYPE_SOUND, lifetime,
-                                         normalized, &normalized_length, &finished);
-    if (finished) return cached;
+AssetHandle asset_load(AssetRegistry* registry, AssetId id,
+                       AssetLifetime lifetime) {
+    if (!registry || !registry->initialized || id == ASSET_ID_NULL ||
+        lifetime > ASSET_LIFETIME_GLOBAL) return null_asset_handle();
+    const AssetCatalogEntry* entry = catalog_find(&registry->catalog, id);
+    if (!entry) return null_asset_handle();
+
+    size_t logical_length = 0u;
+    if (!bounded_string_length(entry->logical_path, ASSET_PATH_MAX,
+                               &logical_length)) return null_asset_handle();
+    bool found = false;
+    AssetHandle existing = existing_asset(registry, id, entry->logical_path,
+                                          logical_length, entry->type, lifetime,
+                                          &found);
+    if (found) return existing;
+
+    uint32_t slot = 0u;
+    if (!next_slot_available(registry, &slot)) return null_asset_handle();
 
     registry->io_arena->offset = registry->io_base_offset;
     BoundedArenaAlloc bounded{registry->io_arena, registry->max_file_bytes};
     Allocator file_allocator{bounded_arena_allocate, &bounded, ALLOC_ARENA};
     PlatformFile file{};
     AssetHandle result = null_asset_handle();
-    if (platform_file_read_rooted(registry->asset_root, normalized,
+    if (platform_file_read_rooted(registry->asset_root, entry->baked_path,
                                   registry->max_file_bytes, file_allocator, &file) &&
         file.size != 0u) {
-        WavInfo info{};
-        if (wav_inspect_pcm(file.data, file.size, &info) &&
-            arena_has_room(registry->io_arena, info.pcm_bytes, 0u)) {
-            WavPcm pcm{};
-            if (wav_decode_pcm(file.data, file.size, arena_allocator(registry->io_arena), &pcm)) {
-                AssetSoundSource source{pcm.pcm, pcm.pcm_bytes, pcm.sample_rate,
-                                        pcm.channels, pcm.bits_per_sample};
-                result = asset_register_sound(registry, normalized, lifetime, source);
+        MbaAssetView view{};
+        if (mba_inspect(file.data, file.size, &view) && view.id == entry->id &&
+            view.type == entry->type) {
+            if (view.type == ASSET_TYPE_TEXTURE) {
+                AssetTextureSource source{view.texture.rgba8, view.texture.width,
+                                          view.texture.height};
+                result = asset_register_texture(registry, entry->logical_path,
+                                                lifetime, source);
+            } else if (view.type == ASSET_TYPE_SOUND) {
+                AssetSoundSource source{view.sound.pcm, view.sound.pcm_bytes,
+                                        view.sound.sample_rate,
+                                        view.sound.channels,
+                                        view.sound.bits_per_sample};
+                result = asset_register_sound(registry, entry->logical_path,
+                                              lifetime, source);
             }
         }
     }

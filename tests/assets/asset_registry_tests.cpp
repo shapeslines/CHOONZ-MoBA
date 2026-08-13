@@ -1,6 +1,9 @@
 #include "test.h"
 
 #include "assets/assets.h"
+#include "assets/mba.h"
+#include "assets/tga.h"
+#include "assets/wav.h"
 #include "platform/platform.h"
 #include "win32_test_directory.h"
 
@@ -12,6 +15,7 @@ struct FakeTextures {
     uint32_t destroys;
     uint32_t last_frames;
     Handle next;
+    bool fail_create;
 };
 
 static TextureHandle fake_create_texture(void* user, const uint8_t* pixels,
@@ -19,6 +23,7 @@ static TextureHandle fake_create_texture(void* user, const uint8_t* pixels,
     FakeTextures* fake = (FakeTextures*)user;
     TextureHandle result{HANDLE_NULL};
     if (!fake || !pixels || width == 0u || height == 0u) return result;
+    if (fake->fail_create) return result;
     ++fake->creates;
     result.h = fake->next++;
     if (handle_gen(result.h) == 0u) result.h = handle_make(fake->creates, 1u);
@@ -47,7 +52,8 @@ struct RegistryFixture {
 };
 
 static bool init_fixture(RegistryFixture* fixture, uint32_t capacity,
-                         const char* asset_root = ".") {
+                          const char* asset_root = ".",
+                          AssetCatalog catalog = AssetCatalog{}) {
     std::memset(fixture, 0, sizeof(*fixture));
     arena_init_fixed(&fixture->persistent, fixture->persistent_storage,
                      sizeof(fixture->persistent_storage));
@@ -61,8 +67,90 @@ static bool init_fixture(RegistryFixture* fixture, uint32_t capacity,
     AssetRendererApi renderer{&fixture->fake, fake_create_texture, fake_destroy_texture};
     AssetRegistryConfig config = asset_registry_config_default(asset_root);
     config.capacity = capacity;
+    config.catalog = catalog;
     return asset_registry_init(&fixture->registry, &fixture->persistent, &fixture->level,
                                &fixture->global, &fixture->io, renderer, config);
+}
+
+static void sort_catalog_entries(AssetCatalogEntry* entries, uint32_t count) {
+    for (uint32_t i = 1u; i < count; ++i) {
+        const AssetCatalogEntry value = entries[i];
+        uint32_t position = i;
+        while (position != 0u && entries[position - 1u].id > value.id) {
+            entries[position] = entries[position - 1u];
+            --position;
+        }
+        entries[position] = value;
+    }
+}
+
+TEST(assets, catalog_validation_is_transactional) {
+    alignas(16) uint8_t persistent_storage[65536];
+    alignas(16) uint8_t level_storage[256];
+    alignas(16) uint8_t global_storage[256];
+    alignas(16) uint8_t io_storage[256];
+    Arena persistent, level, global, io;
+    AssetRegistry registry;
+    AssetRendererApi renderer{};
+
+    AssetCatalogEntry valid[2] = {
+        {asset_id("a.tga"), ASSET_TYPE_TEXTURE, "a.tga", "a.tga.mba"},
+        {asset_id("b.wav"), ASSET_TYPE_SOUND, "b.wav", "b.wav.mba"},
+    };
+    sort_catalog_entries(valid, 2u);
+    AssetCatalogEntry unsorted[2] = {valid[1], valid[0]};
+    AssetCatalogEntry wrong_id = valid[0];
+    wrong_id.id ^= 1u;
+    if (wrong_id.id == ASSET_ID_NULL) wrong_id.id = 1u;
+    AssetCatalogEntry wrong_type = valid[0];
+    wrong_type.type = ASSET_TYPE_NONE;
+    AssetCatalogEntry wrong_baked = valid[0];
+    wrong_baked.baked_path = "other.tga.mba";
+    AssetCatalogEntry noncanonical = valid[0];
+    noncanonical.logical_path = "A.TGA";
+    const AssetCatalog invalid[] = {
+        {nullptr, 1u},
+        {unsorted, 2u},
+        {&wrong_id, 1u},
+        {&wrong_type, 1u},
+        {&wrong_baked, 1u},
+        {&noncanonical, 1u},
+    };
+
+    for (size_t i = 0u; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        arena_init_fixed(&persistent, persistent_storage, sizeof(persistent_storage));
+        arena_init_fixed(&level, level_storage, sizeof(level_storage));
+        arena_init_fixed(&global, global_storage, sizeof(global_storage));
+        arena_init_fixed(&io, io_storage, sizeof(io_storage));
+        std::memset(&registry, 0xA5, sizeof(registry));
+        const AssetRegistry before = registry;
+        AssetRegistryConfig config = asset_registry_config_default(".");
+        config.capacity = 2u;
+        config.catalog = invalid[i];
+        CHECK(!asset_registry_init(&registry, &persistent, &level, &global, &io,
+                                   renderer, config));
+        CHECK(std::memcmp(&registry, &before, sizeof(registry)) == 0);
+        CHECK(persistent.offset == 0u && level.offset == 0u &&
+              global.offset == 0u && io.offset == 0u);
+    }
+
+    arena_init_fixed(&persistent, persistent_storage, sizeof(persistent_storage));
+    arena_init_fixed(&level, level_storage, sizeof(level_storage));
+    arena_init_fixed(&global, global_storage, sizeof(global_storage));
+    arena_init_fixed(&io, io_storage, sizeof(io_storage));
+    AssetCatalogEntry* overlapping = reinterpret_cast<AssetCatalogEntry*>(
+        persistent_storage + 1024u);
+    *overlapping = valid[0];
+    std::memset(&registry, 0xA5, sizeof(registry));
+    const AssetRegistry before = registry;
+    AssetRegistryConfig config = asset_registry_config_default(".");
+    config.capacity = 2u;
+    config.catalog = AssetCatalog{overlapping, 1u};
+    CHECK(!asset_registry_init(&registry, &persistent, &level, &global, &io,
+                               renderer, config));
+    CHECK(std::memcmp(&registry, &before, sizeof(registry)) == 0);
+    CHECK(persistent.offset == 0u && level.offset == 0u &&
+          global.offset == 0u && io.offset == 0u);
 }
 
 TEST(assets, initialization_is_transactional_when_persistent_budget_is_short) {
@@ -319,7 +407,7 @@ static void test_put_u32(uint8_t* out, uint32_t value) {
     out[3] = (uint8_t)(value >> 24u);
 }
 
-TEST(assets, loose_tga_and_wav_files_load_transactionally) {
+TEST(assets, baked_tga_and_wav_match_direct_parser_values) {
     OwnedTestDirectory owned{};
     owned.scope_custody = INVALID_HANDLE_VALUE;
     owned.directory_custody = INVALID_HANDLE_VALUE;
@@ -332,9 +420,9 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
     char tga_file_path[256];
     char wav_file_path[256];
     const int tga_chars = std::snprintf(
-        tga_file_path, sizeof(tga_file_path), "%s/%s", owned.path, tga_asset_path);
+        tga_file_path, sizeof(tga_file_path), "%s/%s.mba", owned.path, tga_asset_path);
     const int wav_chars = std::snprintf(
-        wav_file_path, sizeof(wav_file_path), "%s/%s", owned.path, wav_asset_path);
+        wav_file_path, sizeof(wav_file_path), "%s/%s.mba", owned.path, wav_asset_path);
     const bool paths_ready = tga_chars > 0 && (size_t)tga_chars < sizeof(tga_file_path) &&
         wav_chars > 0 && (size_t)wav_chars < sizeof(wav_file_path);
     CHECK(paths_ready);
@@ -348,9 +436,6 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
     tga[12] = 1u; tga[14] = 1u;
     tga[16] = 32u; tga[17] = 0x28u;
     tga[18] = 0x11u; tga[19] = 0x22u; tga[20] = 0x33u; tga[21] = 0x44u;
-    const bool tga_written = platform_file_write(tga_file_path, tga, sizeof(tga));
-    CHECK(tga_written);
-
     const uint8_t pcm[] = {1u,0u, 2u,0u};
     uint8_t wav[48] = {};
     std::memcpy(wav + 0u, "RIFF", 4u);
@@ -366,8 +451,37 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
     std::memcpy(wav + 36u, "data", 4u);
     test_put_u32(wav + 40u, sizeof(pcm));
     std::memcpy(wav + 44u, pcm, sizeof(pcm));
-    const bool wav_written = platform_file_write(wav_file_path, wav, sizeof(wav));
-    CHECK(wav_written);
+    alignas(16) uint8_t direct_storage[256];
+    Arena direct_arena;
+    arena_init_fixed(&direct_arena, direct_storage, sizeof(direct_storage));
+    TgaImage direct_texture{};
+    WavPcm direct_sound{};
+    CHECK(tga_decode(tga, sizeof(tga), arena_allocator(&direct_arena),
+                     &direct_texture));
+    CHECK(wav_decode_pcm(wav, sizeof(wav), arena_allocator(&direct_arena),
+                         &direct_sound));
+
+    const AssetId tga_id = asset_id("fixture.tga");
+    const AssetId wav_id = asset_id("fixture.wav");
+    uint8_t baked_tga[128] = {};
+    uint8_t baked_wav[128] = {};
+    size_t baked_tga_bytes = 0u;
+    size_t baked_wav_bytes = 0u;
+    MbaTextureSource texture_source{direct_texture.rgba8,
+                                    direct_texture.width * direct_texture.height * 4u,
+                                    direct_texture.width, direct_texture.height};
+    MbaSoundSource sound_source{direct_sound.pcm, direct_sound.pcm_bytes,
+                                direct_sound.sample_rate, direct_sound.channels,
+                                direct_sound.bits_per_sample};
+    CHECK(mba_encode_texture(baked_tga, sizeof(baked_tga), tga_id,
+                             &texture_source, &baked_tga_bytes));
+    CHECK(mba_encode_sound(baked_wav, sizeof(baked_wav), wav_id,
+                           &sound_source, &baked_wav_bytes));
+    const bool tga_written = platform_file_write(
+        tga_file_path, baked_tga, baked_tga_bytes);
+    const bool wav_written = platform_file_write(
+        wav_file_path, baked_wav, baked_wav_bytes);
+    CHECK(tga_written && wav_written);
     if (!tga_written || !wav_written) {
         if (tga_written) CHECK(std::remove(tga_file_path) == 0);
         if (wav_written) CHECK(std::remove(wav_file_path) == 0);
@@ -375,8 +489,14 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
         return;
     }
 
+    AssetCatalogEntry entries[2] = {
+        {tga_id, ASSET_TYPE_TEXTURE, "fixture.tga", "fixture.tga.mba"},
+        {wav_id, ASSET_TYPE_SOUND, "fixture.wav", "fixture.wav.mba"},
+    };
+    sort_catalog_entries(entries, 2u);
+    const AssetCatalog catalog{entries, 2u};
     RegistryFixture fixture;
-    const bool initialized = init_fixture(&fixture, 4u, owned.path);
+    const bool initialized = init_fixture(&fixture, 4u, owned.path, catalog);
     CHECK(initialized);
     if (!initialized) {
         CHECK(std::remove(tga_file_path) == 0);
@@ -384,27 +504,36 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
         CHECK(test_release_owned_directory(&owned));
         return;
     }
-    AssetHandle texture = asset_load_texture_tga(&fixture.registry, tga_asset_path,
-                                                  ASSET_LIFETIME_LEVEL);
-    AssetHandle sound = asset_load_sound_wav(&fixture.registry, wav_asset_path,
-                                              ASSET_LIFETIME_LEVEL);
+    AssetHandle texture = asset_load(&fixture.registry, tga_id,
+                                     ASSET_LIFETIME_LEVEL);
+    AssetHandle sound = asset_load(&fixture.registry, wav_id,
+                                   ASSET_LIFETIME_GLOBAL);
     CHECK(!handle_is_null(texture.h) && !handle_is_null(sound.h));
     AssetTextureView texture_view{};
     AssetSoundView sound_view{};
     CHECK(asset_get_texture(&fixture.registry, texture, &texture_view));
-    CHECK(texture_view.width == 1u && texture_view.height == 1u);
-    CHECK(texture_view.rgba8[0] == 0x33u && texture_view.rgba8[1] == 0x22u &&
-          texture_view.rgba8[2] == 0x11u && texture_view.rgba8[3] == 0x44u);
+    CHECK(texture_view.width == direct_texture.width &&
+          texture_view.height == direct_texture.height &&
+          texture_view.rgba8_bytes == texture_source.rgba8_bytes);
+    CHECK(std::memcmp(texture_view.rgba8, direct_texture.rgba8,
+                      texture_view.rgba8_bytes) == 0);
     CHECK(asset_get_sound(&fixture.registry, sound, &sound_view));
-    CHECK(sound_view.sample_rate == 44100u && sound_view.frame_count == 2u &&
-          std::memcmp(sound_view.pcm, pcm, sizeof(pcm)) == 0);
+    CHECK(sound_view.sample_rate == direct_sound.sample_rate &&
+          sound_view.channels == direct_sound.channels &&
+          sound_view.bits_per_sample == direct_sound.bits_per_sample &&
+          sound_view.pcm_bytes == direct_sound.pcm_bytes &&
+          std::memcmp(sound_view.pcm, direct_sound.pcm,
+                      direct_sound.pcm_bytes) == 0);
     CHECK(fixture.io.offset == fixture.registry.io_base_offset);
+    AssetHandle sound_again = asset_load(&fixture.registry, wav_id,
+                                         ASSET_LIFETIME_GLOBAL);
+    CHECK(sound_again.h == sound.h);
+    CHECK(asset_global_refcount(&fixture.registry, sound) == 2u);
 
     const size_t level_offset = fixture.level.offset;
     const uint32_t live_count = fixture.registry.live_count;
-    AssetHandle missing = asset_load_texture_tga(&fixture.registry,
-                                                  "missing_asset.tga",
-                                                  ASSET_LIFETIME_LEVEL);
+    AssetHandle missing = asset_load(&fixture.registry, asset_id("missing.tga"),
+                                     ASSET_LIFETIME_LEVEL);
     CHECK(handle_is_null(missing.h));
     CHECK(fixture.level.offset == level_offset &&
           fixture.registry.live_count == live_count &&
@@ -413,5 +542,122 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
     asset_registry_shutdown(&fixture.registry, 0u);
     CHECK(std::remove(tga_file_path) == 0);
     CHECK(std::remove(wav_file_path) == 0);
+    CHECK(test_release_owned_directory(&owned));
+}
+
+TEST(assets, baked_runtime_failures_are_mutation_free) {
+    OwnedTestDirectory owned{};
+    owned.scope_custody = INVALID_HANDLE_VALUE;
+    owned.directory_custody = INVALID_HANDLE_VALUE;
+    const bool directory_owned = test_create_owned_directory("asset-failures", &owned);
+    CHECK(directory_owned);
+    if (!directory_owned) return;
+
+    static const uint8_t rgba[] = {9u, 8u, 7u, 6u};
+    static const uint8_t pcm[] = {1u, 0u};
+    const char* logical_paths[] = {
+        "bad-id.tga", "bad-type.tga", "budget.tga", "corrupt.tga",
+        "renderer-fail.tga",
+    };
+    AssetCatalogEntry entries[5];
+    for (uint32_t i = 0u; i < 5u; ++i) {
+        static const char* baked_paths[] = {
+            "bad-id.tga.mba", "bad-type.tga.mba", "budget.tga.mba",
+            "corrupt.tga.mba", "renderer-fail.tga.mba",
+        };
+        entries[i] = AssetCatalogEntry{
+            asset_id_normalized_bytes(logical_paths[i], std::strlen(logical_paths[i])),
+            ASSET_TYPE_TEXTURE, logical_paths[i], baked_paths[i]};
+    }
+    sort_catalog_entries(entries, 5u);
+    const AssetCatalog catalog{entries, 5u};
+
+    uint8_t texture_bytes[128] = {};
+    uint8_t renderer_bytes[128] = {};
+    uint8_t wrong_id_bytes[128] = {};
+    uint8_t sound_bytes[128] = {};
+    size_t texture_size = 0u;
+    size_t renderer_size = 0u;
+    size_t wrong_id_size = 0u;
+    size_t sound_size = 0u;
+    MbaTextureSource texture_source{rgba, sizeof(rgba), 1u, 1u};
+    MbaSoundSource sound_source{pcm, sizeof(pcm), 48000u, 1u, 16u};
+    const AssetId budget_id = asset_id("budget.tga");
+    CHECK(mba_encode_texture(texture_bytes, sizeof(texture_bytes), budget_id,
+                             &texture_source, &texture_size));
+    CHECK(mba_encode_texture(renderer_bytes, sizeof(renderer_bytes),
+                             asset_id("renderer-fail.tga"), &texture_source,
+                             &renderer_size));
+    CHECK(mba_encode_texture(wrong_id_bytes, sizeof(wrong_id_bytes),
+                             asset_id("other.tga"), &texture_source,
+                             &wrong_id_size));
+    CHECK(mba_encode_sound(sound_bytes, sizeof(sound_bytes),
+                           asset_id("bad-type.tga"), &sound_source,
+                           &sound_size));
+
+    struct FileFixture { const char* name; const void* bytes; size_t size; } files[] = {
+        {"bad-id.tga.mba", wrong_id_bytes, wrong_id_size},
+        {"bad-type.tga.mba", sound_bytes, sound_size},
+        {"budget.tga.mba", texture_bytes, texture_size},
+        {"corrupt.tga.mba", texture_bytes, 31u},
+        {"renderer-fail.tga.mba", renderer_bytes, renderer_size},
+        {"stale.tga.mba", texture_bytes, texture_size},
+    };
+    char file_paths[6][256] = {};
+    bool files_ready = true;
+    for (uint32_t i = 0u; i < 6u; ++i) {
+        const int chars = std::snprintf(file_paths[i], sizeof(file_paths[i]),
+                                        "%s/%s", owned.path, files[i].name);
+        files_ready = files_ready && chars > 0 &&
+            (size_t)chars < sizeof(file_paths[i]) &&
+            platform_file_write(file_paths[i], files[i].bytes, files[i].size);
+    }
+    CHECK(files_ready);
+    if (!files_ready) {
+        for (uint32_t i = 0u; i < 6u; ++i) std::remove(file_paths[i]);
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+
+    RegistryFixture fixture;
+    CHECK(init_fixture(&fixture, 8u, owned.path, catalog));
+    const size_t level_base = fixture.level.offset;
+    const size_t global_base = fixture.global.offset;
+    const uint32_t live_base = fixture.registry.live_count;
+    const uint32_t map_base = fixture.registry.by_id.count;
+
+    const AssetId rejected[] = {
+        asset_id("bad-id.tga"), asset_id("bad-type.tga"),
+        asset_id("corrupt.tga"), asset_id("stale.tga"),
+    };
+    for (AssetId id : rejected) {
+        CHECK(handle_is_null(asset_load(&fixture.registry, id,
+                                        ASSET_LIFETIME_LEVEL).h));
+        CHECK(fixture.level.offset == level_base && fixture.global.offset == global_base);
+        CHECK(fixture.io.offset == fixture.registry.io_base_offset);
+        CHECK(fixture.registry.live_count == live_base &&
+              fixture.registry.by_id.count == map_base);
+        CHECK(fixture.fake.creates == 0u && fixture.fake.destroys == 0u);
+    }
+
+    fixture.level.offset = fixture.level.reserved - 1u;
+    const size_t short_offset = fixture.level.offset;
+    CHECK(handle_is_null(asset_load(&fixture.registry, budget_id,
+                                    ASSET_LIFETIME_LEVEL).h));
+    CHECK(fixture.level.offset == short_offset && fixture.fake.creates == 0u);
+    fixture.level.offset = level_base;
+
+    fixture.fake.fail_create = true;
+    CHECK(handle_is_null(asset_load(&fixture.registry,
+                                    asset_id("renderer-fail.tga"),
+                                    ASSET_LIFETIME_LEVEL).h));
+    CHECK(fixture.level.offset == level_base && fixture.global.offset == global_base);
+    CHECK(fixture.io.offset == fixture.registry.io_base_offset);
+    CHECK(fixture.registry.live_count == live_base &&
+          fixture.registry.by_id.count == map_base);
+    CHECK(fixture.fake.creates == 0u && fixture.fake.destroys == 0u);
+
+    asset_registry_shutdown(&fixture.registry, 0u);
+    for (uint32_t i = 0u; i < 6u; ++i) CHECK(std::remove(file_paths[i]) == 0);
     CHECK(test_release_owned_directory(&owned));
 }

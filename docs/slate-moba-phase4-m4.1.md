@@ -77,9 +77,34 @@ Debug/Release bytes, and leaves unchanged outputs untouched.
   Independent cooks, unchanged recook mtimes, and Debug-versus-Release byte
   comparison pass for one TGA and one PCM WAV fixture.
 
-### S4 — Catalog-driven baked-only runtime — next
+### S4 — Catalog-driven baked-only runtime — complete
 
-### S5 — CMake content gate and sandbox migration — pending
+Done-condition: initialization validates one immutable catalog view before mutation;
+the sole file-loading API accepts an `AssetId`, verifies its catalog/container
+identity, and preserves all durable state on failure.
+
+- `AssetRegistryConfig` now carries a catalog view. Initialization requires strict
+  ascending IDs, canonical unique logical paths, exact `<logical>.mba` names,
+  supported types, ID/path agreement, and catalog storage disjoint from registry and
+  arena backing before the first persistent push.
+- `asset_load(registry, id, lifetime)` performs deterministic binary lookup, bounded
+  rooted same-handle read, complete `.mba` inspection, and catalog ID/type matching
+  before copying CPU payloads or invoking the texture upload callback.
+- Registry-level TGA/WAV file loaders and source-parser includes are removed. Direct
+  parsers remain available only through `eng_asset_parsers` for cooker/tests; the
+  in-memory registration APIs remain for procedural assets.
+- Baked TGA pixels and WAV PCM/metadata match direct parser output exactly. Duplicate
+  global loads retain refcount behavior; missing/unlisted IDs, corrupt/truncated
+  containers, valid ID/type mismatches, under-budget lifetime arenas, and renderer
+  failure leave registry counts, arenas, refs, and retained renderer resources
+  unchanged.
+- The sandbox uses a short procedural registry bridge for this checkpoint so the
+  loose loaders are already absent; S5 replaces that bridge with the generated
+  catalog/content target.
+- `/WX` Debug and Release builds pass and both configurations pass 46/46 CTest
+  entries, including the strengthened runtime boundary scan.
+
+### S5 — CMake content gate and sandbox migration — next
 
 ### S6 — Adversarial boundary hardening — pending
 
