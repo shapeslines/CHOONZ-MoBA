@@ -10,17 +10,19 @@ findings passed the complete matrix at `f0a56c4`/`7a0d130`, but fresh full secur
 remaining descendant cleanup race after root validation. The handle-bound descendant walker and
 exact child-swap/outside-sentinel fixture now pass.
 The first committed-head fresh walk passed through its 90-frame render but cleanup failed closed on
-Git read-only pack files. The walker now clears only `READONLY` through each verified handle before
-disposition; it removed the preserved residue, and the fixture covers both that case and a real
-descendant junction. Committed implementation `6ae70c9` passed the full configuration/sanitizer/determinism matrix
-and a complete fresh walk whose handle-bound cleanup reported `FRESH-WALK OK`.
+Git read-only pack files. A superseded repair cleared only `READONLY` through each verified handle;
+it removed the preserved residue, and the fixture covers both that case and a real descendant
+junction. Implementation `6ae70c9` passed the then-current full matrix and fresh walk before the
+deeper full-review findings below.
 Fresh full review of `78055bc` then found cleanup still allowed in-place reparse writes, read-only
 attribute clearing could affect an outside hard link, and atomic file writes lost the create-only
 temporary handle before commit. The final repair denies write/delete sharing throughout cleanup,
 uses ignore-read-only disposition, and retains the atomic-write temporary through handle-based
-rename/disposition. Real reparse, hard-link, and post-flush replacement fixtures pass with the
-complete `/WX` Debug 39-test suite and a focused security rereview. The remaining configuration,
-sanitizer, determinism, fresh-walk, full-review, and exact-head GitHub gates must still repeat.
+rename/disposition. At committed checkpoint `6716796`, real reparse, hard-link, and post-flush
+replacement fixtures pass; `/WX` Debug/RelWithDebInfo/Release pass 39/39 each; Debug-ASan passes
+39/39; clang-cl/UBSan passes 6/6; direct determinism retains the exact oracle/divergence; and a fresh
+92-target/39-test/90-frame walk completes secure cleanup. Focused security rereview passes. Only
+fresh full exact-head reviews and GitHub checks remain before readiness.
 Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## Consolidation delivered
@@ -57,8 +59,7 @@ Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## First action
 
-1. Commit and publish the final object-binding repairs, then repeat the full local acceptance matrix
-   and a committed-head fresh walk.
+1. Publish the final local-acceptance evidence record.
 2. Obtain fresh full security and acceptance verdicts and require that exact head's MSVC matrix,
    clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
    then mark PR #51 ready.

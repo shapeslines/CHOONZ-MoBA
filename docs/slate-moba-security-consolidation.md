@@ -153,9 +153,9 @@ node through its own verified handle. A post-child-validation hook attempts a re
 outside-sentinel junction replacement and proves the rename is blocked and sentinel unchanged.
 The focused fixture and complete Debug suite passed.
 The first committed-head fresh walk of `0cedd80` then configured, built 92 targets, passed 39/39, and
-rendered 90 frames, but cleanup failed safely on Git's read-only pack files. The bound walker now
-opens objects with write-attributes access, clears only `READONLY` through the same verified handle,
-and then applies disposition; it never falls back to recursive path deletion. The preserved partial
+rendered 90 frames, but cleanup failed safely on Git's read-only pack files. A superseded repair
+opened objects with write-attributes access, cleared only `READONLY` through the verified handle,
+and then applied disposition without path fallback. The preserved partial
 clone was removed by this repaired walker and verified absent. The fixture now also deletes a real
 descendant junction as a leaf while preserving its outside sentinel.
 On committed `6ae70c9`, all 39 CTest entries pass in Debug, RelWithDebInfo, Release, and Debug-ASan;
@@ -188,9 +188,12 @@ before path-based commit. Root and child cleanup handles now allow `ShareRead` o
 `FileDispositionInfoEx` with `IGNORE_READONLY`, and permanent fixtures issue a real
 `FSCTL_SET_REPARSE_POINT` at the exact post-parent-validation interval and preserve an outside
 read-only hard link. Platform writes retain the exclusive temporary handle through handle-based
-rename or disposition and test both post-flush rename-away and replacement. `/WX` Debug, focused
-tests 2/2, the complete Debug suite 39/39, and focused security rereview pass. The remaining full
-matrix and fresh exact-head reviews/checks must repeat before ready state.
+rename or disposition and test both post-flush rename-away and replacement. At committed
+implementation checkpoint `6716796`, `/WX` Debug/RelWithDebInfo/Release pass 39/39 each, Debug-ASan
+passes 39/39, clang-cl/UBSan passes 6/6, direct Debug/Release determinism retains the exact oracle and
+tick-4321 diagnostic, and the fresh walk builds 92 targets, passes 39/39, renders 90 validation-clean
+frames with a 2,764,854-byte screenshot, and completes secure cleanup. Focused security rereview
+passes. Fresh full exact-head reviews/checks remain before ready state.
 
 Debug-ASan initially exposed that the visualizer negative fixture could not
 start because its executable directory lacked the repository's app-local MSVC ASan runtime; the
@@ -224,8 +227,7 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Commit the final object-binding repair, repeat the full matrix and fresh walk, then obtain fresh full
-security and acceptance verdicts,
+Publish the final evidence record, obtain fresh full security and acceptance verdicts,
 require exact-head CI/CodeQL, and mark PR #51
 ready only after all are green. Stop before the separate owner merge gate;
 keep simulation/replay encoding, asset APIs, #47-#50, and unfinished S22 outside the branch.

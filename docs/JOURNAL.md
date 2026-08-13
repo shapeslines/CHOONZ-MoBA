@@ -13,7 +13,7 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 **Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and
 prove the hardened boundary without changing simulation behavior, replay encoding, asset APIs, or
 starting Phase 4.
-**Outcome:** repaired implementation and local acceptance are complete on draft PR #51 at `6ae70c9`. Candidate
+**Outcome:** repaired implementation and local acceptance are complete on draft PR #51 at `6716796`. Candidate
 `a89caf6` passed its full local matrix and GitHub checks, but its required security review found three
 real gaps, so it was not promoted. Focused repairs for cleanup object binding, real-renderer corrupt
 state, and fail-closed CLI grammar passed the complete local matrix. Independent acceptance and
@@ -21,8 +21,8 @@ exact-head GitHub checks then passed, but fresh full security review found desce
 after classification. The walker is now handle-bound for every node; the exact child-swap test and
 focused security rereview pass.
 The first committed-head fresh walk then passed configure/build/tests/Vulkan but failed safely during
-cleanup on Git's read-only pack files. The same bound handle now clears only `READONLY` before
-disposition; it successfully removed the preserved partial clone, and the permanent fixture covers a
+cleanup on Git's read-only pack files. A superseded repair cleared only `READONLY` through the bound
+handle; it successfully removed the preserved partial clone, and the permanent fixture covers a
 read-only file plus a descendant junction with an unchanged outside sentinel.
 That candidate's fresh full security audit subsequently found three deeper binding issues: cleanup
 handles still shared writes during name enumeration, read-only deletion could alter an outside hard
@@ -30,11 +30,11 @@ link's shared attributes, and the create-only file-write temporary was closed be
 commit. Cleanup now excludes write/delete sharing, uses `FileDispositionInfoEx` with
 `IGNORE_READONLY`, and attacks the exact interval with a real `FSCTL_SET_REPARSE_POINT` plus an
 outside read-only hard link. Atomic writes retain the exclusive temporary through handle-based
-rename/disposition and an exact post-flush replacement attack. Focused `/WX` Debug, all 39 Debug
-tests, and focused security rereview pass; the complete final-head matrix is being repeated.
-The earlier implementation checkpoint passes all 39 tests in Debug, RelWithDebInfo, Release, and Debug-ASan;
-clang-cl/UBSan 6/6; direct Debug/Release determinism; and a committed-head
-92-target/39-test/90-frame fresh walk whose secure cleanup reports `FRESH-WALK OK`.
+rename/disposition and an exact post-flush replacement attack. On committed checkpoint `6716796`,
+`/WX` Debug/RelWithDebInfo/Release pass 39/39 each, Debug-ASan passes 39/39, clang-cl/UBSan passes
+6/6, direct Debug/Release determinism retains the exact oracle and tick-4321 diagnostic, and a fresh
+92-target/39-test/90-frame walk completes secure cleanup. Focused security rereview also passes;
+fresh full exact-head reviews and hosted checks remain.
 Merge remains a separate owner action.
 
 ### What changed

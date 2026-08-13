@@ -281,9 +281,9 @@ none is carried solely by source-branch history.
 - Committed-head fresh-walk finding on `0cedd80`: the clone configured, built 92 targets, passed
   39/39, and rendered 90 validation-clean frames, then the new walker failed closed with access
   denied on Git's read-only pack files. The exact partial clone was retained for diagnosis.
-- Read-only compatibility repair: each already-bound object is opened with write-attributes access;
-  if its handle-reported attributes include `READONLY`, the walker clears only that bit with
-  `FileBasicInfo` on the same handle before disposition. There is no path fallback. The repaired
+- Superseded read-only compatibility repair: each already-bound object was opened with write-attributes access;
+  if its handle-reported attributes included `READONLY`, the walker cleared only that bit with
+  `FileBasicInfo` on the same handle before disposition. There was no path fallback. That repaired
   walker removed the preserved residue and parent verification proved the exact path absent. The
   permanent fixture includes a read-only nested file and a real descendant junction whose outside
   sentinel remains exact.
@@ -310,16 +310,21 @@ none is carried solely by source-branch history.
   proves both bytes and `READONLY` survive. Platform file writes retain `GENERIC_WRITE | DELETE` on
   the create-only temporary through flush and handle-based `FileRenameInfo` or failure disposition;
   a post-flush hook proves rename-away and attacker replacement are rejected.
-- Repair evidence before checkpoint: `/WX` Debug builds; focused platform/fresh-walk tests pass 2/2;
-  the complete Debug suite passes 39/39; and focused read-only security rereview returns PASS. The
-  remaining full matrix and exact-head gates must repeat on the committed repair before ready state.
-- S7 local disposition: reopened after `78055bc`; focused repair is green. Candidates `7a0d130` and
-  `78055bc` remain superseded and draft; full final-head security/acceptance and exact-head GitHub
-  checks remain before ready state.
+- Final repair evidence at committed `6716796`: `/WX` Debug, RelWithDebInfo, and Release build and
+  pass 39/39 each; Debug-ASan passes 39/39; clang-cl 19.1.5 demonstrates the live signed-overflow
+  UBSan tripwire and passes 6/6; direct Debug/Release determinism each pass four tests/178,690 checks
+  and report `tick=4321 field=position_x entity=7`; the Release probe reports final
+  `0x637628abff59c823`, stream `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`.
+- Committed-head fresh walk at `6716796`: fresh MSVC/Vulkan configure, 92-target Debug build, 39/39,
+  `SANDBOX_SMOKE=PASS`, 90 validation-clean frames, a 2,764,854-byte screenshot, and handle-bound
+  cleanup all pass with `FRESH-WALK OK`.
+- Focused read-only security rereview returns PASS for all three final repairs.
+- S7 local disposition: PASS at implementation checkpoint `6716796`. Candidates `7a0d130` and
+  `78055bc` remain superseded; fresh full final-head security/acceptance and exact-head GitHub checks
+  remain before ready state.
 
 ## NEXT
 
-Commit the final binding repair, repeat the complete matrix and fresh walk, then obtain both fresh
-full independent verdicts and exact-head CI/CodeQL,
+Publish the final evidence record, obtain both fresh full independent verdicts and exact-head CI/CodeQL,
 and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
 unfinished S22 separately; stop before owner merge.

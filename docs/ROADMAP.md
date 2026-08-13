@@ -613,17 +613,19 @@ Fresh full review of documentation head `7a0d130` then found descendants were st
 recursively removed by path. Every node is now handle-bound with reparse points treated as leaf
 links; the exact child-replacement/outside-sentinel regression and focused security rereview pass.
 The first committed-head walk passed configure/build/tests/render and then failed closed on Git's
-read-only pack files. Bound-handle `READONLY` clearing and a permanent read-only/junction fixture now
-pass the complete local matrix at `6ae70c9`; its committed-head walk builds 92 targets, passes
-39/39, renders 90 validation-clean frames, and completes secure cleanup with `FRESH-WALK OK`.
+read-only pack files. A superseded bound-handle `READONLY`-clearing repair and permanent
+read-only/junction fixture passed the then-current matrix at `6ae70c9`; its committed-head walk built
+92 targets, passed 39/39, rendered 90 validation-clean frames, and completed cleanup.
 Final full security review then found three deeper object-binding gaps: cleanup still shared writes
 during path enumeration, clearing `READONLY` could mutate an outside hard link, and atomic writes
 closed the create-only temporary before path-based commit. Cleanup now denies write sharing, uses
 `FileDispositionInfoEx` with `IGNORE_READONLY`, and tests a real post-validation reparse operation
 plus an outside read-only hard link. Atomic writes keep the temporary handle through handle-based
-rename/disposition and test an exact post-flush replacement attack. The `/WX` Debug build, focused
-fixtures, complete 39-test Debug suite, and focused security rereview are green; the remaining full
-matrix and exact-head gates must repeat before readiness.
+rename/disposition and test an exact post-flush replacement attack. At committed implementation
+checkpoint `6716796`, `/WX` Debug/RelWithDebInfo/Release pass 39/39 each, Debug-ASan passes 39/39,
+clang-cl/UBSan passes 6/6, both direct determinism runs retain their exact oracle/divergence, and a
+fresh 92-target/39-test/90-frame walk completes secure cleanup. Focused security rereview is green;
+fresh full exact-head reviews and GitHub checks remain before readiness.
 
 ---
 
