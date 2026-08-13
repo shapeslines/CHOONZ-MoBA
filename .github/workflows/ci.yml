@@ -39,8 +39,9 @@ jobs:
         shell: pwsh
         run: |
           winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --silent --accept-package-agreements --accept-source-agreements
-          $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0"
-          if (-not (Test-Path $sdk)) { Write-Error "SDK not at $sdk after winget install"; exit 1 }
+          $sdk = "C:\VulkanSDK\1.4.357.0"                       # winget default install root
+          if (-not (Test-Path $sdk)) { $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0" }
+          if (-not (Test-Path $sdk)) { Write-Error "SDK not at C:\VulkanSDK\1.4.357.0 or Program Files after winget install"; exit 1 }
           "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           "PATH=$sdk\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
 
@@ -128,8 +129,9 @@ jobs:
         shell: pwsh
         run: |
           winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --silent --accept-package-agreements --accept-source-agreements
-          $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0"
-          if (-not (Test-Path $sdk)) { Write-Error "SDK not at $sdk after winget install"; exit 1 }
+          $sdk = "C:\VulkanSDK\1.4.357.0"                       # winget default install root
+          if (-not (Test-Path $sdk)) { $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0" }
+          if (-not (Test-Path $sdk)) { Write-Error "SDK not at C:\VulkanSDK\1.4.357.0 or Program Files after winget install"; exit 1 }
           "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           "PATH=$sdk\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
       - name: Run the fresh-checkout walk
