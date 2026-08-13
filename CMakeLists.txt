@@ -1,4 +1,4 @@
-﻿# MOBA engine ΓÇö top-level build. The CMake link graph IS the architecture (ADR-0006).
+# MOBA engine ΓÇö top-level build. The CMake link graph IS the architecture (ADR-0006).
 cmake_minimum_required(VERSION 3.28)
 
 project(moba LANGUAGES CXX VERSION 0.0.0)
