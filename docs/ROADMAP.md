@@ -321,6 +321,8 @@ screen." Each rung is a runnable program and a learning checkpoint. The renderer
 seam (`renderer.h`, opaque handles, `DrawItem[]`) from the very first rung.
 
 > **Complete:** M2.0 → M2.5. **Now:** Phase 3. **Later:** Phase 4.
+> Hardware coverage beyond NVIDIA discrete is tracked in
+> [`docs/testing-hardware.md`](testing-hardware.md) (G26).
 > 🔴 **This whole phase is the #1 technical-risk cluster.** Synchronization correctness and the
 > custom allocator are the sub-poles. Keep **validation + synchronization-validation on, always, in
 > dev.**
@@ -620,8 +622,11 @@ material refs, optional single skin; hard-error on the rest — morph targets, s
 extensions); bakes flat SoA vertex streams + index buffer + material refs in the **vertex layout the
 renderer defines**; `renderer_create_mesh` consumes it. Decide interleave-hot-core
 (pos/normal/uv) vs split rarely-used streams against the renderer's vertex-input.
+**Frustum culling owns a milestone here (G27):** the baked AABBs are consumed by a camera-frustum
+test against each `DrawItem`'s mesh AABB — culled items are dropped before batching. The AABB bakes
+in M4.3, so the cull lands in M4.3, not later.
 **DoD:** a `.glb` cooks and renders as instanced meshes (replacing M2.3's programmatic cube); AABB baked
-and usable for culling.
+and used for frustum culling.
 **Risks:** glTF spec is large — the strict-subset + hard-error discipline is the guard against stalling.
 **Exercises:** Assets, Renderer, Math.
 
