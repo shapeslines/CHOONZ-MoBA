@@ -75,8 +75,26 @@ authority. Initial disposition: intentionally superseded after final provenance 
 
 ## Final hunk map
 
-Pending implementation. This section must account for every source diff before ready state.
+In progress. This section must account for every source diff before ready state.
+
+- PR #27: retained and repaired. Direct-child temp, file, and reparse protections remain; persistent
+  tests now cover root, temp root, source/outside root, nested, file, and junction. A newly found case
+  where the source repository itself was a direct temp child is rejected before deletion.
+- PR #30: retained and repaired. Least privilege and verified v5.0.1 SHA apply to all three current
+  checkout uses; `workflow_dispatch` supplies the missing recovery path; both Vulkan SDK installs use
+  `--source winget` to avoid the historical ambient `msstore` failure.
+
+### S2 — CI recovery and fresh-walk
+
+- PowerShell parser: all three changed scripts parse.
+- Direct negative matrix: PASS with all six unsafe path classes mutation-free.
+- Focused CTest: 2/2 (`fresh_walk_path_guard`, `ci_workflow_contract`).
+- Full fresh walk on the corrected committed tree: 88-target Debug build; 34/34 CTests; real Vulkan
+  `SANDBOX_SMOKE=PASS`; 90 validation-clean frames; screenshot 2,764,854 bytes; cleanup complete.
+- Repair loop: first full walk rejected S2 because the temp-root checkout could target itself; the
+  source-repository equality guard was added and the complete walk rerun green.
+- S2 disposition: PASS pending push and draft PR creation.
 
 ## NEXT
 
-Checkpoint S1, then reconcile PR #27 and PR #30 only.
+Push S2, open the draft consolidation PR, record it, then reconcile PRs #41/#42/#43/#46 only.

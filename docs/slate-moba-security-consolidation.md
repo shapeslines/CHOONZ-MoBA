@@ -59,7 +59,13 @@ Goal: add manual recovery and fail-closed cleanup.
 Done means: unsafe paths fail before mutation; push/manual workflow contracts, all checkout pins, and
 explicit winget source are tested; full fresh-walk passes; draft PR is open.
 
-Status: pending.
+Status: implementation complete; publication pending. PowerShell parse checks pass. The focused CTest
+gate passes 2/2 and covers system root, temp root, source/outside root, nested directory, file, and
+junction rejection without sentinel mutation. The first full walk exposed and then drove a repair for
+a source checkout that itself lives as a direct temp child. The corrected exact commit completed a
+fresh 88-target Debug build, 34/34 CTests, and a 90-frame validation-clean Vulkan run with a
+2,764,854-byte screenshot. Workflow contract coverage proves push, pull request, manual dispatch,
+global `contents: read`, all three verified checkout pins, and both explicit winget sources.
 
 ### S3 — Core memory and containers
 
@@ -125,5 +131,5 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Reconcile PR #27 and PR #30, add the missing workflow recovery and adversarial path contracts, and do
-not advance until the focused scripts plus a complete fresh-walk are green.
+Push the green S2 checkpoint, open the single draft consolidation PR, record its exact URL/head, then
+advance to the PR #41/#42/#43/#46 core-memory slice only.
