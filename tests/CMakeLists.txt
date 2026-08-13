@@ -72,6 +72,11 @@ target_link_libraries(sim_determinism_tests PRIVATE eng::sim moba_warnings moba_
 add_executable(sim_oracle_probe sim/sim_oracle_probe.cpp)
 target_link_libraries(sim_oracle_probe PRIVATE eng::sim moba_warnings moba_options)
 
+if(MOBA_UBSAN)
+    add_executable(sim_ubsan_tripwire sim/sim_ubsan_tripwire.cpp)
+    target_link_libraries(sim_ubsan_tripwire PRIVATE moba_warnings moba_options)
+endif()
+
 # App-local MSVC ASan runtime for every test executable in this output directory.
 moba_stage_asan_runtime()
 
@@ -106,6 +111,18 @@ add_test(NAME sim_binary_parity
             -DGAME_EXE=$<TARGET_FILE:sandbox>
             -DGAME_NULL_EXE=$<TARGET_FILE:sandbox_null>
             -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_binary_parity.cmake")
+
+if(MOBA_UBSAN)
+    add_test(NAME sim_ubsan_oracle
+        COMMAND sim_oracle_probe --sim-self-check)
+    set_tests_properties(sim_ubsan_oracle PROPERTIES
+        PASS_REGULAR_EXPRESSION
+            "sim_oracle ticks=10000 commands=923 final=0x637628abff59c823 stream=0x6f381609f7e59f0c logic=0xab96814425ba80a4")
+    add_test(NAME sim_ubsan_tripwire
+        COMMAND ${CMAKE_COMMAND}
+                -DTRIPWIRE_EXE=$<TARGET_FILE:sim_ubsan_tripwire>
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_ubsan_tripwire.cmake")
+endif()
 
 add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}

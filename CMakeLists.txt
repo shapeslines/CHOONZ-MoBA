@@ -20,6 +20,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # --- Options ---
 option(MOBA_WERROR "Treat warnings as errors (/WX) — on in CI/test, off locally" OFF)
 option(MOBA_ASAN "Build with AddressSanitizer (/fsanitize=address) — activates arena poison hooks (G10)" OFF)
+option(MOBA_UBSAN "Build the clang-cl undefined-behavior sanitizer stretch gate" OFF)
 option(MOBA_VULKAN_REQUIRED "Hard-require the Vulkan SDK (find_package REQUIRED) — on in CI (G15)" OFF)
 
 # --- Project-wide flag/posture targets (must precede module add_subdirectory) ---

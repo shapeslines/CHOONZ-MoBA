@@ -74,7 +74,7 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 | S1 | Central compiler policy | one CMake-owned deterministic policy applies to every `eng_sim` source in every configuration, with a test that detects drift | complete — `moba_sim_determinism`; all 9 current sources x 3 configs audited |
 | S2 | Binary-path parity | test and runnable game paths consume the same sim library and replay the same commands to the exact M3.3 hash stream | complete — probe + Vulkan/null sandboxes match the pinned stream digest |
 | S3 | Strong isolation lint | source, include, link, compile-command, and accidental-source-recompile checks fail on forbidden sim/platform/render/presentation coupling | complete - configure contract + generated-build/source scans fail closed |
-| S4 | Second-toolchain stretch | clang-cl config builds the oracle and UBSan runs where supported, with exact capability/evidence recorded | queued |
+| S4 | Second-toolchain stretch | clang-cl config builds the oracle and UBSan runs where supported, with exact capability/evidence recorded | complete - clang-cl 19.1.5 + UBSan oracle/tripwire green |
 | S5 | Close M3.4 | `/WX` matrix, ASan, parity, boundary scans, fresh walk, docs, independent acceptance, and exact-head GitHub gates are green | queued |
 
 ## S0 evidence
@@ -144,6 +144,25 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 - The five-test isolation/parity set passed in Debug, RelWithDebInfo, and Release after affected
   targets built with `/WX`. The complete Debug suite passed 32/32. The canonical oracle and logic
   hash remain unchanged.
+
+## S4 evidence
+
+- Visual Studio's installed clang-cl reported version 19.1.5 targeting
+  `x86_64-pc-windows-msvc`. The capability probe compiled, linked, and executed an intentional
+  signed-overflow tripwire; it exited nonzero with the expected UBSan runtime diagnostic.
+- The first fail-closed runs exposed two real Windows toolchain constraints before the oracle could
+  pass: clang-cl diagnoses MSVC-only `/Zc:preprocessor` as unused under `/WX`, and the standalone
+  UBSan C++ runtime requires the static release CRT. The final policy keeps `/Zc:preprocessor` on
+  cl.exe only and selects `/MT` only when `MOBA_UBSAN=ON`; normal MSVC builds retain their ABI.
+- The capability-aware script performs a fresh CMake configure in a dedicated Ninja Multi-Config
+  tree with clang-cl, `/WX`, the
+  named `/fp:precise` sim policy, no RTTI/exceptions, and UBSan when the compile/link/runtime probe
+  succeeds. Unsupported installations report an explicit `UNAVAILABLE`/`ubsan=off` classification;
+  `-RequireCompiler -RequireUbsan` turns either condition into a hard local failure.
+- The instrumented RelWithDebInfo oracle completed without a sanitizer diagnostic and emitted the
+  unchanged 10,000-tick line: 923 commands, final `0x637628abff59c823`, stream
+  `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`. The UBSan oracle/tripwire plus four structural
+  policy/isolation tests passed 6/6.
 
 ## Exit gate
 

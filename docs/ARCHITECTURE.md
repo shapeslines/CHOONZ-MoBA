@@ -1008,8 +1008,11 @@ sandbox through the same canonical command stream. `moba_enforce_sim_target` rej
 implementation sources, direct include roots, direct links, or exported link entries during CMake
 configure. The generated compile database then proves that every sim implementation source is
 compiled only by `eng_sim`, sees only the core/math/serialize include roots, and carries the named
-policy. Negative fixtures exercise each failure lane. **Deferred within M3.4:** the clang-cl/UBSan
-capability proof.
+policy. Negative fixtures exercise each failure lane. The capability-aware
+`check-clang-cl-determinism.ps1` stretch gate locates an installed clang-cl, proves UBSan with a
+real signed-overflow tripwire, and then runs the canonical oracle under instrumented RelWithDebInfo
+with `/WX`, `/fp:precise`, no RTTI, and no exceptions. RelWithDebInfo plus the stretch-only static
+CRT selection match the standalone Windows UBSan runtime ABI; normal MSVC builds are unchanged.
 **Later deferrals:** archetypes, multithreaded systems/job system
 (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
 first), rollback machinery, generic query DSL, reflection/serialization codegen, and
