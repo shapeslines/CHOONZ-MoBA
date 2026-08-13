@@ -19,6 +19,9 @@ static bool utf8_to_wide(const char* path, wchar_t* out, int out_count) {
     return true;
 }
 
+static bool win32_read_open_file(HANDLE file, size_t max_bytes, Allocator alloc,
+                                 PlatformFile* out, const char* display_path);
+
 bool platform_file_size(const char* path, size_t* out_size) {
     if (!out_size) return false;
     wchar_t wpath[1024];
@@ -31,41 +34,23 @@ bool platform_file_size(const char* path, size_t* out_size) {
 }
 
 bool platform_file_read(const char* path, Allocator alloc, PlatformFile* out) {
-    if (!out) return false;
+    return platform_file_read_bounded(path, SIZE_MAX, alloc, out);
+}
+
+bool platform_file_read_bounded(const char* path, size_t max_bytes,
+                                Allocator alloc, PlatformFile* out) {
+    if (!out || !alloc.fn) return false;
     wchar_t wpath[1024];
     if (!utf8_to_wide(path, wpath, 1024)) return false;
 
     HANDLE h = CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                           OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+                           nullptr);
     if (h == INVALID_HANDLE_VALUE) return false;   // missing file is a normal outcome — no log
-
-    LARGE_INTEGER li;
-    if (!GetFileSizeEx(h, &li) || li.QuadPart < 0 || (uint64_t)li.QuadPart > (uint64_t)(SIZE_MAX / 2)) {
-        CloseHandle(h);
-        return false;
-    }
-    size_t size = (size_t)li.QuadPart;
-
-    // 0-byte files still get a valid pointer so out->data is never null on success.
-    void* buf = mem_alloc(alloc, size ? size : 1, MEM_DEFAULT_ALIGN);
-    if (!buf) { CloseHandle(h); return false; }
-
-    size_t got = 0;
-    while (got < size) {
-        DWORD chunk = (size - got > 0x40000000u) ? 0x40000000u : (DWORD)(size - got);  // <=1 GiB per ReadFile
-        DWORD rd = 0;
-        if (!ReadFile(h, (uint8_t*)buf + got, chunk, &rd, nullptr) || rd == 0) break;
-        got += rd;
-    }
+    const bool success = win32_read_open_file(h, max_bytes, alloc, out, path);
     CloseHandle(h);
-    if (got != size) {                       // truncated/failed mid-read
-        mem_free(alloc, buf, size ? size : 1);   // no-op for arenas; real free for heap allocators
-        platform_log("platform: short read on '%s' (%zu of %zu bytes)\n", path, got, size);
-        return false;
-    }
-    out->data = buf;
-    out->size = size;
-    return true;
+    return success;
 }
 
 static bool win32_handle_attributes(HANDLE handle, DWORD* out_attributes) {
@@ -266,14 +251,12 @@ static bool win32_discard_open_file(HANDLE file) {
                static_cast<DWORD>(sizeof(disposition))) != 0;
 }
 
-bool win32_platform_file_write_with_hook(
-    const char* path, const void* data, size_t size,
+static bool win32_file_write_full_with_hook(
+    const char* display_path, const wchar_t* wfull, const void* data, size_t size,
     Win32FileWriteAfterFlushHook after_flush, void* user) {
-    if (!path || (!data && size)) return false;
-    wchar_t wpath[1024], wfull[1024], wtmp[1024];
-    if (!utf8_to_wide(path, wpath, 1024)) return false;
-    const DWORD full_length = GetFullPathNameW(wpath, 1024, wfull, nullptr);
-    if (full_length == 0 || full_length >= 1024 || wcslen(wfull) + 5 > 1024) return false;
+    if (!display_path || !wfull || (!data && size) || wcslen(wfull) + 5u > 1024u)
+        return false;
+    wchar_t wtmp[1024];
     wcscpy_s(wtmp, 1024, wfull);
     wcscat_s(wtmp, 1024, L".tmp");
 
@@ -285,7 +268,8 @@ bool win32_platform_file_write_with_hook(
         wtmp, GENERIC_WRITE | DELETE, 0, nullptr, CREATE_NEW,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
-        platform_log("platform: create '%s.tmp' failed (%lu)\n", path, (unsigned long)GetLastError());
+        platform_log("platform: create '%s.tmp' failed (%lu)\n", display_path,
+                     (unsigned long)GetLastError());
         return false;
     }
 
@@ -313,11 +297,12 @@ bool win32_platform_file_write_with_hook(
         if (failure == ERROR_SUCCESS) failure = ERROR_WRITE_FAULT;
         if (!win32_discard_open_file(h)) {
             platform_log(
-                "platform: discard '%s.tmp' failed (%lu)\n", path,
+                "platform: discard '%s.tmp' failed (%lu)\n", display_path,
                 (unsigned long)GetLastError());
         }
         CloseHandle(h);
-        platform_log("platform: write '%s' failed (%lu)\n", path, (unsigned long)failure);
+        platform_log("platform: write '%s' failed (%lu)\n", display_path,
+                     (unsigned long)failure);
         SetLastError(failure);
         return false;
     }
@@ -325,6 +310,115 @@ bool win32_platform_file_write_with_hook(
     return true;
 }
 
+bool win32_platform_file_write_with_hook(
+    const char* path, const void* data, size_t size,
+    Win32FileWriteAfterFlushHook after_flush, void* user) {
+    if (!path || (!data && size)) return false;
+    wchar_t wpath[1024], wfull[1024];
+    if (!utf8_to_wide(path, wpath, 1024)) return false;
+    const DWORD full_length = GetFullPathNameW(wpath, 1024, wfull, nullptr);
+    if (full_length == 0u || full_length >= 1024u) return false;
+    return win32_file_write_full_with_hook(path, wfull, data, size,
+                                           after_flush, user);
+}
+
 bool platform_file_write(const char* path, const void* data, size_t size) {
     return win32_platform_file_write_with_hook(path, data, size, nullptr, nullptr);
+}
+
+bool platform_file_write_rooted(const char* root, const char* relative_path,
+                                const void* data, size_t size) {
+    if (!root || !relative_path || (!data && size) || relative_path[0] == '\0' ||
+        relative_path[0] == '/' || relative_path[0] == '\\') return false;
+
+    wchar_t wide_root[1024];
+    wchar_t wide_relative[1024];
+    wchar_t full_root[1024];
+    if (!utf8_to_wide(root, wide_root, 1024) ||
+        !utf8_to_wide(relative_path, wide_relative, 1024)) return false;
+    const DWORD full_root_length = GetFullPathNameW(wide_root, 1024, full_root, nullptr);
+    if (full_root_length == 0u || full_root_length >= 1024u) return false;
+
+    HANDLE root_handle = CreateFileW(
+        full_root, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (root_handle == INVALID_HANDLE_VALUE) return false;
+
+    HANDLE components[512];
+    uint32_t component_count = 0u;
+    bool success = false;
+    DWORD root_attributes = 0u;
+    wchar_t final_root[1024];
+    size_t final_root_length = 0u;
+    wchar_t current[1024]{};
+    const size_t root_chars = wcslen(full_root);
+    size_t current_length = 0u;
+    size_t cursor = 0u;
+    if (!win32_handle_attributes(root_handle, &root_attributes) ||
+        (root_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0u ||
+        (root_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u ||
+        !win32_final_path(root_handle, final_root, 1024u, &final_root_length))
+        goto cleanup;
+
+    if (root_chars + 2u > sizeof(current) / sizeof(current[0])) goto cleanup;
+    memcpy(current, full_root, (root_chars + 1u) * sizeof(wchar_t));
+    current_length = root_chars;
+    if (current_length != 0u && current[current_length - 1u] != L'\\' &&
+        current[current_length - 1u] != L'/') current[current_length++] = L'\\';
+
+    for (;;) {
+        const size_t segment_begin = cursor;
+        while (wide_relative[cursor] != L'\0' && wide_relative[cursor] != L'/') {
+            if (wide_relative[cursor] == L'\\' || wide_relative[cursor] == L':')
+                goto cleanup;
+            ++cursor;
+        }
+        const size_t segment_length = cursor - segment_begin;
+        if (segment_length == 0u ||
+            (segment_length == 1u && wide_relative[segment_begin] == L'.') ||
+            (segment_length == 2u && wide_relative[segment_begin] == L'.' &&
+             wide_relative[segment_begin + 1u] == L'.') ||
+            segment_length + current_length + 1u >
+                sizeof(current) / sizeof(current[0])) goto cleanup;
+
+        memcpy(current + current_length, wide_relative + segment_begin,
+               segment_length * sizeof(wchar_t));
+        current_length += segment_length;
+        current[current_length] = L'\0';
+        const bool final_component = wide_relative[cursor] == L'\0';
+        if (final_component) {
+            success = win32_file_write_full_with_hook(
+                relative_path, current, data, size, nullptr, nullptr);
+            goto cleanup;
+        }
+
+        if (component_count >= sizeof(components) / sizeof(components[0]))
+            goto cleanup;
+        HANDLE component = CreateFileW(
+            current, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (component == INVALID_HANDLE_VALUE) goto cleanup;
+        components[component_count++] = component;
+
+        DWORD attributes = 0u;
+        wchar_t final_component_path[1024];
+        size_t final_component_length = 0u;
+        if (!win32_handle_attributes(component, &attributes) ||
+            (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0u ||
+            (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u ||
+            !win32_final_path(component, final_component_path, 1024u,
+                              &final_component_length) ||
+            !win32_path_is_descendant(final_root, final_root_length,
+                                      final_component_path,
+                                      final_component_length)) goto cleanup;
+
+        current[current_length++] = L'\\';
+        ++cursor;
+        if (wide_relative[cursor] == L'\0') goto cleanup;
+    }
+
+cleanup:
+    while (component_count != 0u) CloseHandle(components[--component_count]);
+    CloseHandle(root_handle);
+    return success;
 }

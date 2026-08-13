@@ -56,6 +56,11 @@ typedef struct PlatformFile { void* data; size_t size; } PlatformFile;
 // policy, and an on-disk file's size must never be able to trigger it.
 bool platform_file_size (const char* path, size_t* out_size);
 bool platform_file_read (const char* path, Allocator alloc, PlatformFile* out);
+// Same-handle bounded read for externally mutable files. The opened file's size is
+// checked against `max_bytes` before allocation and the same handle supplies all
+// bytes. On failure both `out` and the allocator remain untouched.
+bool platform_file_read_bounded(const char* path, size_t max_bytes,
+                                Allocator alloc, PlatformFile* out);
 // Asset-root read: `relative_path` is a forward-slash relative path. The platform
 // opens and binds every component without write/delete sharing, rejects reparse
 // points, multi-link file aliases, and root escapes, derives size from the final
@@ -68,6 +73,12 @@ bool platform_file_read_rooted(const char* root, const char* relative_path,
 // pre-existing .tmp is never overwritten; that collision returns false and leaves
 // both files untouched.
 bool platform_file_write(const char* path, const void* data, size_t size);
+// Root-confined atomic write. Every existing parent component is held open without
+// following reparses or permitting write/delete sharing through the handle-bound
+// commit. Parent directories must already exist. The final file may be created or
+// replaced; a pre-existing predictable `.tmp` still fails closed.
+bool platform_file_write_rooted(const char* root, const char* relative_path,
+                                const void* data, size_t size);
 
 // ---- Diagnostics ----
 void platform_log  (const char* fmt, ...);

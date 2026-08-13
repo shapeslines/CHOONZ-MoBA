@@ -102,6 +102,16 @@ add_test(NAME assets_boundary
 add_test(NAME asset_parsers_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_asset_parsers_boundary.cmake")
+add_test(NAME cooker_cli
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/assets/cooker_cli_tests.ps1"
+            -Cooker $<TARGET_FILE:moba_cooker>
+            -SourceTga "${CMAKE_SOURCE_DIR}/assets/uv_test.tga"
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}"
+            -GuardScript "${CMAKE_SOURCE_DIR}/tools/fresh-walk-guard.ps1")
+set_tests_properties(cooker_cli PROPERTIES
+    PASS_REGULAR_EXPRESSION
+        "cooker CLI: deterministic texture/sound publication and failure matrix passed")
 add_test(NAME core_invariant_tripwire
     COMMAND ${CMAKE_COMMAND}
             -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>

@@ -53,9 +53,31 @@ and Release. Open a draft PR after the green checkpoint.
 - The direct M4.0 registry loaders intentionally remain until S4 replaces them with
   the catalog-driven baked-only runtime in one vertical change.
 
-### S3 — Deterministic cooker and generated catalog — next
+### S3 — Deterministic cooker and generated catalog — complete
 
-### S4 — Catalog-driven baked-only runtime — pending
+Done-condition: a strict invocation preflights the complete manifest, publishes
+asset containers before the generated catalog commit marker, produces identical
+Debug/Release bytes, and leaves unchanged outputs untouched.
+
+- `moba_cooker` accepts only the four required option/value pairs, normalizes and
+  validates a CMake-generated sorted manifest, and supports only `.tga` and `.wav`.
+- Preflight rejects non-canonical/unsorted paths, duplicate paths, IDs, symbols, or
+  outputs, unsupported types, malformed source data, oversized manifests/sources,
+  and aggregate/output arithmetic overflow before publication.
+- Each source becomes `<logical-path>.mba`; the catalog is sorted by `AssetId` and
+  publishes last as `assets/asset_ids.gen.h`. Existing byte-identical files are not
+  rewritten.
+- Rooted reads and writes bind every existing path component, reject reparses and
+  escapes, and perform bounded same-handle reads plus create-only temporary,
+  handle-based atomic replacement.
+- The adversarial CLI fixture owns its temporary root through atomic
+  `NtCreateFile(FILE_CREATE)` acquisition and handle-bound cleanup. Fresh security
+  rereview returned PASS after the manifest-read and fixture-custody repairs.
+- `/WX` Debug and Release builds pass; both configurations pass 46/46 CTest entries.
+  Independent cooks, unchanged recook mtimes, and Debug-versus-Release byte
+  comparison pass for one TGA and one PCM WAV fixture.
+
+### S4 — Catalog-driven baked-only runtime — next
 
 ### S5 — CMake content gate and sandbox migration — pending
 

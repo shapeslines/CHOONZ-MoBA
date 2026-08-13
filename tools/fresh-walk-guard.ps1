@@ -12,14 +12,22 @@ using Microsoft.Win32.SafeHandles;
 
 public static class MobaFreshWalkNative {
     private const uint DeleteAccess = 0x00010000;
+    private const uint Synchronize = 0x00100000;
+    private const uint FileListDirectory = 0x00000001;
     private const uint FileReadAttributes = 0x00000080;
     private const uint GenericWrite = 0x40000000;
     private const uint ShareRead = 0x1;
     private const uint ShareWrite = 0x2;
     private const uint ShareDelete = 0x4;
     private const uint OpenExisting = 3;
+    private const uint FileCreate = 2;
+    private const uint FileAttributeNormal = 0x00000080;
+    private const uint FileDirectoryFile = 0x00000001;
+    private const uint FileSynchronousIoNonAlert = 0x00000020;
     private const uint BackupSemantics = 0x02000000;
     private const uint OpenReparsePoint = 0x00200000;
+    private const uint ObjectCaseInsensitive = 0x00000040;
+    private const uint ObjectDontReparse = 0x00001000;
     private const uint FsctlSetReparsePoint = 0x000900A4;
     private const uint IoReparseTagMountPoint = 0xA0000003;
 
@@ -43,10 +51,41 @@ public static class MobaFreshWalkNative {
         public uint FileIndexLow;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnicodeString {
+        public ushort Length;
+        public ushort MaximumLength;
+        public IntPtr Buffer;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ObjectAttributes {
+        public uint Length;
+        public IntPtr RootDirectory;
+        public IntPtr ObjectName;
+        public uint Attributes;
+        public IntPtr SecurityDescriptor;
+        public IntPtr SecurityQualityOfService;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoStatusBlock {
+        public IntPtr Status;
+        public UIntPtr Information;
+    }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFileW(
         string path, uint desiredAccess, uint shareMode, IntPtr securityAttributes,
         uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtCreateFile(
+        out IntPtr fileHandle, uint desiredAccess,
+        ref ObjectAttributes objectAttributes, ref IoStatusBlock ioStatusBlock,
+        IntPtr allocationSize, uint fileAttributes, uint shareAccess,
+        uint createDisposition, uint createOptions, IntPtr eaBuffer,
+        uint eaLength);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -90,6 +129,62 @@ public static class MobaFreshWalkNative {
         // final handle-bound disposition after the children are gone.
         return OpenDirectory(
             path, DeleteAccess | FileReadAttributes, ShareRead);
+    }
+
+    public static SafeFileHandle CreateOwnedCleanupDirectory(
+        string parentPath, string childName) {
+        if (String.IsNullOrEmpty(parentPath) || String.IsNullOrEmpty(childName) ||
+            childName.IndexOfAny(new char[] {'\\', '/', ':'}) >= 0)
+            throw new ArgumentException("A single child name is required.", "childName");
+
+        using (SafeFileHandle parent = OpenDirectory(
+            parentPath, FileListDirectory | FileReadAttributes,
+            ShareRead | ShareWrite | ShareDelete)) {
+            ByHandleFileInformation parentInformation = Information(parent);
+            if ((parentInformation.FileAttributes & 0x10) == 0 ||
+                (parentInformation.FileAttributes & 0x400) != 0)
+                throw new IOException("Owned-directory parent is not a normal directory.");
+
+            IntPtr nameBuffer = Marshal.StringToHGlobalUni(childName);
+            IntPtr nameStorage = IntPtr.Zero;
+            try {
+                int nameBytes = checked(childName.Length * 2);
+                if (nameBytes == 0 || nameBytes > UInt16.MaxValue)
+                    throw new PathTooLongException(childName);
+                UnicodeString name = new UnicodeString();
+                name.Length = (ushort)nameBytes;
+                name.MaximumLength = (ushort)nameBytes;
+                name.Buffer = nameBuffer;
+                nameStorage = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(UnicodeString)));
+                Marshal.StructureToPtr(name, nameStorage, false);
+
+                ObjectAttributes attributes = new ObjectAttributes();
+                attributes.Length = (uint)Marshal.SizeOf(typeof(ObjectAttributes));
+                attributes.RootDirectory = parent.DangerousGetHandle();
+                attributes.ObjectName = nameStorage;
+                attributes.Attributes = ObjectCaseInsensitive | ObjectDontReparse;
+                IoStatusBlock statusBlock = new IoStatusBlock();
+                IntPtr created;
+                int status = NtCreateFile(
+                    out created,
+                    DeleteAccess | Synchronize | FileListDirectory | FileReadAttributes,
+                    ref attributes, ref statusBlock, IntPtr.Zero,
+                    FileAttributeNormal, ShareRead, FileCreate,
+                    FileDirectoryFile | FileSynchronousIoNonAlert | OpenReparsePoint,
+                    IntPtr.Zero, 0);
+                if (status < 0 || created == IntPtr.Zero || created == new IntPtr(-1)) {
+                    if (created != IntPtr.Zero && created != new IntPtr(-1))
+                        new SafeFileHandle(created, true).Dispose();
+                    throw new IOException(String.Format(
+                        "Atomic directory creation failed (NTSTATUS 0x{0:X8}).",
+                        unchecked((uint)status)));
+                }
+                return new SafeFileHandle(created, true);
+            } finally {
+                if (nameStorage != IntPtr.Zero) Marshal.FreeHGlobal(nameStorage);
+                Marshal.FreeHGlobal(nameBuffer);
+            }
+        }
     }
 
     public static string DirectoryIdentity(SafeFileHandle handle) {
@@ -273,7 +368,10 @@ function Assert-FreshWalkLocation([string]$Path, [string]$TempRoot, [string]$Sou
     return $trimmedPath
 }
 
-function New-FreshWalkLease([string]$CloneDir, [string]$SourceRoot) {
+function New-FreshWalkLease(
+    [string]$CloneDir,
+    [string]$SourceRoot,
+    [switch]$CreateOwnedDirectory) {
     $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
     $clonePath = Assert-FreshWalkLocation $CloneDir $tempRoot $SourceRoot
     if (Test-Path -LiteralPath $clonePath) {
@@ -287,6 +385,14 @@ function New-FreshWalkLease([string]$CloneDir, [string]$SourceRoot) {
         throw "CloneDir must not already exist: $clonePath"
     }
 
+    $custodyHandle = $null
+    if ($CreateOwnedDirectory) {
+        $parentPath = [System.IO.Path]::GetDirectoryName($clonePath)
+        $childName = [System.IO.Path]::GetFileName($clonePath)
+        $custodyHandle = [MobaFreshWalkNative]::CreateOwnedCleanupDirectory(
+            $parentPath, $childName)
+    }
+
     $token = [Guid]::NewGuid().ToString('N')
     return [pscustomobject]@{
         ClonePath = $clonePath
@@ -295,6 +401,7 @@ function New-FreshWalkLease([string]$CloneDir, [string]$SourceRoot) {
         MarkerName = "moba-fresh-walk-lease-$token"
         Token = $token
         Identity = $null
+        CustodyHandle = $custodyHandle
     }
 }
 
@@ -326,8 +433,12 @@ function Initialize-FreshWalkLease($Lease) {
         $stream.Dispose()
     }
 
-    $Lease.Identity = [MobaFreshWalkNative]::DirectoryIdentity($clonePath)
-    Assert-FreshWalkLease $Lease
+    $Lease.Identity = if ($null -eq $Lease.CustodyHandle) {
+        [MobaFreshWalkNative]::DirectoryIdentity($clonePath)
+    } else {
+        [MobaFreshWalkNative]::DirectoryIdentity($Lease.CustodyHandle)
+    }
+    Assert-FreshWalkLease $Lease $Lease.CustodyHandle
 }
 
 function Assert-FreshWalkLease($Lease, $DirectoryHandle = $null) {
@@ -370,7 +481,12 @@ function Remove-FreshWalkLease(
     # validation through final disposition. This closes the path-swap interval:
     # the root cannot be renamed or replaced while its children are removed, and
     # the root itself is deleted through the verified handle rather than by path.
-    $handle = [MobaFreshWalkNative]::OpenCleanupDirectory($Lease.ClonePath)
+    $usesCustody = $null -ne $Lease.CustodyHandle
+    $handle = if ($usesCustody) {
+        $Lease.CustodyHandle
+    } else {
+        [MobaFreshWalkNative]::OpenCleanupDirectory($Lease.ClonePath)
+    }
     try {
         Assert-FreshWalkLease $Lease $handle
         if ($null -ne $AfterValidation) {
@@ -387,6 +503,7 @@ function Remove-FreshWalkLease(
         [MobaFreshWalkNative]::MarkObjectForDelete($handle)
     } finally {
         $handle.Dispose()
+        if ($usesCustody) { $Lease.CustodyHandle = $null }
     }
 
     if (Test-Path -LiteralPath $Lease.ClonePath) {

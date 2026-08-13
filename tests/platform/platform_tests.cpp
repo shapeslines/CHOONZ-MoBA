@@ -245,6 +245,90 @@ TEST(platform, rooted_file_read_binds_components_and_rejects_junction_escape) {
     CHECK(test_release_owned_directory(&outside));
 }
 
+TEST(platform, rooted_file_write_is_atomic_and_rejects_junction_escape) {
+    OwnedTestDirectory root{};
+    OwnedTestDirectory outside{};
+    root.scope_custody = INVALID_HANDLE_VALUE;
+    root.directory_custody = INVALID_HANDLE_VALUE;
+    outside.scope_custody = INVALID_HANDLE_VALUE;
+    outside.directory_custody = INVALID_HANDLE_VALUE;
+    const bool root_owned = test_create_owned_directory("write-root", &root);
+    CHECK(root_owned);
+    if (!root_owned) return;
+    const bool outside_owned = test_create_owned_directory("write-outside", &outside);
+    CHECK(outside_owned);
+    if (!outside_owned) {
+        CHECK(test_release_owned_directory(&root));
+        return;
+    }
+
+    char destination[256];
+    char temporary[260];
+    char escaped[256];
+    wchar_t junction[256];
+    const int destination_chars = std::snprintf(
+        destination, sizeof(destination), "%s/inside.bin", root.path);
+    const int temporary_chars = std::snprintf(
+        temporary, sizeof(temporary), "%s/inside.bin.tmp", root.path);
+    const int escaped_chars = std::snprintf(
+        escaped, sizeof(escaped), "%s/escaped.bin", outside.path);
+    const int junction_chars = swprintf_s(junction, L"%s\\escape", root.wide_path);
+    const bool paths_ready = destination_chars > 0 && temporary_chars > 0 &&
+        escaped_chars > 0 && junction_chars > 0;
+    CHECK(paths_ready);
+    if (!paths_ready) {
+        CHECK(test_release_owned_directory(&root));
+        CHECK(test_release_owned_directory(&outside));
+        return;
+    }
+
+    const char* first = "rooted-first";
+    const char* second = "rooted-second";
+    CHECK(platform_file_write_rooted(root.path, "inside.bin", first,
+                                     std::strlen(first)));
+
+    alignas(16) uint8_t memory[512];
+    Arena arena;
+    Allocator alloc = test_arena_alloc(&arena, memory, sizeof(memory));
+    PlatformFile file{};
+    CHECK(platform_file_read_rooted(root.path, "inside.bin", 64u, alloc, &file));
+    CHECK(file.size == std::strlen(first) &&
+          std::memcmp(file.data, first, file.size) == 0);
+
+    const char* sentinel = "stale-temp";
+    CHECK(platform_file_write(temporary, sentinel, std::strlen(sentinel)));
+    CHECK(!platform_file_write_rooted(root.path, "inside.bin", second,
+                                      std::strlen(second)));
+    arena.offset = 0u;
+    CHECK(platform_file_read_rooted(root.path, "inside.bin", 64u, alloc, &file));
+    CHECK(file.size == std::strlen(first) &&
+          std::memcmp(file.data, first, file.size) == 0);
+    arena.offset = 0u;
+    CHECK(platform_file_read_rooted(root.path, "inside.bin.tmp", 64u, alloc, &file));
+    CHECK(file.size == std::strlen(sentinel) &&
+          std::memcmp(file.data, sentinel, file.size) == 0);
+
+    CHECK(!platform_file_write_rooted(root.path, "../escaped.bin", second,
+                                      std::strlen(second)));
+    CHECK(!platform_file_write_rooted(root.path, "bad\\escaped.bin", second,
+                                      std::strlen(second)));
+    CHECK(GetFileAttributesA(escaped) == INVALID_FILE_ATTRIBUTES);
+
+    const bool junction_created = test_create_junction(junction, outside.wide_path);
+    CHECK(junction_created);
+    if (junction_created) {
+        CHECK(!platform_file_write_rooted(root.path, "escape/escaped.bin", second,
+                                          std::strlen(second)));
+        CHECK(GetFileAttributesA(escaped) == INVALID_FILE_ATTRIBUTES);
+        CHECK(RemoveDirectoryW(junction) != 0);
+    }
+
+    CHECK(DeleteFileA(temporary) != 0);
+    CHECK(DeleteFileA(destination) != 0);
+    CHECK(test_release_owned_directory(&root));
+    CHECK(test_release_owned_directory(&outside));
+}
+
 TEST(platform, owned_test_directory_scope_cannot_be_replaced_while_bound) {
     OwnedTestDirectory owned{};
     owned.scope_custody = INVALID_HANDLE_VALUE;
@@ -300,6 +384,29 @@ TEST(platform, file_read_missing_fails_and_leaves_out_untouched) {
     CHECK(!platform_file_read("moba_io_does_not_exist.bin", al, &f));
     CHECK(f.data == (void*)(uintptr_t)0xC0FFEE && f.size == 123);
     CHECK(a.offset == 0);                               // nothing allocated on failure
+}
+
+TEST(platform, file_read_bounded_rejects_before_allocation) {
+    const char* path = "moba_io_bounded.bin";
+    const char* bytes = "bounded-same-handle-read";
+    std::remove(path);
+    CHECK(platform_file_write(path, bytes, std::strlen(bytes)));
+
+    alignas(16) uint8_t memory[256];
+    Arena arena;
+    Allocator alloc = test_arena_alloc(&arena, memory, sizeof(memory));
+    PlatformFile untouched{(void*)(uintptr_t)0xC0FFEEu, 123u};
+    CHECK(!platform_file_read_bounded(path, std::strlen(bytes) - 1u,
+                                      alloc, &untouched));
+    CHECK(untouched.data == (void*)(uintptr_t)0xC0FFEEu &&
+          untouched.size == 123u);
+    CHECK(arena.offset == 0u);
+
+    PlatformFile file{};
+    CHECK(platform_file_read_bounded(path, std::strlen(bytes), alloc, &file));
+    CHECK(file.size == std::strlen(bytes) &&
+          std::memcmp(file.data, bytes, file.size) == 0);
+    std::remove(path);
 }
 
 TEST(platform, file_write_overwrite_replaces_and_removes_tmp) {

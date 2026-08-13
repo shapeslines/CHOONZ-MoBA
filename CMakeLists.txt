@@ -54,6 +54,24 @@ if(Vulkan_FOUND AND Vulkan_VERSION VERSION_LESS "1.3.0")
         "hard minimum (1.3). Expect device-selection or feature failures.")
 endif()
 
+# M4.1 source discovery is owned by CMake, not a hand-maintained manifest. The
+# sorted LF-only file is the strict input to moba_cooker; CONFIGURE_DEPENDS asks
+# CMake to regenerate when a supported source appears or disappears.
+file(GLOB_RECURSE MOBA_CONTENT_SOURCE_FILES CONFIGURE_DEPENDS
+    RELATIVE "${CMAKE_SOURCE_DIR}/assets"
+    "${CMAKE_SOURCE_DIR}/assets/*.tga"
+    "${CMAKE_SOURCE_DIR}/assets/*.wav")
+list(SORT MOBA_CONTENT_SOURCE_FILES)
+set(MOBA_ASSET_MANIFEST_CONTENT "")
+foreach(asset_path IN LISTS MOBA_CONTENT_SOURCE_FILES)
+    file(TO_CMAKE_PATH "${asset_path}" asset_path)
+    string(APPEND MOBA_ASSET_MANIFEST_CONTENT "${asset_path}\n")
+endforeach()
+set(MOBA_ASSET_MANIFEST "${CMAKE_BINARY_DIR}/content/asset_manifest.txt")
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/content")
+file(GENERATE OUTPUT "${MOBA_ASSET_MANIFEST}"
+              CONTENT "${MOBA_ASSET_MANIFEST_CONTENT}")
+
 # --- Engine modules (M0.2 spine: the four that establish the link graph) ---
 add_subdirectory(engine/core)
 add_subdirectory(engine/math)
@@ -67,6 +85,7 @@ add_subdirectory(engine/game)   # M3.3: snapshot/interpolation presentation boun
 
 # --- Tools & tests ---
 enable_testing()                        # register CTest tests (M1.4); must be top-level
+add_subdirectory(tools/cooker)          # M4.1: deterministic TGA/WAV -> .mba + catalog
 add_subdirectory(tools/sandbox)         # M0.3: window + message loop
 add_subdirectory(tools/visualize)       # BMP dumps of the fixed-point math vs libm
 add_subdirectory(tools/replay)          # M3.0: deterministic replay record/inspect/verify
