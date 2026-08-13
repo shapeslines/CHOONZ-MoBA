@@ -20,7 +20,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # --- Options ---
 option(MOBA_WERROR "Treat warnings as errors (/WX) — on in CI/test, off locally" OFF)
 option(MOBA_ASAN "Build with AddressSanitizer (/fsanitize=address) — activates arena poison hooks (G10)" OFF)
-option(MOBA_VULKAN_REQUIRED "Hard-require the Vulkan SDK (find_package REQUIRED) — on in CI (G15)" OFF)
 
 # --- Project-wide flag/posture targets (must precede module add_subdirectory) ---
 include(cmake/CompilerWarnings.cmake)   # moba_warnings
@@ -28,28 +27,23 @@ include(cmake/EngineOptions.cmake)      # moba_options
 include(cmake/CompileShaders.cmake)     # add_shader_library()
 
 # --- Vulkan (ADR-0004: link HEADERS only; the loader is hand-loaded) ---
-# Soft by default (null backend when the SDK is absent — dev convenience); CI turns
-# MOBA_VULKAN_REQUIRED on so the real backend + shaders + validation are always gated
-# (G15). PIN (G12): project-pinned SDK is 1.4.357.0 (winget KhronosGroup.VulkanSDK);
-# the code gate is API 1.3 per ADR-0012 (dynamicRendering + synchronization2).
-if(MOBA_VULKAN_REQUIRED)
-    find_package(Vulkan REQUIRED)
-    message(STATUS "Vulkan SDK found (REQUIRED): ${Vulkan_INCLUDE_DIRS}")
-else()
-    find_package(Vulkan QUIET)
-    if(Vulkan_FOUND)
-        message(STATUS "Vulkan SDK found: ${Vulkan_INCLUDE_DIRS}")
-    else()
+# Soft for the M0.2 spine (render is an empty skeleton). Becomes REQUIRED at Phase 2
+# (Vulkan bring-up). Install the LunarG Vulkan SDK (sets VULKAN_SDK) before then.
+# PIN (G12): project-pinned SDK is 1.4.357.0 (winget KhronosGroup.VulkanSDK); the
+# code gate is API 1.3 per ADR-0012 (dynamicRendering + synchronization2).
+find_package(Vulkan QUIET)
+if(Vulkan_FOUND)
+    message(STATUS "Vulkan SDK found: ${Vulkan_INCLUDE_DIRS}")
+    if(Vulkan_VERSION VERSION_LESS "1.3.0")
         message(WARNING
-            "Vulkan SDK NOT found (VULKAN_SDK unset). The 'render' module builds as "
-            "the null backend. Install the LunarG Vulkan SDK (README pin) or build "
-            "with -DMOBA_VULKAN_REQUIRED=ON.")
+            "Vulkan headers report API ${Vulkan_VERSION} — older than the ADR-0012 "
+            "hard minimum (1.3). Expect device-selection or feature failures.")
     endif()
-endif()
-if(Vulkan_FOUND AND Vulkan_VERSION VERSION_LESS "1.3.0")
+else()
     message(WARNING
-        "Vulkan headers report API ${Vulkan_VERSION} — older than the ADR-0012 "
-        "hard minimum (1.3). Expect device-selection or feature failures.")
+        "Vulkan SDK NOT found (VULKAN_SDK unset). The 'render' module builds as an "
+        "empty skeleton for now. Install the LunarG Vulkan SDK before Phase 2 — it "
+        "becomes REQUIRED there (find_package(Vulkan REQUIRED)).")
 endif()
 
 # --- Engine modules (M0.2 spine: the four that establish the link graph) ---
