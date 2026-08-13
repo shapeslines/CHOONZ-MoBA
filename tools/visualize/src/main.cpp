@@ -11,6 +11,7 @@
 // whole point is to compare the deterministic fixed-point path against real math.
 // Usage: visualize [out_dir]   (default ".")
 #include "math/fix.h"
+#include <cstddef>
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
@@ -86,6 +87,17 @@ static bool write_bmp(const char* path) {
     return true;
 }
 
+static bool make_output_path(const char* dir, const char* name, char* path,
+                             std::size_t path_capacity) {
+    if (!dir || !name || !path || path_capacity == 0) return false;
+    int written = std::snprintf(path, path_capacity, "%s/%s", dir, name);
+    if (written < 0 || static_cast<std::size_t>(written) >= path_capacity) {
+        std::printf("  ERROR: output path too long for %s\n", name);
+        return false;
+    }
+    return true;
+}
+
 static const double PI = 3.14159265358979323846;
 
 // fix_sin / fix_cos over [0,2pi) vs the libm reference.
@@ -106,7 +118,8 @@ static bool draw_sin_cos(const char* dir) {
         dot(x, fs, SIN); dot(x, fc, COS);
         ps = fs; pc = fc;
     }
-    char path[512]; std::snprintf(path, sizeof(path), "%s/fix_sin_cos.bmp", dir);
+    char path[512];
+    if (!make_output_path(dir, "fix_sin_cos.bmp", path, sizeof(path))) return false;
     return write_bmp(path);
 }
 
@@ -124,7 +137,8 @@ static bool draw_trig_error(const char* dir) {
         dot(x, ymap(es, lo, hi), SIN);
         dot(x, ymap(ec, lo, hi), COS);
     }
-    char path[512]; std::snprintf(path, sizeof(path), "%s/fix_trig_error.bmp", dir);
+    char path[512];
+    if (!make_output_path(dir, "fix_trig_error.bmp", path, sizeof(path))) return false;
     return write_bmp(path);
 }
 
@@ -149,7 +163,8 @@ static bool draw_sqrt(const char* dir) {
         int ey = ymap(std::sqrt(xx) + (fv - std::sqrt(xx)) * 4000.0, lo, hi);
         put(x, ey, TOL);
     }
-    char path[512]; std::snprintf(path, sizeof(path), "%s/fix_sqrt.bmp", dir);
+    char path[512];
+    if (!make_output_path(dir, "fix_sqrt.bmp", path, sizeof(path))) return false;
     return write_bmp(path);
 }
 
