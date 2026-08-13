@@ -8,6 +8,53 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 13 — 2026-08-13 — Phase 4 M4.0 direct asset foundation
+
+**Scope:** establish stable asset identity and lifetimes, promote the bootstrap TGA path into the
+engine, add strict direct WAV loading, and route the sandbox texture through the asset registry
+without starting the M4.1 cooker.
+
+**Outcome:** implementation and local acceptance are complete on draft PR #52. `eng_assets` now
+owns normalized relative-path FNV-1a/64 IDs, a transactional fixed-capacity arena-backed SoA
+registry, deterministic generational handles, level bulk-unload, small global refcounts, bounded
+direct TGA/WAV loads, and a Vulkan-free renderer callback. The existing renderer-owned loose SPIR-V
+path is unchanged.
+
+### What changed
+
+- Canonical path normalization lowercases ASCII, normalizes separators, removes repeated and `.`
+  segments, and rejects traversal, absolute/drive paths, controls, and truncation. Stored canonical
+  paths turn a runtime hash collision into a hard rejection instead of an alias.
+- Persistent registry metadata, level payloads, global payloads, and I/O scratch use distinct
+  caller-owned arenas. Invalid/under-budget initialization and malformed/capacity failures are
+  mutation-free; level unload invalidates every stale handle and rewinds in O(1).
+- TGA type 2/type 10 true-color decoding covers 24/32-bit pixels and both vertical origins. WAV
+  accepts a strict RIFF PCM subset with exact chunk padding, rates, alignment, and sample widths.
+- The stat/open file-growth interval is bounded by a loader allocator; scratch rewinds after every
+  result and durable state commits only after complete decode.
+- The sandbox no longer compiles its own TGA decoder or reads the texture file directly. It binds
+  registry upload/destroy callbacks to the existing renderer seam and preserves GPU ownership order.
+- `assets_boundary` permanently rejects renderer, Vulkan, sim, or direct sandbox decode coupling.
+
+### Verification
+
+- CI-preset `/WX` Debug, RelWithDebInfo, and Release build 97/97 targets and pass 43/43 tests each.
+  Debug-ASan also builds 97/97 and passes 43/43; clang-cl/UBSan passes 6/6.
+- Debug/Release retain the exact 10,000-tick oracle: 923 commands, final
+  `0x637628abff59c823`, stream `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`.
+- An RTX 4070 Ti Vulkan run completed 90 validation-clean frames with the asset-managed 64×64
+  texture, 64 objects, one scene draw, clean shutdown, and a visually inspected screenshot.
+- GitHub CI/CodeQL passed all eight checks on implementation head `dc5e208`; the final documentation
+  head must repeat that exact-head result before readiness.
+
+### Next
+
+Commit and push the evidence closure, obtain final acceptance, and promote PR #52 only after its
+exact head is green. Merge remains an explicit owner decision. After landing and synchronizing
+`main`, open M4.1 as a separate cooker/`.mba` slate; do not stack it on this branch.
+
+---
+
 ## Session 12 — 2026-08-13 — Interphase security consolidation
 
 **Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and

@@ -1,8 +1,10 @@
 # Phase 4 M4.0 Slate - Direct Assets and Lifetime Registry
 
-**Status:** active
+**Status:** local acceptance complete; draft PR #52 awaits final exact-head checks and ready state
 
 **Branch:** `codex/m4.0-assets`
+
+**PR:** #52 — `Phase 4 M4.0: direct assets and lifetime registry`
 
 **Base:** merged `main` at `a2565cafc89942b834b1fe310b72cf1acf9ec8d5`
 
@@ -30,7 +32,9 @@ record and commit the green checkpoint, then advance.
 - [x] Stable `AssetId` plus transactional arena-backed registry and lifetime tests.
 - [x] Promote TGA and add bounded WAV parsing/file loads.
 - [x] Route the sandbox texture through `eng_assets` and prove unload ownership.
-- [ ] Full Debug/RelWithDebInfo/Release, ASan, oracle, boundary, fresh review, and PR.
+- [x] Full Debug/RelWithDebInfo/Release, ASan, oracle, boundary, and Vulkan acceptance.
+- [ ] Commit the evidence record, pass that exact head's GitHub checks, obtain acceptance, and mark
+  PR #52 ready. Merge remains separately owner-approved.
 
 ## Locked decisions
 
@@ -73,3 +77,19 @@ record and commit the green checkpoint, then advance.
 - Material teardown precedes registry shutdown; registry shutdown returns texture
   destruction through the renderer callback before renderer destruction.
 - Focused asset/boundary/oracle gate: 6/6. Full Debug CTest: 43/43.
+
+### Final local acceptance
+
+- `/WX` Debug, RelWithDebInfo, and Release builds complete 97/97 targets; every configuration passes
+  43/43 CTest entries.
+- Debug-ASan completes 97/97 targets and 43/43 tests. clang-cl 19.1.5 plus UBSan passes its runtime
+  tripwire and 6/6 deterministic/isolation tests.
+- Direct Debug and Release 10,000-tick runs both report 923 commands, final
+  `0x637628abff59c823`, stream `0x6f381609f7e59f0c`, and unchanged logic
+  `0xab96814425ba80a4`.
+- RelWithDebInfo Vulkan acceptance completes 90 frames on an RTX 4070 Ti with validation enabled,
+  the asset-managed 64×64 texture id `0x3d9bff0eddada061`, 64 objects, one scene draw, and a visually
+  inspected 1280×720 screenshot.
+- Implementation checkpoints are `ad4d3da` (identity/registry), `7a1c352` (bounded direct loaders),
+  and `dc5e208` (sandbox integration). All eight CI/CodeQL checks on `dc5e208` passed; the final
+  documentation head must earn the same exact-head result before readiness.

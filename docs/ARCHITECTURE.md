@@ -92,7 +92,7 @@ initialization. `eng_sim` itself resolves only to `eng_core`, `eng_math`, and `e
 | Render | `eng_render` | Raw Vulkan backend behind the thin renderer seam; bring-up, frames-in-flight, own device-memory allocator, pipelines, instanced forward draw | no | **yes (only here)** |
 | Sim | `eng_sim` | arena-backed sparse-set SoA world, ordered views, typed events, explicit systems/tick schedule, canonical hash/diff, replay codec | no | no |
 | Net | `eng_net` | Server loop driving sim_tick, per-client baseline/delta snapshots + interest management, client prediction/reconciliation, lag-comp history ring, own UDP reliability, command codec, replay, divergence detection | via platform seam | no |
-| Assets | `eng_assets` | Own PNG/glTF/WAV/TGA parsers, baked `.mba` container, runtime loader, resource registry | via platform seam | no (hands blobs to render seam) |
+| Assets | `eng_assets` | normalized stable IDs, arena-backed registry/lifetimes, bounded direct TGA/WAV loaders; cooker formats arrive in M4.1+ | via platform seam | no (Vulkan-free upload/destroy callback) |
 | Serialize | `eng_serialize` | Bounded, sticky, allocation-free LE byte readers/writers shared by net + replay + asset codecs | no | no |
 | Game/present | `eng_game` | Arena-backed previous/current snapshots, read-only extraction, identity-aware interpolation, the sole fixed→float conversion, and `DrawItem` construction | no | no (uses `eng_render_common`) |
 
@@ -286,13 +286,13 @@ moba-game/
 │  ├─ serialize/ include/serialize/*.h src/*.cpp  # LE byte readers/writers
 │  ├─ platform/  include/platform/*.h  src/win32/*.cpp   # the OS seam + impl
 │  ├─ render/    include/render/*.h    src/vk/*.cpp       # raw Vulkan
-│  ├─ assets/    include/assets/*.h    src/*.cpp          # parsers, .mba loader, registry
+│  ├─ assets/    include/assets/*.h    src/*.cpp          # stable IDs, direct TGA/WAV, registry
 │  ├─ sim/       include/sim/*.h       src/*.cpp          # config derivative + deterministic sim/ECS
 │  └─ net/       include/net/*.h       src/*.cpp          # server-auth + UDP
 ├─ game/         src/main_win32.cpp  src/game_*.cpp  src/present/*.cpp
 ├─ tools/
 │  ├─ sandbox/   # day-one bring-up: window + clear
-│  └─ cooker/    # offline asset baker (links eng_assets parsers; MAY use STL)
+│  └─ cooker/    # M4.1 offline asset baker (POD parser seam; MAY use STL)
 ├─ shaders/      # *.vert/.frag/.comp (LF, committed)
 ├─ assets/       # source PNG/glTF/WAV/TTF (Git LFS candidate later)
 ├─ tests/        # engine_tests exe (own harness, links eng_core_group; NO STL, NO gtest)
@@ -1112,15 +1112,17 @@ Two tiers: loose source files in dev, baked by an **offline cooker** (`tools/coo
 
 | Asset | Author | Parsed where | Runtime sees |
 |---|---|---|---|
-| Texture | **PNG** (prod) / **TGA** (bootstrap) | PNG: cooker only. TGA: cooker + direct runtime loader early | RGBA8 mip chain |
+| Texture | **PNG** (prod) / **TGA** (bootstrap) | PNG: cooker only. TGA type 2/10, 24/32-bit: direct runtime now | RGBA8 pixels (mips arrive in the cooker) |
 | Mesh | **glTF 2.0 binary `.glb`** (strict subset) | cooker only | flat SoA vertex streams + index buffer + material refs |
-| Audio | **WAV** now, OGG later | WAV: direct runtime. OGG: deferred, cooker-only | raw PCM |
+| Audio | **WAV** now, OGG later | strict RIFF PCM, 1–2 channels, 8/16/24/32-bit: direct runtime. OGG: deferred | raw PCM |
 | Font | bitmap atlas first; **TTF** later | atlas: cooker. TTF: deferred, cooker-only | glyph atlas + metrics |
 | Shader | **GLSL** | `glslc` at build time (§3.4) | **loose `.spv`**, loaded via platform file API (not `.mba`) |
 
-Heavy parsers (DEFLATE for PNG, glTF JSON) live **only** in the cooker. The runtime has one loader and a switch on a type tag.
+Heavy parsers (DEFLATE for PNG, glTF JSON) live **only** in the future cooker. The unified
+type-tagged runtime loader begins in M4.1; M4.0 deliberately keeps only the bounded direct bootstrap
+paths. Loose raw `.spv` remains renderer-owned under ADR-0008.
 
-### 11.2 The baked container (`.mba`)
+### 11.2 The baked container (`.mba`, M4.1)
 
 One outer header for every asset type; a typed POD payload, little-endian, naturally aligned, designed so GPU upload points directly at a loaded offset with no per-element fixup.
 
@@ -1135,16 +1137,36 @@ Every load is: read header → validate magic/version (mismatch hard-rejects →
 
 ### 11.3 Runtime registry & lifetime
 
-A SoA registry keyed by `AssetHandle` (§2.3 ABI): parallel `generation/type/state/asset_id/cpu_blob/gpu/refcount` arrays.
+A fixed-capacity SoA registry keyed by `AssetHandle` (§2.3 ABI) owns parallel generation, liveness,
+type, state, lifetime, stable ID, CPU blob, typed GPU-handle bits, refcount, metadata, canonical path,
+and deterministic free-stack arrays. Sparse lookup is by `AssetId`; the stored canonical path is
+checked as well, so an observed hash collision fails closed instead of aliasing another asset.
 
-- **Level assets (the majority):** owned by a `level_arena`. `assets_unload_level()` resets it in O(1), bumps generations (invalidating dangling handles), and tells the renderer to free that GPU batch. Ideal for a MOBA (load match-start, free match-end).
+`AssetId` is FNV-1a/64 over a lowercase normalized relative path (ADR-0010). Runtime normalization
+converts backslashes, collapses repeated separators and `.` segments, and rejects `..`, absolute or
+drive paths, controls, and truncation. Compile-time `asset_id("canonical/path")` accepts only already
+canonical literals. Asset identity therefore never depends on pointers, allocation order, or file
+load order.
+
+Initialization is transactional and uses four distinct caller-owned arenas: persistent registry
+metadata, level payloads, small global payloads, and rewindable I/O scratch. Loose loads impose a
+maximum file size before and during open/read so a stat/open growth race cannot escape the scratch
+budget; decode succeeds completely before durable registry or lifetime state is committed.
+
+- **Level assets (the majority):** owned by a `level_arena`. `assets_unload_level()` releases each GPU
+  handle through the renderer callback, invalidates every matching registry handle, and rewinds the
+  payload arena in O(1). Ideal for a MOBA (load match-start, free match-end).
 - **Global assets (small set — fonts, UI atlas, common shaders/default textures):** manual `refcount`, freed at zero.
 
 A `state`/`LOADING` field reserves the seam for a future job-system async loader; day-one loading is synchronous at level-load behind a loading screen.
 
 ### 11.4 GPU upload (rides the renderer seam)
 
-The asset layer **never calls Vulkan.** It produces a CPU blob + a `TextureDesc`/`MeshDesc` (shared structs in `render/renderer_types.h`) and calls the renderer's `renderer_create_texture`/`renderer_create_mesh` (§8.1), storing back the typed handle. The renderer owns staging, the transfer queue, and the device-memory allocator. Teardown and hot-reload both use the renderer's deferred-destroy (`frames_until_free`) so nothing in flight references a freed resource.
+The asset layer **never calls Vulkan.** M4.0 accepts a renderer-neutral texture upload/destroy
+callback table and stores only typed handle bits. The renderer owns staging, transfers, device memory,
+and deferred destruction; the sandbox binds this callback after renderer creation and releases asset
+materials before registry shutdown. Mesh callbacks arrive with the cooked mesh work rather than being
+invented in the direct-loader slice.
 
 ### 11.5 Hot-reload (dev-only)
 
@@ -1229,7 +1251,8 @@ All sim state is Q16.16 (§2.1), ticked at 30 Hz, ordered deterministically (§9
 - **Full-state hash cost** at hundreds of units × 30 Hz — full-hash is simplest and likely fine; revisit dirty/incremental hashing only if it shows up in a profile.
 - **Device-local block size / budget split** for the Phase-2 allocator on low-VRAM integrated GPUs — measure with real assets.
 - **Per-frame instance data:** storage buffer indexed by `gl_InstanceIndex` (flexible) vs vertex-input instanced binding (simpler first) — pick at the instanced milestone.
-- **Asset ID scheme:** hashed string path (friction-free, needs a cooker collision check + debug hash→name table) vs sequential manifest ints.
+- **Cooker collision-report/debug-table output:** runtime `AssetId` is resolved as normalized-path
+  FNV-1a/64 by ADR-0010; M4.1 must make build-time collisions actionable without changing that ABI.
 - **Prediction-divergence / server replay-hash cadence** (every tick vs every N).
 
 **Top risks & mitigations:**

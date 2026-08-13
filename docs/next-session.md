@@ -1,76 +1,55 @@
 # MOBA-proto — next session
 
-## State @ PR #51 final local acceptance · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ M4.0 final local acceptance · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
-Phase 3 M3.0–M3.4 is complete. Current `main` is `dc380a1` after documentation PR #26 landed; merge
-commit `227fc80` reconciles that base into the active interphase security
-consolidation is `codex/security-consolidation` / draft PR #51. Candidate `a89caf6` passed its full
-local and GitHub gates but failed the required security review, so it was not promoted. All three
-findings passed the complete matrix at `f0a56c4`/`7a0d130`, but fresh full security review found one
-remaining descendant cleanup race after root validation. The handle-bound descendant walker and
-exact child-swap/outside-sentinel fixture now pass.
-The first committed-head fresh walk passed through its 90-frame render but cleanup failed closed on
-Git read-only pack files. A superseded repair cleared only `READONLY` through each verified handle;
-it removed the preserved residue, and the fixture covers both that case and a real descendant
-junction. Implementation `6ae70c9` passed the then-current full matrix and fresh walk before the
-deeper full-review findings below.
-Fresh full review of `78055bc` then found cleanup still allowed in-place reparse writes, read-only
-attribute clearing could affect an outside hard link, and atomic file writes lost the create-only
-temporary handle before commit. The final repair denies write/delete sharing throughout cleanup,
-uses ignore-read-only disposition, and retains the atomic-write temporary through handle-based
-rename/disposition. At committed checkpoint `6716796`, real reparse, hard-link, and post-flush
-replacement fixtures pass; `/WX` Debug/RelWithDebInfo/Release pass 39/39 each; Debug-ASan passes
-39/39; clang-cl/UBSan passes 6/6; direct determinism retains the exact oracle/divergence; and a fresh
-92-target/39-test/90-frame walk completes secure cleanup. Focused security rereview passes. Only
-fresh full exact-head reviews and GitHub checks remain before readiness.
-Merge is still a separate owner decision. Do not begin M4.0 from this branch.
+Phase 3 M3.0–M3.4 and the interphase security consolidation are merged on `main`. PR #51 exact head
+`e516b46` landed as `a2565ca`, which is the synchronized base for the isolated
+`codex/m4.0-assets` worktree. Draft PR #52 contains only M4.0; the dirty historical root checkout was
+not modified.
 
-## Consolidation delivered
+Implementation is complete at checkpoint `dc5e208`:
 
-- PR #27 and PRs #29–#46 are accounted for in
-  [`security-consolidation-ledger.md`](security-consolidation-ledger.md); every approved source hunk
-  is retained or strengthened. PR #26 is already merged base provenance and its report is preserved
-  unchanged. PRs #47–#50 and the unfinished platform
-  memory worktree remain explicitly outside this slate.
-- CI has `workflow_dispatch`, `contents: read`, three immutable checkout v5.0.1 pins, and explicit
-  winget community-source selection. Fresh-walk deletion is constrained to a non-root direct temp
-  child and rejects files, roots, outside/nested paths, source-self targets, and reparse points.
-- Core Array/arena/HashMap arithmetic and Pool/HandlePool free-list state are guarded before mutation.
-  Platform atomic writes refuse pre-existing `.tmp` files and keep that exclusive object bound through
-  handle-based commit/cleanup; Vulkan and shader paths are restricted and
-  validated.
-- Sandbox/replay/test/visualizer parsing is canonical and side-effect-free on failure. Classifier logs
-  are bounded at 4 MiB; renderer capacity arithmetic rejects overflow/corrupt state before reads or
-  mutation.
-- Replay v1, command bytes, authoritative sim, asset APIs, and
-  `SIM_LOGIC_HASH = 0xab96814425ba80a4` are unchanged.
+- `eng_assets` owns normalized-path FNV-1a/64 `AssetId`, a fixed-capacity arena-backed generational
+  SoA registry, stable path lookup with collision rejection, level bulk-unload, and a small
+  refcounted global lifetime.
+- Direct TGA supports type 2/type 10, 24/32-bit true-color and both vertical origins; direct WAV
+  accepts the strict RIFF PCM subset (1–2 channels, 8/16/24/32-bit). Validation completes before
+  durable allocation or registry mutation.
+- Loose loads use a bounded allocator in the rewindable I/O arena, closing the stat/open growth
+  race. Initialization and failed loads preserve all caller arenas and registry state.
+- The renderer still owns GPU memory. `eng_assets` has no Vulkan/render/sim dependency and receives
+  only a Vulkan-free upload/destroy callback. The sandbox loads `uv_test.tga` through the registry
+  and tears down materials/assets before the renderer.
+- Raw loose `.spv` remains renderer-owned under ADR-0008. No `.mba`, cooker, PNG, glTF, hot reload,
+  gameplay, networking, or simulation behavior entered M4.0.
 
 ## Verified locally
 
-- `/WX` Debug, RelWithDebInfo, and Release builds; 39/39 CTest entries in every configuration.
-- Debug-ASan 39/39; clang-cl 19.1.5 + UBSan 6/6. The visualizer now stages its ASan runtime
-  app-locally, closing the one DLL-discovery failure found by the first sanitizer pass.
-- Direct oracle: 10,000 ticks, 923 commands, final `0x637628abff59c823`, stream
-  `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`; controlled divergence remains exactly
-  `tick=4321 field=position_x entity=7` (178,690 checks).
-- Guarded fresh clone: 92-target Debug build, 39/39, and 90-frame `SANDBOX_SMOKE=PASS`.
-- Local Vulkan: RTX 4070 Ti, Vulkan 1.3, validation on, clean 90-frame exit, visually inspected
-  2,764,854-byte 1280×720 screenshot.
+- CI-preset `/WX` Debug, RelWithDebInfo, and Release builds: 97/97 targets in each configuration;
+  CTest: 43/43 in each configuration.
+- Debug-ASan: 97/97 targets and 43/43 tests.
+- clang-cl 19.1.5 plus UBSan: runtime capability tripwire and 6/6 deterministic/isolation tests.
+- Debug and Release oracle: 10,000 ticks, 923 commands, final `0x637628abff59c823`, stream
+  `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`.
+- RTX 4070 Ti Vulkan 1.3, validation enabled: 90 clean frames, asset-managed 64×64 texture id
+  `0x3d9bff0eddada061`, 64 objects, one scene draw, and a visually inspected 1280×720 screenshot.
+- All eight GitHub CI/CodeQL checks passed on implementation head `dc5e208`. The documentation
+  closure commit must pass the same exact-head gate before PR #52 becomes ready.
 
 ## First action
 
-1. Publish the final local-acceptance evidence record.
-2. Obtain fresh full security and acceptance verdicts and require that exact head's MSVC matrix,
-   clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
-   then mark PR #51 ready.
-3. Stop for separate owner merge approval. After an exact-head squash merge, verify the merged tree
-   and `main` run (manual dispatch only if automatic push registration fails), then close
-   #27/#29–#46 with the landing SHA. PR #26 is already merged. Retain all source branches/worktrees.
-4. Only from synchronized green `main`, open a separate Phase 4 M4.0 asset-pipeline slate.
+1. Review and commit the M4.0 evidence/documentation closure, push it, and require all exact-head
+   GitHub checks.
+2. Obtain final acceptance and mark PR #52 ready only when local and hosted evidence agree.
+3. Stop for the explicit owner decision on squash-merging PR #52. After an authorized merge, verify
+   the recorded exact head landed and synchronize `main`.
+4. Open a separate M4.1 slate from that green `main`; do not stack cooker work on PR #52.
 
-## M4.0 boundary
+## M4.1 boundary
 
-M4.0 defines asset identity/lifetime and the direct TGA/WAV/SPIR-V loaders before cooker breadth.
-Keep source/baked assets, GPU upload ownership, and hot-reload generations explicit. Do not fold
-gameplay, networking, generic streaming, compression, or renderer redesign into the first asset
-slice; keep the Phase 3 oracle and structural/security gates permanent.
+M4.1 is the offline cooker plus one versioned little-endian `.mba` container. Keep the shared parser
+surface POD-only, emit byte-identical output from repeated full cooks, add build-time AssetId
+collision diagnostics/generated constants, and make the runtime reject bad magic/version/type/size
+before allocation. The first vertical proof is TGA → `.mba` texture → the existing registry/upload
+seam. No PNG inflate, glTF, incremental dependency graph, pack file, compression, hot reload,
+gameplay, or networking belongs in that slate.
