@@ -1,4 +1,4 @@
-# MOBA engine — top-level build. The CMake link graph IS the architecture (ADR-0006).
+# MOBA engine ΓÇö top-level build. The CMake link graph IS the architecture (ADR-0006).
 cmake_minimum_required(VERSION 3.28)
 
 project(moba LANGUAGES CXX VERSION 0.0.0)
@@ -18,9 +18,9 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Options ---
-option(MOBA_WERROR "Treat warnings as errors (/WX) — on in CI/test, off locally" OFF)
-option(MOBA_ASAN "Build with AddressSanitizer (/fsanitize=address) — activates arena poison hooks (G10)" OFF)
-option(MOBA_VULKAN_REQUIRED "Hard-require the Vulkan SDK (find_package REQUIRED) — on in CI (G15)" OFF)
+option(MOBA_WERROR "Treat warnings as errors (/WX) ΓÇö on in CI/test, off locally" OFF)
+option(MOBA_ASAN "Build with AddressSanitizer (/fsanitize=address) ΓÇö activates arena poison hooks (G10)" OFF)
+option(MOBA_VULKAN_REQUIRED "Hard-require the Vulkan SDK (find_package REQUIRED) ΓÇö on in CI (G15)" OFF)
 
 # --- Project-wide flag/posture targets (must precede module add_subdirectory) ---
 include(cmake/CompilerWarnings.cmake)   # moba_warnings
@@ -28,7 +28,7 @@ include(cmake/EngineOptions.cmake)      # moba_options
 include(cmake/CompileShaders.cmake)     # add_shader_library()
 
 # --- Vulkan (ADR-0004: link HEADERS only; the loader is hand-loaded) ---
-# Soft by default (null backend when the SDK is absent — dev convenience); CI turns
+# Soft by default (null backend when the SDK is absent ΓÇö dev convenience); CI turns
 # MOBA_VULKAN_REQUIRED on so the real backend + shaders + validation are always gated
 # (G15). PIN (G12): project-pinned SDK is 1.4.357.0 (winget KhronosGroup.VulkanSDK);
 # the code gate is API 1.3 per ADR-0012 (dynamicRendering + synchronization2).
@@ -48,7 +48,7 @@ else()
 endif()
 if(Vulkan_FOUND AND Vulkan_VERSION VERSION_LESS "1.3.0")
     message(WARNING
-        "Vulkan headers report API ${Vulkan_VERSION} — older than the ADR-0012 "
+        "Vulkan headers report API ${Vulkan_VERSION} ΓÇö older than the ADR-0012 "
         "hard minimum (1.3). Expect device-selection or feature failures.")
 endif()
 
@@ -59,6 +59,7 @@ add_subdirectory(engine/serialize)
 add_subdirectory(engine/platform)
 add_subdirectory(engine/sim)
 add_subdirectory(engine/render)
+add_subdirectory(engine/game)   # M3.3: game/present glue (fixed-tick loop + snapshots)
 
 # --- Tools & tests ---
 enable_testing()                        # register CTest tests (M1.4); must be top-level
@@ -68,4 +69,4 @@ add_subdirectory(tools/replay)          # M3.0: deterministic replay record/insp
 add_subdirectory(tests)                 # M1.4: self-registering harness + CTest suites
 # assets / net + cooker arrive in their phases.
 
-message(STATUS "moba spine configured — modules: eng_core eng_math eng_serialize eng_platform eng_sim eng_render")
+message(STATUS "moba spine configured ΓÇö modules: eng_core eng_math eng_serialize eng_platform eng_sim eng_render")
