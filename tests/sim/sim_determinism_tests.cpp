@@ -116,6 +116,81 @@ TEST(sim_determinism, ten_k_tick_record_stays_inside_cpu_time_ceiling) {
     CHECK(cpu_seconds < CEILING_SECONDS);
 }
 
+static const size_t CAPACITY_WORLD_BYTES = 4u * 1024u * 1024u;
+alignas(16) static uint8_t g_capacity_storage_a[CAPACITY_WORLD_BYTES];
+alignas(16) static uint8_t g_capacity_storage_b[CAPACITY_WORLD_BYTES];
+
+// G32: the world at documented capacity — 16,384 entities fully populated, ticked,
+// and churned through deferred destruction — must hash identically across two
+// independent runs. The 10,000-tick oracle proves determinism at 64 units; this
+// proves ordering, hashing, and recycle behavior at full load.
+TEST(sim_determinism, full_capacity_world_orders_hashes_and_churns_deterministically) {
+    SimWorldConfig config = sim_world_config_default();
+    CHECK(config.max_entities == SIM_DEFAULT_MAX_ENTITIES);
+    CHECK(sim_world_memory_required(config) <= CAPACITY_WORLD_BYTES);
+
+    SimWorld a{}, b{};
+    Arena arena_a{}, arena_b{};
+    CHECK(init_determinism_world(&a, &arena_a, g_capacity_storage_a, 42u));
+    CHECK(init_determinism_world(&b, &arena_b, g_capacity_storage_b, 42u));
+
+    uint32_t created = 0u;
+    for (;;) {
+        EntityId entity_a = entity_manager_create(&a.entities);
+        EntityId entity_b = entity_manager_create(&b.entities);
+        if (entity_a.h == HANDLE_NULL && entity_b.h == HANDLE_NULL) break;
+        CHECK(entity_a.h != HANDLE_NULL);
+        CHECK(entity_b.h != HANDLE_NULL);
+        CHECK(transform_pool_add(&a.transforms, entity_a, 1, 2, 3));
+        CHECK(transform_pool_add(&b.transforms, entity_b, 1, 2, 3));
+        CHECK(velocity_pool_add(&a.velocities, entity_a, 4, 5));
+        CHECK(velocity_pool_add(&b.velocities, entity_b, 4, 5));
+        CHECK(health_pool_add(&a.health, entity_a, 6, 7, 8u));
+        CHECK(health_pool_add(&b.health, entity_b, 6, 7, 8u));
+        ++created;
+    }
+    CHECK(created == SIM_DEFAULT_MAX_ENTITIES - SIM_MAX_UNITS);   // exhausted exactly
+
+    for (uint32_t tick = 0u; tick < 128u; ++tick) {
+        SimCommand commands[SIM_MAX_COMMANDS_PER_TICK]{};
+        uint32_t command_count = replay_generate_placeholder_commands(42u, tick, 2u, commands);
+        SimCommandBuffer command_buffer{commands, command_count};
+        CHECK(sim_tick(&a, &command_buffer));
+        CHECK(sim_tick(&b, &command_buffer));
+        CHECK(sim_hash_state(&a) != 0u);
+        CHECK(sim_hash_state(&a) == sim_hash_state(&b));
+    }
+
+    for (uint32_t unit = 1u; unit < SIM_MAX_UNITS; unit += 2u) {
+        CHECK(sim_destroy_deferred(&a, a.unit_entities[unit]));
+        CHECK(sim_destroy_deferred(&b, b.unit_entities[unit]));
+    }
+    for (uint32_t tick = 0u; tick < 32u; ++tick) {
+        CHECK(sim_tick(&a, nullptr));
+        CHECK(sim_tick(&b, nullptr));
+        CHECK(sim_hash_state(&a) == sim_hash_state(&b));
+    }
+
+    uint32_t recycled = 0u;
+    for (uint32_t ordinal = 0u; ordinal < 1000u; ++ordinal) {
+        EntityId entity_a = entity_manager_create(&a.entities);
+        EntityId entity_b = entity_manager_create(&b.entities);
+        if (entity_a.h == HANDLE_NULL) break;
+        CHECK(entity_b.h != HANDLE_NULL);
+        CHECK(transform_pool_add(&a.transforms, entity_a, 9, 9, 9));
+        CHECK(transform_pool_add(&b.transforms, entity_b, 9, 9, 9));
+        ++recycled;
+    }
+    CHECK(recycled == 32u);                                   // exactly the destroyed slots
+    for (uint32_t tick = 0u; tick < 16u; ++tick) {
+        CHECK(sim_tick(&a, nullptr));
+        CHECK(sim_tick(&b, nullptr));
+        CHECK(sim_hash_state(&a) == sim_hash_state(&b));
+    }
+    std::printf("  full-capacity world: %u entities + %u recycled, hash-identical twin runs\n",
+                SIM_DEFAULT_MAX_ENTITIES, recycled);
+}
+
 TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_entity_7) {    size_t size = record_determinism_replay(nullptr);
     CHECK(size > 0);
     if (size == 0) return;

@@ -689,6 +689,10 @@ crosses into sim (and later the wire). Raw input → quantized `Command`, never 
 into sim.
 **DoD:** click-to-move and attack-move work; selection is provably outside the hashed state (two
 different local selections produce identical sim hash); commands apply on a known tick.
+**Replay seam note (G23):** `SIM_MAX_UNITS = 64` caps per-tick commanded units (the replay codec
+addresses unit slots). If a scale test shows >64 commanded units per tick, widening is a
+deliberate replay-format + logic-hash break — schedule it as its own reviewed change, not a
+silent bump.
 **Risks:** 🔴 selection leaking into sim would desync — keep it strictly view-side. `EntityId` is the
 **unsigned** ECS type (ADR-0003), not gameplay's old `int32_t`. **Exercises:** Gameplay, ECS, Platform
 (input→command).
