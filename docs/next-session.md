@@ -1,11 +1,11 @@
 # MOBA-proto — next session
 
-## State @ M3.3 acceptance repair · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ merged `b03f545` · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
-Phase 3 M3.0–M3.2 is merged. PRs #21–#24 also merged in order, but #23/#24 landed
-externally before their acceptance corrections. Corrective PR #28 preserves that history and carries
-the complete platform-cadence and presentation-boundary repair. M3.4 has only a queued slate; no
-M3.4 implementation has begun.
+Phase 3 M3.0–M3.3 is complete on merged `main`. PRs #21–#24 landed in order; corrective PR #28
+preserved that history, passed independent acceptance, and squash-merged exact head `8cc42c1` as
+`b03f545`. Post-merge CI and CodeQL are green. M3.4 has only a queued slate; no M3.4 implementation
+has begun.
 
 ## Landed stack
 
@@ -13,8 +13,8 @@ M3.4 implementation has begun.
 - PR #22 `d35adee` → `4d250b2`: renderer robustness and restored Vulkan hard-require gate.
 - PR #23 `6a39c17` → `ab774ed`: ADR-0014 and roadmap ownership amendments.
 - PR #24 `c56ade4` → `ca5ad22`: initial M3.3 wave, corrected forward by PR #28.
-- PR #28 `codex/m3.3-acceptance-repair`: platform cadence, transactional snapshots, boundary repair,
-  Windows ASan CTest runtime staging, and final evidence/docs.
+- PR #28 `8cc42c1` → `b03f545`: platform cadence, transactional snapshots, boundary repair, strict
+  hosted Vulkan classification, Windows ASan CTest runtime staging, and final evidence/docs.
 
 ## Verified locally
 
@@ -33,13 +33,15 @@ M3.4 implementation has begun.
   screenshots.
 - `eng_sim → core + math + serialize`; `eng_game → core + math + sim + render_common`; renderer has
   no sim dependency; platform cadence has no game/sim dependency.
+- Exact-head and post-merge Debug/RelWithDebInfo/Release, fresh-walk, CodeQL C/C++, and workflow
+  analysis are green. Remote wave and corrective branches were retained.
 
 ## First action
 
-1. If PR #28 is still open, compare its live head to the recorded accepted head, require exact-head
-   Debug/RelWithDebInfo/Release CI plus CodeQL green, and squash-merge without deleting remote
-   branches. If any head changed, repeat acceptance on that exact head.
-2. Fast-forward local `main` and require post-merge CI/CodeQL green before opening new work.
+1. Execute M3.4 slice S0 from updated `main`: capture the untouched M3.3 matrix, oracle, logic hash,
+   and dependency seams before changing build policy.
+2. Create a separate M3.4 branch/worktree only after that baseline is recorded. Do not reuse an M3.3
+   branch and do not begin Phase 4.
 
 ## Next slate
 

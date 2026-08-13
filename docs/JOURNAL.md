@@ -13,10 +13,10 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 **Scope:** land gap-close PRs #21–#24 in order, repair the hosted Vulkan gate, and close M3.3 without
 starting M3.4. Commands remain same-tick; the runtime loop is shaped for a future per-tick input/net
 source by generating one fresh buffer for every owed tick.
-**Outcome:** PRs #21–#24 reached `main` in order. PRs #23/#24 were externally merged before their
-acceptance corrections landed, so history was preserved and corrective PR #28 carries the complete
-non-rewriting M3.3 repair. Local implementation and hardware gates are green; exact-head independent
-acceptance, GitHub checks, and squash merge remain the final external closure loop.
+**Outcome:** M3.3 is complete. PRs #21–#24 reached `main` in order. PRs #23/#24 were externally
+merged before their acceptance corrections landed, so history was preserved and corrective PR #28
+carried the complete non-rewriting repair. Its accepted exact head `8cc42c1` squash-merged as
+`b03f545`; the complete post-merge CI and CodeQL gates are green.
 
 ### What landed
 
@@ -53,11 +53,13 @@ acceptance, GitHub checks, and squash merge remain the final external closure lo
 - A fresh clone of the final corrective tree completed configure, build, all 28 Debug tests, and a
   90-frame validation-clean sandbox run. RTX 4070 Ti evidence produced a 2,764,854-byte 1280×720
   screenshot with 64 objects, one batch, one scene draw, three total draws, and 12 allocations.
+- Fresh-context read-only acceptance returned PASS on exact PR #28 head `8cc42c1`. Its Debug,
+  RelWithDebInfo, Release, fresh-walk, CodeQL C/C++, and workflow-analysis checks passed; after the
+  squash merge, CI run `31671492172` and CodeQL run `31671491991` passed on `b03f545`.
 
 ### Next
 
-Close PR #28 only from its exact independently accepted green head, then synchronize `main`. Open
-[`slate-moba-phase3-m3.4.md`](slate-moba-phase3-m3.4.md) separately for centralized sim flags,
+Open [`slate-moba-phase3-m3.4.md`](slate-moba-phase3-m3.4.md) separately for centralized sim flags,
 game/test binary parity, stronger isolation linting, and the clang-cl/UBSan stretch gate. Phase 4
 remains blocked until M3.4 closes.
 

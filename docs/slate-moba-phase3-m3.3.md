@@ -2,7 +2,7 @@
 type: record
 title: "SLATE - Phase 3 M3.3 fixed tick and presentation boundary"
 kind: slate
-status: acceptance
+status: complete
 project: moba
 axis: "simulation presentation boundary"
 queued: 2026-08-12
@@ -19,9 +19,9 @@ related:
 
 # Slate - Phase 3 M3.3 fixed tick and presentation boundary
 
-**Status:** implementation-complete on corrective PR #28; independent acceptance, exact-head GitHub
-checks, and squash merge remain the closure gate. PRs #21–#24 merged in order, but #23/#24 were
-externally merged before acceptance corrections landed. History is preserved; #28 repairs forward.
+**Status:** complete. Corrective PR #28 exact head `8cc42c1` passed independent acceptance and every
+local/GitHub gate, then squash-merged as `b03f545`. Post-merge CI and CodeQL are green. PRs #21–#24
+remain in order; #23/#24 history is preserved and #28 repairs their acceptance gaps forward.
 
 ## Goal
 
@@ -68,13 +68,16 @@ presentation state or timing to feed back into `eng_sim`.
 | S3 | Platform accumulator | variable frame deltas call exactly the expected whole 30 Hz ticks under the catch-up clamp | complete — window-free helper drives sandbox; consume follows successful tick/capture |
 | S4 | Present glue | interpolation and the single fixed→float conversion build renderer inputs without a sim dependency in render | complete — previous→current and EntityId-change cases covered |
 | S5 | Runtime integration | normal, high, low, and minimized render rates preserve one sim hash stream and smooth snapshots | complete — grouping/minimized tests and 90-frame RTX 4070 Ti run green |
-| S6 | Close M3.3 | full matrix, tests, boundary gates, hardware/fresh-walk evidence, docs, acceptance, and GitHub gates are green | in progress — all local gates green; independent verdict and exact-head GitHub/merge pending |
+| S6 | Close M3.3 | full matrix, tests, boundary gates, hardware/fresh-walk evidence, docs, acceptance, and GitHub gates are green | complete — exact accepted head `8cc42c1` merged as `b03f545`; post-merge CI/CodeQL green |
 
 ## Acceptance evidence
 
 - PR #21 exact head `04ae177` merged as `8defa10`; #22 exact head `d35adee` merged as
   `4d250b2`; #23 exact head `6a39c17` merged as `ab774ed`; #24 exact head `c56ade4` merged as
   `ca5ad22`. #20/#25 are superseded by #21. Wave 5/6 remote branches are retained.
+- Fresh-context read-only acceptance passed exact PR #28 head `8cc42c1`. Debug, RelWithDebInfo,
+  Release, fresh-walk, CodeQL C/C++, and workflow analysis were green on that head; it squash-merged
+  as `b03f545`. The same matrix and both CodeQL analyses are green on the merge commit.
 - Corrective implementation checkpoints: platform cadence `b7bb363`, cadence slate record
   `8f5e641`, and final cadence/presentation separation `9524185`. Replay format v1,
   `SIM_LOGIC_HASH = 0xab96814425ba80a4`, same-tick command semantics, and authoritative simulation
@@ -92,9 +95,9 @@ presentation state or timing to feed back into `eng_sim`.
   anchored device-gate matching. Fourteen adversarial cases reject phrase-plus-failure, Vulkan
   validation WARN/ERROR, incomplete, stale/invalid screenshot, and unknown no-screenshot runs while
   accepting the three exact gates.
-- A fresh clone of the final corrective tree completed the README configure/build/test path and rendered 90
-  validation-clean frames. The RTX 4070 Ti screenshot is 1280×720 (2,764,854 bytes) with 64 objects,
-  one batch, one scene draw, three total draws, and 12 allocations.
+- A fresh clone of the final corrective tree completed the README configure/build/test path and
+  rendered 90 validation-clean frames. The RTX 4070 Ti screenshot is 1280×720 (2,764,854 bytes)
+  with 64 objects, one batch, one scene draw, three total draws, and 12 allocations.
 - The 10,000-tick oracle remains `0x637628abff59c823`; controlled divergence remains exactly
   `tick=4321 field=position_x entity=7`.
 
@@ -103,5 +106,6 @@ presentation state or timing to feed back into `eng_sim`.
 M3.3 closes only when one platform-owned accumulator drives the unchanged deterministic schedule,
 snapshot extraction is fixed-only and one-way, presentation owns the sole fixed→float conversion,
 the renderer cannot see `SimWorld`, and render timing variations leave the M3.2 oracle unchanged.
+Those conditions are satisfied on merged `main` at `b03f545`.
 M3.4 remains the separate [`structural determinism slate`](slate-moba-phase3-m3.4.md); no M3.4
 implementation enters this branch.
