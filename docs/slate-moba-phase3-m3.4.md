@@ -2,13 +2,13 @@
 type: record
 title: "SLATE - Phase 3 M3.4 structural determinism"
 kind: slate
-status: queued
+status: active
 project: moba
 axis: "simulation build isolation"
 queued: 2026-08-13
 updated: 2026-08-13
-worktree: "unassigned"
-branch: "unassigned"
+worktree: "C:\\Users\\doton\\Desktop\\GITHUB\\MOBA-proto\\build\\m34-structural"
+branch: "codex/m3.4-structural-determinism"
 tags: [slate, simulation, build, determinism, isolation]
 related:
   - "docs/ROADMAP.md M3.4"
@@ -18,9 +18,9 @@ related:
 
 # Slate - Phase 3 M3.4 structural determinism
 
-**Status:** queued. Corrective PR #28 is squash-merged from exact green head `8cc42c1` as `b03f545`,
-and post-merge `main` is green. Begin with S0 baseline capture; Phase 4 remains blocked until this
-slate closes.
+**Status:** active. Corrective PR #28 is squash-merged from exact green head `8cc42c1` as `b03f545`;
+docs closure PR #35 then advanced `main` to `11662ae` without engine changes. S0 captured that exact
+untouched baseline before the M3.4 branch was created. Phase 4 remains blocked until this slate closes.
 
 ## Goal
 
@@ -41,9 +41,9 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 - [x] PR #28 is squash-merged from recorded exact head `8cc42c1` as `b03f545`; local and origin
   `main` agree.
 - [x] Post-merge Debug, RelWithDebInfo, Release, fresh-walk, and CodeQL checks are green.
-- [ ] Capture the untouched M3.3 10,000-tick oracle `0x637628abff59c823`, replay logic hash
+- [x] Capture the untouched M3.3 10,000-tick oracle `0x637628abff59c823`, replay logic hash
   `0xab96814425ba80a4`, and all four current dependency seams before build changes.
-- [ ] Create a new M3.4 branch/worktree from that updated `main`; do not reuse the M3.3 branch.
+- [x] Create a new M3.4 branch/worktree from that updated `main`; do not reuse the M3.3 branch.
 
 ## Invariants and fence
 
@@ -70,12 +70,29 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
-| S0 | Land and rebaseline | branch starts at merged PR #28 and untouched M3.3 matrix/oracle/boundaries are recorded | queued |
+| S0 | Land and rebaseline | branch starts at merged PR #28 and untouched M3.3 matrix/oracle/boundaries are recorded | complete — exact `11662ae`; 28/28 in Debug, RelWithDebInfo, Release |
 | S1 | Central compiler policy | one CMake-owned deterministic policy applies to every `eng_sim` source in every configuration, with a test that detects drift | queued |
 | S2 | Binary-path parity | test and runnable game paths consume the same sim library and replay the same commands to the exact M3.3 hash stream | queued |
 | S3 | Strong isolation lint | source, include, link, compile-command, and accidental-source-recompile checks fail on forbidden sim/platform/render/presentation coupling | queued |
 | S4 | Second-toolchain stretch | clang-cl config builds the oracle and UBSan runs where supported, with exact capability/evidence recorded | queued |
 | S5 | Close M3.4 | `/WX` matrix, ASan, parity, boundary scans, fresh walk, docs, independent acceptance, and exact-head GitHub gates are green | queued |
+
+## S0 evidence
+
+- Exact source baseline: `11662aee80c522cf7bf3ba071c858f386ca8a290`; local `main` and
+  `origin/main` matched after a fresh fetch, with a clean worktree.
+- `/WX` `build-ci` Debug, RelWithDebInfo, and Release each built successfully and passed all 28
+  CTest entries. The shell was initialized through `vcvars64.bat`; an initial invocation without the
+  Developer environment could find `cl.exe` but correctly failed to find the MSVC standard headers.
+- `sim_determinism_tests --suite sim_determinism` passed 4 tests and 178,690 checks. It replayed
+  10,000 ticks to `0x637628abff59c823` and reported the controlled first divergence as exactly
+  `tick=4321 field=position_x entity=7`.
+- `SIM_LOGIC_HASH` remains `0xab96814425ba80a4`.
+- Direct seams before policy changes: `eng_sim -> core + math + serialize`; `eng_game -> core + math
+  + sim + render_common`; renderer source is sim-free; platform fixed-step code has no game/sim
+  include or link dependency. The focused scripts reported 17 sim files and 2 game files clean.
+- The phase manifest at `docs/arc-m3.4-manifest.json` passed the ARC compiler self-test (1,169
+  checks), schema validation, and deterministic render check before implementation began.
 
 ## Exit gate
 

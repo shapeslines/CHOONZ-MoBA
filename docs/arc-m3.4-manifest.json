@@ -1,0 +1,514 @@
+{
+  "schema_version": "1.0",
+  "source": {
+    "plan": "docs/slate-moba-phase3-m3.4.md",
+    "phase_pointer": "M3.4 structural determinism S0 through S5"
+  },
+  "phase": {
+    "id": "m3-4-structural-determinism",
+    "goal": "Make deterministic simulation compilation and binary consumption mechanically auditable without changing authoritative behavior",
+    "in_scope": [
+      "Central deterministic compiler policy",
+      "Runnable and test binary parity",
+      "Simulation isolation linting",
+      "Clang-cl and UBSan capability evidence",
+      "Milestone acceptance and documentation"
+    ],
+    "out_of_scope": [
+      "Authoritative simulation behavior or replay encoding changes",
+      "Phase 4 assets or Phase 5 gameplay",
+      "Renderer or presentation behavior changes",
+      "Security micro-slice branch reconciliation",
+      "Owner-gated pull request merge"
+    ],
+    "dependencies": [
+      "Merged main at 11662aee80c522cf7bf3ba071c858f386ca8a290",
+      "M3.3 oracle 0x637628abff59c823",
+      "SIM_LOGIC_HASH 0xab96814425ba80a4"
+    ],
+    "done_condition": "Exact-head CI is green after game and test paths reproduce oracle 0x637628abff59c823 through one eng_sim artifact and all isolation checks pass"
+  },
+  "tasks": [
+    {
+      "id": "rebaseline",
+      "goal": "Record the untouched M3.3 build matrix oracle logic hash and dependency seams",
+      "context": "M3.4 must detect any behavior change against merged main before build policy changes",
+      "inputs": [
+        "Merged main source tree",
+        "Existing build-ci matrix",
+        "M3.4 slate"
+      ],
+      "output_contract": "The slate names the exact baseline commit and observed Debug RelWithDebInfo Release oracle hash and dependency evidence",
+      "output_artifacts": [
+        {
+          "id": "baseline-evidence",
+          "description": "Recorded untouched M3.3 acceptance baseline",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "All three warning-as-error configurations pass 28 CTest entries and the controlled mutation reports tick 4321 position_x entity 7",
+      "out_of_scope": [
+        "Compiler policy edits",
+        "Simulation source edits"
+      ],
+      "model_tier": "Sol",
+      "depends_on": [],
+      "fence": {
+        "read_paths": [
+          "Repository build and test files",
+          "docs/slate-moba-phase3-m3.4.md"
+        ],
+        "write_paths": [
+          "docs/arc-m3.4-manifest.json",
+          "docs/slate-moba-phase3-m3.4.md"
+        ],
+        "allowed_tools": [
+          "cmake",
+          "ctest",
+          "git",
+          "apply_patch"
+        ],
+        "effects": [
+          "Build local targets",
+          "Run local tests",
+          "Record baseline evidence"
+        ]
+      },
+      "source_pointers": [
+        "docs/slate-moba-phase3-m3.4.md Entry gate",
+        "docs/ROADMAP.md M3.4"
+      ],
+      "failure_states": [
+        {
+          "id": "baseline-red",
+          "trigger": "Any untouched configuration oracle or boundary check fails",
+          "expected_evidence": [
+            "Failing command and first diagnostic are recorded"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Re-run the exact matrix and focused deterministic executable from clean main",
+        "expected_evidence": [
+          "Debug RelWithDebInfo and Release each report 28 of 28 tests passed",
+          "Boundary scripts name the intended module seams"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "central-policy",
+      "goal": "Give every eng_sim source one named deterministic compiler policy",
+      "context": "Target-local fp flags are easy to drift and cannot be audited from one owner",
+      "inputs": [
+        "baseline-evidence",
+        "Existing EngineOptions and eng_sim target definitions"
+      ],
+      "output_contract": "A named CMake policy owns deterministic flags and an automated test rejects missing duplicate or contradictory sim flags",
+      "output_artifacts": [
+        {
+          "id": "compiler-policy-evidence",
+          "description": "Central deterministic compiler policy and drift check",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "Generated compile commands show the named policy on every eng_sim translation unit in every MSVC configuration and the drift test passes",
+      "out_of_scope": [
+        "Changing fixed-point algorithms",
+        "Changing simulation logic hash"
+      ],
+      "model_tier": "Terra",
+      "depends_on": [
+        "rebaseline"
+      ],
+      "fence": {
+        "read_paths": [
+          "cmake",
+          "engine/sim",
+          "tests/sim"
+        ],
+        "write_paths": [
+          "cmake/EngineOptions.cmake",
+          "engine/sim/CMakeLists.txt",
+          "tests/sim",
+          "tests/CMakeLists.txt",
+          "docs/slate-moba-phase3-m3.4.md"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "cmake",
+          "ctest",
+          "git"
+        ],
+        "effects": [
+          "Change CMake target policy",
+          "Add deterministic build checks"
+        ]
+      },
+      "source_pointers": [
+        "docs/slate-moba-phase3-m3.4.md S1",
+        "docs/ARCHITECTURE.md 3.3"
+      ],
+      "failure_states": [
+        {
+          "id": "policy-drift",
+          "trigger": "Any eng_sim translation unit lacks the deterministic policy or receives a conflicting fp option",
+          "expected_evidence": [
+            "Drift check names the affected source and option"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Inspect generated compile invocations and deliberately test the policy checker against a contradictory fixture",
+        "expected_evidence": [
+          "Every eng_sim source receives one accepted floating-point policy",
+          "Contradictory fixture fails closed"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "binary-parity",
+      "goal": "Prove runnable and test paths consume the same eng_sim artifact and hash stream",
+      "context": "Behavioral parity must cover the executable path without recompiling simulation sources",
+      "inputs": [
+        "baseline-evidence",
+        "compiler-policy-evidence",
+        "Existing sandbox and determinism harness"
+      ],
+      "output_contract": "A headless runnable mode and the dedicated test path replay identical commands through the same linked eng_sim library and report the pinned oracle",
+      "output_artifacts": [
+        {
+          "id": "binary-parity-evidence",
+          "description": "Cross-binary oracle and shared-artifact proof",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "CTest compares runnable and test outputs and both report 0x637628abff59c823 without any executable compiling engine/sim sources",
+      "out_of_scope": [
+        "Window or renderer initialization",
+        "New command semantics"
+      ],
+      "model_tier": "Terra",
+      "depends_on": [
+        "central-policy"
+      ],
+      "fence": {
+        "read_paths": [
+          "engine/sim",
+          "tests/sim",
+          "tools/sandbox"
+        ],
+        "write_paths": [
+          "engine/sim",
+          "tests/sim",
+          "tools/sandbox",
+          "tests/CMakeLists.txt",
+          "docs/slate-moba-phase3-m3.4.md"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "cmake",
+          "ctest",
+          "git"
+        ],
+        "effects": [
+          "Add headless parity entrypoint",
+          "Add cross-binary comparison test"
+        ]
+      },
+      "source_pointers": [
+        "docs/slate-moba-phase3-m3.4.md S2",
+        "docs/ROADMAP.md M3.4"
+      ],
+      "failure_states": [
+        {
+          "id": "binary-divergence",
+          "trigger": "Runnable and test paths report different per-tick hashes or final oracle values",
+          "expected_evidence": [
+            "First differing tick and both hashes are recorded"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Run both executables from a clean build and inspect link and source ownership",
+        "expected_evidence": [
+          "Both executables report the pinned final oracle",
+          "Only eng_sim compiles engine/sim implementation sources"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "isolation-lint",
+      "goal": "Reject source include link and accidental recompilation violations around eng_sim",
+      "context": "The mature deterministic island needs checks over generated build evidence as well as source text",
+      "inputs": [
+        "compiler-policy-evidence",
+        "binary-parity-evidence",
+        "Existing sim and presentation boundary checks"
+      ],
+      "output_contract": "One focused gate checks forbidden source tokens includes target links compile options and duplicate sim compilation with actionable diagnostics",
+      "output_artifacts": [
+        {
+          "id": "isolation-evidence",
+          "description": "Strong deterministic island isolation checks",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "All real-tree checks pass and representative forbidden dependency option include and duplicate-source fixtures fail closed",
+      "out_of_scope": [
+        "General repository style linting",
+        "Security micro-slice tooling"
+      ],
+      "model_tier": "Terra",
+      "depends_on": [
+        "binary-parity"
+      ],
+      "fence": {
+        "read_paths": [
+          "CMake target graph",
+          "Generated compile commands",
+          "engine/sim sources"
+        ],
+        "write_paths": [
+          "tests/sim",
+          "tests/CMakeLists.txt",
+          "tools/hooks",
+          "docs/slate-moba-phase3-m3.4.md"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "cmake",
+          "ctest",
+          "git"
+        ],
+        "effects": [
+          "Strengthen deterministic boundary enforcement",
+          "Wire checks into existing local gates"
+        ]
+      },
+      "source_pointers": [
+        "docs/slate-moba-phase3-m3.4.md S3",
+        "docs/ARCHITECTURE.md 9.7"
+      ],
+      "failure_states": [
+        {
+          "id": "isolation-violation",
+          "trigger": "A forbidden source include link option or duplicate compilation path is found",
+          "expected_evidence": [
+            "Diagnostic names the violated boundary and exact path or target"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Run real-tree and negative-fixture isolation checks from a clean configured build",
+        "expected_evidence": [
+          "Real tree passes every isolation dimension",
+          "Each negative fixture produces its intended failure class"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "second-toolchain",
+      "goal": "Record an explicit clang-cl and UBSan capability result for the deterministic oracle",
+      "context": "The second toolchain is a stretch gate and unsupported Windows sanitizer combinations must be visible",
+      "inputs": [
+        "isolation-evidence",
+        "Installed compiler and sanitizer runtimes",
+        "Pinned oracle harness"
+      ],
+      "output_contract": "A reproducible configure and run path either proves the oracle under clang-cl and UBSan or reports the exact unsupported capability without a false pass",
+      "output_artifacts": [
+        {
+          "id": "toolchain-evidence",
+          "description": "Clang-cl and UBSan capability and oracle result",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "The stretch script exits success only after a real oracle run or an explicit recognized unsupported capability result",
+      "out_of_scope": [
+        "Replacing the blocking MSVC matrix",
+        "Installing unapproved toolchains"
+      ],
+      "model_tier": "Sol",
+      "depends_on": [
+        "isolation-lint"
+      ],
+      "fence": {
+        "read_paths": [
+          "CMake presets",
+          "Installed compiler capabilities",
+          "Determinism harness"
+        ],
+        "write_paths": [
+          "CMakePresets.json",
+          "cmake",
+          "tools",
+          "tests/sim",
+          "docs/slate-moba-phase3-m3.4.md"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "cmake",
+          "ctest",
+          "clang-cl",
+          "git"
+        ],
+        "effects": [
+          "Configure second toolchain build",
+          "Run sanitizer capability probe",
+          "Record explicit capability evidence"
+        ]
+      },
+      "source_pointers": [
+        "docs/slate-moba-phase3-m3.4.md S4",
+        "docs/ROADMAP.md M3.4"
+      ],
+      "failure_states": [
+        {
+          "id": "unclassified-toolchain-failure",
+          "trigger": "The second-toolchain path fails without matching a proven unsupported capability",
+          "expected_evidence": [
+            "Compiler command and first unclassified diagnostic are recorded"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Run the stretch path in a fresh build directory and inspect its capability classification",
+        "expected_evidence": [
+          "Clang-cl oracle matches or exact unavailable reason is reported",
+          "UBSan run matches or exact unsupported runtime reason is reported"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "close-milestone",
+      "goal": "Close M3.4 with full local remote and independent acceptance evidence",
+      "context": "Phase 4 remains blocked until the structural determinism contract is verified end to end",
+      "inputs": [
+        "baseline-evidence",
+        "compiler-policy-evidence",
+        "binary-parity-evidence",
+        "isolation-evidence",
+        "toolchain-evidence"
+      ],
+      "output_contract": "The milestone docs and pull request record the exact green head matrix oracle boundaries stretch result and independent verdict",
+      "output_artifacts": [
+        {
+          "id": "m3-4-acceptance",
+          "description": "Ready pull request and complete M3.4 acceptance record",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "Warning-as-error matrix ASan fresh walk parity isolation and exact-head GitHub checks are green and an independent verifier returns PASS",
+      "out_of_scope": [
+        "Merging without owner approval",
+        "Beginning Phase 4 implementation"
+      ],
+      "model_tier": "Sol",
+      "depends_on": [
+        "second-toolchain"
+      ],
+      "fence": {
+        "read_paths": [
+          "Whole M3.4 diff",
+          "GitHub exact-head checks",
+          "Repository acceptance commands"
+        ],
+        "write_paths": [
+          "README.md",
+          "docs",
+          "M3.4 branch and pull request"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "cmake",
+          "ctest",
+          "git",
+          "gh"
+        ],
+        "effects": [
+          "Update milestone records",
+          "Publish branch and pull request",
+          "Request independent acceptance"
+        ]
+      },
+      "source_pointers": [
+        "docs/slate-moba-phase3-m3.4.md S5",
+        "docs/ROADMAP.md Phase 3 exit"
+      ],
+      "failure_states": [
+        {
+          "id": "acceptance-red",
+          "trigger": "Any blocking local remote or independent acceptance gate is not green",
+          "expected_evidence": [
+            "Open gate and exact failing evidence are recorded"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Fresh-context read-only review of the exact pull request head and acceptance evidence",
+        "expected_evidence": [
+          "Verifier names the exact commit and returns PASS",
+          "GitHub reports every required check successful on that commit"
+        ],
+        "independent": true
+      }
+    }
+  ],
+  "syntheses": [
+    {
+      "id": "m3-4-terminal",
+      "children": [
+        "rebaseline",
+        "central-policy",
+        "binary-parity",
+        "isolation-lint",
+        "second-toolchain",
+        "close-milestone"
+      ],
+      "input_artifacts": [
+        "baseline-evidence",
+        "compiler-policy-evidence",
+        "binary-parity-evidence",
+        "isolation-evidence",
+        "toolchain-evidence",
+        "m3-4-acceptance"
+      ],
+      "output_contract": "One evidence-backed structural determinism milestone ready for owner merge with Phase 4 still unopened",
+      "output_artifacts": [
+        {
+          "id": "m3-4-terminal-record",
+          "description": "Terminal M3.4 structural determinism acceptance record",
+          "disposition": "terminal"
+        }
+      ],
+      "done_check": "Every child artifact is reconciled and no blocking acceptance gate or semantic uncertainty remains",
+      "source_pointers": [
+        "docs/slate-moba-phase3-m3.4.md Exit gate",
+        "docs/ROADMAP.md M3.4"
+      ],
+      "verification_handoff": {
+        "method": "Independent reviewer traces every terminal claim to exact command or GitHub evidence",
+        "expected_evidence": [
+          "All M3.4 requirements map to passing evidence",
+          "No Phase 4 implementation appears in the diff"
+        ],
+        "independent": true
+      },
+      "unresolved_questions": {
+        "disposition": "escalate"
+      }
+    }
+  ],
+  "terminal_synthesis_id": "m3-4-terminal"
+}
