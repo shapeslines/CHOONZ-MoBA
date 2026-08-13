@@ -1,9 +1,8 @@
-// M2.2 TGA decoder tests — crafted byte blobs, no files. The decoder is app-layer
-// (tools/sandbox/src/tga_direct.cpp, compiled straight into this exe) and provisional
-// until M4.0's asset-module parser; these tests pin the contract it must keep.
+// M4.0 direct TGA parser tests — crafted byte blobs, no files. The original M2.2
+// app-local decoder is now promoted into eng_assets and extended with RLE.
 #include "test.h"
+#include "assets/tga.h"
 #include "core/mem.h"
-#include "tga_direct.h"
 #include <cstdint>
 #include <cstring>
 
@@ -139,13 +138,13 @@ TEST(tga, rejects_unsupported_and_malformed) {
     const uint8_t px[] = { 0,0,0,0 };
     uint8_t blob[64];
     size_t n = make_tga(blob, 1, 1, 32, true, px);
-    TgaImage img = {}; img.width = -7; img.height = -8; img.rgba8 = (uint8_t*)(uintptr_t)0xBEEF;
+    TgaImage img = {}; img.width = 77u; img.height = 88u; img.rgba8 = (uint8_t*)(uintptr_t)0xBEEF;
 
     CHECK(!tga_decode(nullptr, n, al, &img));
     CHECK(!tga_decode(blob, 17, al, &img));        // shorter than the header
     CHECK(!tga_decode(blob, n - 1, al, &img));     // truncated pixel data
 
-    blob[2] = 10;                                  // RLE true-color: M4.0, reject now
+    blob[2] = 3;                                   // grayscale is outside the true-color subset
     CHECK(!tga_decode(blob, n, al, &img));
     blob[2] = 2;
 
@@ -166,7 +165,7 @@ TEST(tga, rejects_unsupported_and_malformed) {
     blob[17] &= (uint8_t)~0x40;
 
     // out untouched across ALL failures — every field, not just width.
-    CHECK(img.width == -7 && img.height == -8 && img.rgba8 == (uint8_t*)(uintptr_t)0xBEEF);
+    CHECK(img.width == 77u && img.height == 88u && img.rgba8 == (uint8_t*)(uintptr_t)0xBEEF);
     CHECK(tga_decode(blob, n, al, &img));          // restored blob decodes again
 }
 
@@ -215,4 +214,61 @@ TEST(tga, huge_claimed_dims_reject_before_allocating) {
     TgaImage img = {};
     CHECK(!tga_decode(blob, n, al, &img));
     CHECK(a.offset == 0);                          // rejected before mem_alloc
+}
+
+TEST(tga, rle_and_raw_packets_decode_in_file_order) {
+    uint8_t repeated[32] = {};
+    const uint8_t seed[] = {0,0,0, 0,0,0, 0,0,0};
+    size_t repeated_size = make_tga(repeated, 3, 1, 24, true, seed);
+    (void)repeated_size;
+    repeated[2] = 10u;
+    repeated[18] = 0x82u;                         // RLE packet: 3 copies
+    repeated[19] = 0x10u; repeated[20] = 0x20u; repeated[21] = 0x30u;
+
+    alignas(16) uint8_t memory[256];
+    Arena arena; Allocator alloc = test_alloc(&arena, memory, sizeof(memory));
+    TgaImage image{};
+    CHECK(tga_decode(repeated, 22u, alloc, &image));
+    const uint8_t repeated_want[] = {
+        0x30,0x20,0x10,0xff, 0x30,0x20,0x10,0xff, 0x30,0x20,0x10,0xff,
+    };
+    CHECK(image.rgba8 && std::memcmp(image.rgba8, repeated_want,
+                                     sizeof(repeated_want)) == 0);
+
+    uint8_t raw[64] = {};
+    const uint8_t raw_seed[] = {0,0,0, 0,0,0, 0,0,0, 0,0,0};
+    (void)make_tga(raw, 2, 2, 24, false, raw_seed);
+    raw[2] = 10u;
+    raw[18] = 0x03u;                              // raw packet: 4 distinct pixels
+    const uint8_t packet_pixels[] = {
+        0,0,0xff, 0,0xff,0,                      // bottom: red, green
+        0xff,0,0, 0xff,0xff,0xff,                // top: blue, white
+    };
+    std::memcpy(raw + 19, packet_pixels, sizeof(packet_pixels));
+    arena_reset(&arena);
+    image = {};
+    CHECK(tga_decode(raw, 19u + sizeof(packet_pixels), alloc, &image));
+    const uint8_t raw_want[] = {
+        0,0,0xff,0xff, 0xff,0xff,0xff,0xff,
+        0xff,0,0,0xff, 0,0xff,0,0xff,
+    };
+    CHECK(image.rgba8 && std::memcmp(image.rgba8, raw_want, sizeof(raw_want)) == 0);
+}
+
+TEST(tga, malformed_rle_rejects_before_allocation) {
+    uint8_t blob[32] = {};
+    const uint8_t seed[] = {0,0,0};
+    (void)make_tga(blob, 1, 1, 24, true, seed);
+    blob[2] = 10u;
+    blob[18] = 0x81u;                              // claims 2 pixels into a 1-pixel image
+
+    alignas(16) uint8_t memory[128];
+    Arena arena; Allocator alloc = test_alloc(&arena, memory, sizeof(memory));
+    TgaImage image{};
+    CHECK(!tga_decode(blob, 22u, alloc, &image));
+    CHECK(arena.offset == 0u);
+
+    blob[18] = 0x80u;                              // one repeated pixel, but bytes truncated
+    CHECK(!tga_decode(blob, 20u, alloc, &image));
+    CHECK(arena.offset == 0u);
 }

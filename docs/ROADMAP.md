@@ -320,7 +320,7 @@ with zero warnings/errors; Phase 3 is next.
 screen." Each rung is a runnable program and a learning checkpoint. The renderer is behind the thin
 seam (`renderer.h`, opaque handles, `DrawItem[]`) from the very first rung.
 
-> **Complete:** M2.0 → M2.5. **Now:** Phase 3. **Later:** Phase 4.
+> **Complete:** M2.0 → M2.5. **Now:** Phase 4. **Later:** Phase 5 gameplay.
 > Hardware coverage beyond NVIDIA discrete is tracked in
 > [`docs/testing-hardware.md`](testing-hardware.md) (G26).
 > 🔴 **This whole phase is the #1 technical-risk cluster.** Synchronization correctness and the
@@ -448,8 +448,8 @@ so Phase 4 consumes exactly this. **Exercises:** Renderer seam, Build (PRIVATE V
 **determinism harness built before there is content to break it.** This is the project's spine and the
 reviews' most-watched risk.
 
-> **Complete:** M3.0–M3.4. **Gate:** land the interphase security consolidation. **Next:** Phase 4
-> (assets). **Later:** Phase 5 gameplay begins on the cooked asset seams.
+> **Complete:** M3.0–M3.4 and the interphase security consolidation. **Now:** Phase 4 assets.
+> **Later:** Phase 5 gameplay begins on the cooked asset seams.
 > 🔴 Determinism is global and fragile: one stray float, unordered iteration, or wall-clock read
 > desyncs. The state-hash self-check is the only humane way to catch it — **build it first.**
 
@@ -584,13 +584,13 @@ test probe and both Vulkan/null game binaries from the same archive; all emit 92
 clang-cl 19.1.5 plus UBSan passes its runtime tripwire and instrumented oracle; local and hosted
 fresh walks complete 90 validation-clean frames. See the closed execution record in
 [`slate-moba-phase3-m3.4.md`](slate-moba-phase3-m3.4.md). PR #38 landed as `63f0b1de`; the
-interphase security gate below is the remaining pre-Phase-4 boundary.
+interphase security gate then landed through PR #51 as `a2565ca`, opening Phase 4.
 **Risks:** flag drift between binaries is a silent desync source — single toolchain include prevents it.
 **Exercises:** Build (sim isolation), Tooling, Determinism.
 
 ---
 
-### Interphase security consolidation — boundary hardening  · S  🔒 FINAL LOCAL ACCEPTANCE COMPLETE 2026-08-13
+### Interphase security consolidation — boundary hardening  · S  ✅ LANDED 2026-08-13
 **Goal:** reconcile the accepted security drafts into one reviewable head before asset APIs expand the
 runtime boundary.
 **Observed:** PR #51 retains or strengthens every approved hunk from #27 and #29–#46. Core allocation
@@ -602,9 +602,9 @@ RelWithDebInfo, and Release suites pass 39/39 in each configuration; Debug-ASan 
 clang-cl/UBSan passes 6/6; a clean fresh walk and an RTX 4070 Ti run complete 90 validation-clean
 frames. Replay v1, command encoding, `SIM_LOGIC_HASH = 0xab96814425ba80a4`, final oracle
 `0x637628abff59c823`, and exact tick-4321 divergence remain unchanged.
-**Gate:** fresh-context security/acceptance verdicts and exact-head CI/CodeQL must pass before PR #51
-becomes ready. Merge and stale-draft retirement remain separately owner-approved. No M4.0 asset work
-is part of this consolidation.
+**Landed:** PR #51 exact head `e516b46` was squash-merged as `a2565ca`; its required checks passed and
+the synchronized result became the M4.0 base. No asset API or simulation change was part of that
+consolidation.
 **Review correction:** candidate `a89caf6` was kept draft after security review found a cleanup
 path-swap interval, a real-renderer corrupt-count gap, and fail-open CLI grammar. Object-bound cleanup,
 shared renderer preflight, and complete fail-closed grammar repairs now pass the full local matrix at
@@ -625,7 +625,7 @@ rename/disposition and test an exact post-flush replacement attack. At committed
 checkpoint `6716796`, `/WX` Debug/RelWithDebInfo/Release pass 39/39 each, Debug-ASan passes 39/39,
 clang-cl/UBSan passes 6/6, both direct determinism runs retain their exact oracle/divergence, and a
 fresh 92-target/39-test/90-frame walk completes secure cleanup. Focused security rereview is green;
-fresh full exact-head reviews and GitHub checks remain before readiness.
+fresh full exact-head reviews and GitHub checks subsequently passed before landing.
 
 ---
 
@@ -634,12 +634,12 @@ fresh full exact-head reviews and GitHub checks remain before readiness.
 **Goal:** the path from source files to GPU/CPU memory behind stable handles, built bottom-up: direct
 trivial loaders first, then the offline cooker and the unified baked format, then glTF and hot-reload.
 
-> **Blocked:** owner-merge PR #51 and synchronize a green `main`. **Then:** M4.0 → M4.4. **Next:**
-> Phase 5 (gameplay needs real meshes/maps). **Later:** hot-reload polish.
+> **Now:** close M4.0 PR #52 from synchronized security-hardened `main`. **Then:** M4.1 → M4.4.
+> **Next phase:** Phase 5 (gameplay needs real meshes/maps). **Later:** hot-reload polish.
 
 ---
 
-### M4.0 — Direct TGA / WAV / SPIR-V loaders + handle registry  · M
+### M4.0 — Direct TGA / WAV / SPIR-V loaders + handle registry  · M  🟡 LOCAL ACCEPTANCE COMPLETE 2026-08-13
 **Goal:** the simplest runtime loaders + the SoA asset registry, replacing M2.2's hardcoded TGA.
 **Deliverables:** direct TGA (uncompressed/RLE) and WAV (header+PCM) parsers; SPIR-V already loaded as
 raw `.spv`; `AssetRegistry` (SoA, handle+generation per ADR-0003, `state` field reserving async later);
@@ -649,6 +649,19 @@ app-layer decoder that tests currently compile from the sandbox folder is promot
 and the tests' include path follows it (closing the ADR-0009 contamination path in miniature).
 **DoD:** the textured quad now loads its texture through the asset manager (not hardcoded); a WAV loads
 to PCM; `assets_unload_level` bulk-frees and bumps generations (stale handles detected).
+**Observed on PR #52:** normalized-path FNV-1a/64 identity, the fixed-capacity arena-backed SoA
+registry, transactional initialization, level/global lifetimes, bounded raw/RLE TGA and strict PCM
+WAV loaders, and the Vulkan-free upload/destroy seam are implemented. The sandbox no longer owns a
+TGA decoder or reads its texture directly. `/WX` Debug, RelWithDebInfo, Release, and Debug-ASan pass
+43/43; clang-cl/UBSan passes 6/6; Debug/Release retain final oracle `0x637628abff59c823`, stream
+`0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`. An RTX 4070 Ti completed 90 validation-clean
+frames with the asset-managed 64×64 texture. Raw loose SPIR-V remains renderer-owned under ADR-0008;
+no cooker/container work entered M4.0. Fresh security review found and closed three boundary gaps:
+canonical IDs now enforce a portable grammar that rejects Win32 aliases, registry initialization
+rejects every overlapping arena/control range before mutation, and loose loads size/read one
+handle-bound file beneath a handle-bound non-reparse root while rejecting multi-link aliases.
+Junction, hard-link, nonzero-backing, overlap, and exact-adjacency regressions pass in every local
+configuration. Exact-head hosted checks and owner landing remain the closing gates.
 **Risks:** determinism rule — sim references assets by **stable id only**, never pointer/load-order.
 **Exercises:** Assets, Renderer (upload seam), Memory (arenas).
 

@@ -59,6 +59,7 @@ add_subdirectory(engine/core)
 add_subdirectory(engine/math)
 add_subdirectory(engine/serialize)
 add_subdirectory(engine/platform)
+add_subdirectory(engine/assets)
 add_subdirectory(engine/sim)
 add_subdirectory(engine/render)
 add_subdirectory(engine/game)   # M3.3: snapshot/interpolation presentation boundary
@@ -69,6 +70,6 @@ add_subdirectory(tools/sandbox)         # M0.3: window + message loop
 add_subdirectory(tools/visualize)       # BMP dumps of the fixed-point math vs libm
 add_subdirectory(tools/replay)          # M3.0: deterministic replay record/inspect/verify
 add_subdirectory(tests)                 # M1.4: self-registering harness + CTest suites
-# assets / net + cooker arrive in their phases.
+# Net and the cooker arrive in their later phases.
 
-message(STATUS "moba spine configured — modules: eng_core eng_math eng_serialize eng_platform eng_sim eng_render eng_game")
+message(STATUS "moba spine configured — modules: eng_core eng_math eng_serialize eng_platform eng_assets eng_sim eng_render eng_game")

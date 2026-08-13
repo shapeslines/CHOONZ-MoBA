@@ -28,9 +28,10 @@ RTS-class game engine.
 > fixed→float owner; the renderer still cannot see `SimWorld`.
 > **Phase 3 is complete through M3.4 on `main`.** Central compiler ownership, test/game-binary
 > parity, fail-closed isolation, and clang-cl/UBSan proofs are green. Interphase security
-> consolidation on PR #51 hardens core arithmetic, platform/shader boundaries, CLI inputs, renderer
-> capacity checks, and CI recovery without changing simulation behavior or replay encoding. Phase 4
-> asset work begins only after that consolidation is owner-merged into a green synchronized `main`.
+> consolidation landed as `a2565ca`. Phase 4 M4.0 now adds portable normalized-path 64-bit asset
+> IDs, a disjoint-arena generational SoA registry, handle-bound asset-root reads, bounded direct
+> TGA/WAV loaders, and a Vulkan-free renderer upload callback. The sandbox texture is loaded and
+> released through that registry; raw loose SPIR-V remains renderer-owned under ADR-0008.
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -95,9 +96,9 @@ caller-storage-backed oracle with clang-cl `/WX` in RelWithDebInfo and requires 
 10,000-tick hash stream. RelWithDebInfo intentionally matches Visual Studio's static release UBSan
 runtime ABI; normal MSVC builds retain their existing CRT selection.
 
-CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, entity/component/event/system/
-schedule/sim/presentation suites, `render`,
-`render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
+CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, `asset_id`, the asset registry,
+bounded TGA/WAV parsing and file loads, entity/component/event/system/schedule/sim/presentation
+suites, `render`, `render_null`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
 the generated sim-policy/include/source-owner audit, test/game-binary hash-stream parity, the
 configure-time sim target contract, adversarial isolation self-tests, the sim/presentation boundary
 scans, replay/CLI malformed-input matrices, create-only atomic-write collisions, shader declaration
@@ -138,12 +139,13 @@ engine/        the engine, one static lib per module (the CMake link graph = the
   math/        fix.h (Q16.16), rng.h, vec/mat/quat                     (leaf)
   serialize/   bounded little-endian byte readers/writers              (leaf-up)
   platform/    the OS seam (Win32): window, input, timing, files, sockets, Vulkan surface
+  assets/      normalized IDs, arena-backed registry/lifetimes, direct TGA/WAV loading
   game/        arena snapshots, interpolation, fixed→float, and DrawItem construction
   render/      raw Vulkan behind a thin renderer seam; GLSL sources in render/shaders/
   sim/         arena-backed deterministic ECS, typed events/systems, schedule + replay codec
-  (assets / net arrive in their phases)
+  (net arrives in its phase)
 cmake/         CompilerWarnings, EngineOptions, CompileShaders helpers
-game/ tools/   the game exe, sandbox, asset cooker
+game/ tools/   the game exe, sandbox, replay, and visualization tools
 assets/ tests/
 docs/          ARCHITECTURE.md, ROADMAP.md, DECISIONS/ (ADRs)
 ```

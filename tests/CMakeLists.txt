@@ -14,7 +14,7 @@
 # headless testing holds.
 add_library(engine_core_group INTERFACE)
 target_link_libraries(engine_core_group INTERFACE
-    eng::core eng::math eng::serialize eng::sim eng::platform)
+    eng::core eng::math eng::serialize eng::assets eng::sim eng::platform)
 
 # --- engine_tests: the headless aggregate suite (mem + math + containers) ---
 add_executable(engine_tests
@@ -22,6 +22,8 @@ add_executable(engine_tests
     mem/mem_tests.cpp
     math/math_tests.cpp
     containers/container_tests.cpp
+    assets/asset_id_tests.cpp
+    assets/asset_registry_tests.cpp
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
     sim/component_pool_tests.cpp
@@ -38,10 +40,9 @@ add_executable(engine_tests
     present/present_tests.cpp          # M3.3: cadence integration + snapshot/present glue
     render/render_tests.cpp
     tga/tga_tests.cpp
-    ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
+    wav/wav_tests.cpp)
 target_include_directories(engine_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/tools/sandbox/src
     ${CMAKE_SOURCE_DIR}/engine/render/src
     ${CMAKE_SOURCE_DIR}/engine/platform/src/win32)         # Vulkan-free/internal boundaries under test
 # The aggregate suite links only the Vulkan-free renderer core; the null seam has its
@@ -91,6 +92,11 @@ moba_stage_asan_runtime()
 add_test(NAME mem         COMMAND engine_tests --suite mem)
 add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
+add_test(NAME asset_id    COMMAND engine_tests --suite asset_id)
+add_test(NAME assets      COMMAND engine_tests --suite assets)
+add_test(NAME assets_boundary
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_assets_boundary.cmake")
 add_test(NAME core_invariant_tripwire
     COMMAND ${CMAKE_COMMAND}
             -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>
@@ -109,6 +115,7 @@ add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 cadence/snap
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
+add_test(NAME wav         COMMAND engine_tests --suite wav)
 add_test(NAME det_precise COMMAND det_tests)        # /fp:precise golden hash
 add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (must match)
 add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)
