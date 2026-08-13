@@ -526,7 +526,14 @@ scale. **Exercises:** ECS, Determinism.
 
 ---
 
-### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M
+### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M  ✅ COMPLETE 2026-08-12
+**Status:** complete (gap-close Wave 6). The game/present glue (`eng_game`,
+`game/present.h`) owns the fixed-tick accumulator (clamped by `SIM_MAX_CATCHUP_S`),
+double-buffered fixed-only `RenderSnapshot`s, and the single fixed→float conversion;
+`snapshot_extract` is const and hash-neutral; the renderer still never sees `SimWorld`.
+Headless tests prove render-rate independence (60/30/mixed fps → identical tick count
+and hash) and the sandbox runs the deterministic orbit demo validation-clean
+(64 units, one batch). M3.4 remains the separate flag-pinning/isolation slate.
 **Goal:** the accumulator loop and the single, one-directional fixed→float interpolation seam.
 **Deliverables:**
 - The accumulator lives in the **platform's outer loop** (it owns the OS pump + clock); the ECS
@@ -582,7 +589,9 @@ trivial loaders first, then the offline cooker and the unified baked format, the
 **Deliverables:** direct TGA (uncompressed/RLE) and WAV (header+PCM) parsers; SPIR-V already loaded as
 raw `.spv`; `AssetRegistry` (SoA, handle+generation per ADR-0003, `state` field reserving async later);
 **arena-per-level** lifetime + a small refcounted global pool; consumes the **Renderer upload API
-unified in M2.5**.
+unified in M2.5**. **`tools/sandbox/src/tga_direct.*` moves into `eng_assets` here (G39)** — the
+app-layer decoder that tests currently compile from the sandbox folder is promoted to the real parser,
+and the tests' include path follows it (closing the ADR-0009 contamination path in miniature).
 **DoD:** the textured quad now loads its texture through the asset manager (not hardcoded); a WAV loads
 to PCM; `assets_unload_level` bulk-frees and bumps generations (stale handles detected).
 **Risks:** determinism rule — sim references assets by **stable id only**, never pointer/load-order.
@@ -692,6 +701,9 @@ concern, **never** in sim); per-entity `OrderQueue` (move/attack-move/attack-uni
 shift-queue); `Command` struct (issuing player, tick, target entities, order) as the **only** thing that
 crosses into sim (and later the wire). Raw input → quantized `Command`, never raw mouse pixels/floats
 into sim.
+**Raw Input owns a home here (G38):** the M0.3-deferred upgrade from `WM_KEY*`/`WM_LBUTTON*` to
+`RegisterRawInputDevices` (keyboard + mouse, E0/E1 and L/R modifier decoding) lands in this milestone —
+selection and commands need unaccelerated, low-latency mouse state and reliable multi-key state.
 **DoD:** click-to-move and attack-move work; selection is provably outside the hashed state (two
 different local selections produce identical sim hash); commands apply on a known tick.
 **Replay seam note (G23):** `SIM_MAX_UNITS = 64` caps per-tick commanded units (the replay codec
