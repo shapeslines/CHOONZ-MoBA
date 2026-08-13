@@ -234,7 +234,7 @@ none is carried solely by source-branch history.
 - Direct determinism: 10,000 ticks retain final `0x637628abff59c823`, stream
   `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`; the controlled mutation first diverges at
   tick 4321 on `position_x`, entity 7 (178,690 checks).
-- Fresh walk: a guarded direct-temp clone of checkpoint `79721a8` configured cleanly, built 92 Debug
+- Fresh walk: a guarded direct-temp clone of final code checkpoint `f0a56c4` configured cleanly, built 92 Debug
   targets, passed 39/39, classified a real 90-frame screenshot, and removed the clone successfully.
 - Vulkan: local NVIDIA RTX 4070 Ti / Vulkan 1.3 / validation-on execution completed 90 frames and a
   clean exit; the retained 1280x720, 2,764,854-byte screenshot was visually inspected.
@@ -255,13 +255,18 @@ none is carried solely by source-branch history.
   non-delete-sharing handle on the exact leased directory from validation through cleanup and applies
   final deletion through that handle; a deterministic post-validation hook proves an attempted move
   is blocked, in addition to the pre-validation junction and same-path replacement cases.
-- Focused repaired evidence: affected renderer, sandbox, replay, and fresh-walk tests pass 9/9; the
-  complete Debug suite passes 39/39. Full exact-head revalidation is still required.
-- S7 disposition: IN PROGRESS. The complete permanent matrix, fresh security/acceptance verdicts, and
-  final exact-head GitHub checks remain before ready state.
+- Repaired local acceptance: `/WX` Debug/RelWithDebInfo/Release builds pass; all 39 entries pass in
+  each configuration (117 executions); Debug-ASan passes 39/39; clang-cl 19.1.5 proves UBSan with a
+  live signed-overflow tripwire and passes 6/6; direct Debug and Release determinism each pass four
+  tests/178,690 checks with the permanent oracle and exact divergence; committed-head fresh-walk and
+  the retained validation-on RTX 4070 Ti run each complete 90 frames with a 2,764,854-byte image.
+- Focused security rereview: PASS for all three repairs. A separate full final-head security verdict
+  remains required alongside fresh independent acceptance.
+- S7 local disposition: PASS at code checkpoint `f0a56c4`. Fresh full security/acceptance verdicts
+  and final exact-head GitHub checks remain before ready state.
 
 ## NEXT
 
-Publish the focused-green repair checkpoint, run the complete final-head matrix, obtain both
-independent verdicts, require exact-head CI/CodeQL, and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
+Publish the local-acceptance record, obtain both independent verdicts, require exact-head CI/CodeQL,
+and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
 unfinished S22 separately; stop before owner merge.

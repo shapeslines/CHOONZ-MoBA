@@ -32,7 +32,7 @@ commit/push the green checkpoint, and advance only on evidence.
 - [x] Static manifest validates and renders deterministically.
 - [x] Untouched Debug baseline and M3.4 oracle captured.
 - [x] Draft consolidation PR opened after first implementation slice.
-- [ ] Full local acceptance green.
+- [x] Full local acceptance green.
 - [ ] Fresh security and independent acceptance verdicts green.
 - [ ] Exact-head CI and CodeQL green; PR ready.
 - [ ] Separate owner merge approval.
@@ -140,28 +140,30 @@ Goal: account for every source hunk and prove the full permanent regression batt
 Done means: retained/repaired/superseded map is complete, all local gates pass, two fresh reviews pass,
 and exact-head CI/CodeQL are green before ready state.
 
-Status: revalidation in progress. The first local-acceptance candidate (`a89caf6`) passed the `/WX`
+Status: repaired local acceptance complete at code checkpoint `f0a56c4`. The first local-acceptance candidate (`a89caf6`) passed the `/WX`
 Debug/RelWithDebInfo/Release builds, all 39 CTest entries in each configuration, Debug-ASan,
 clang-cl/UBSan, determinism, fresh-walk, and local Vulkan gates. Its fresh security review correctly
 rejected three remaining boundary gaps: a cleanup path-swap interval, missing corrupt-count defense
 in the real renderer submission path, and fail-open sandbox/replay grammar. The renderer and CLI
-repairs are focused-green. Fresh-walk cleanup now holds a non-delete-sharing handle on the verified
+repairs are now full-matrix green. Fresh-walk cleanup holds a non-delete-sharing handle on the verified
 lease through child cleanup and deletes the empty root through that same handle; the adversarial test
-attempts a directory move exactly after validation and proves it is blocked. The complete Debug suite
-is green 39/39 on the repaired worktree. Full final-head revalidation, two passing reviews, and
-exact-head GitHub checks remain.
+attempts a directory move exactly after validation and proves it is blocked. On the repaired head,
+all three `/WX` builds and all 117 configuration test executions pass; Debug-ASan passes 39/39;
+clang-cl 19.1.5 proves UBSan active and passes 6/6; direct Debug/Release determinism passes 4 tests
+and 178,690 checks each; the committed-head fresh walk builds 92 targets, passes 39/39, renders 90
+frames, and completes handle-bound cleanup. Two full passing reviews and exact-head GitHub checks
+remain.
 
-The first candidate's evidence remains useful but is not final-head acceptance: the `/WX` Debug/RelWithDebInfo/Release builds and all 39 CTest entries in each
-configuration are green. Debug-ASan initially exposed that the visualizer negative fixture could not
+Debug-ASan initially exposed that the visualizer negative fixture could not
 start because its executable directory lacked the repository's app-local MSVC ASan runtime; the
 shared staging helper is now applied there and the complete Debug-ASan suite passes 39/39. The
 clang-cl/UBSan gate passes 6/6, and the unchanged direct oracle plus controlled-divergence proof pass.
-A guarded fresh clone builds 92 targets, passes 39/39, and completes a classified 90-frame Vulkan
-run. A separate validation-on RTX 4070 Ti run produced a visually inspected 2,764,854-byte 1280x720
+A guarded fresh clone of `f0a56c4` builds 92 targets, passes 39/39, completes a classified 90-frame Vulkan
+run, and removes its leased directory. A separate validation-on RTX 4070 Ti run produced a visually inspected 2,764,854-byte 1280x720
 screenshot. All 17 approved source heads/paths were freshly reconciled; PR #26 has no required unique
 content, excluded #47-#50 are absent, and no sim/replay-codec/asset/logic-hash file changed.
-That candidate's security verdict supersedes its earlier acceptance verdict; both reviews must be
-rerun on the repaired exact head before ready state.
+The focused repair review is green, but both full reviews must be run on the final exact head before
+ready state.
 
 ### S8 — Owner-gated landing and retirement
 
@@ -183,7 +185,6 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Commit and push the focused-green security repairs, rerun the full permanent matrix on that exact
-head, obtain fresh security and acceptance verdicts, require exact-head CI/CodeQL, and mark PR #51
+Publish this local-acceptance record, obtain fresh security and acceptance verdicts, require exact-head CI/CodeQL, and mark PR #51
 ready only after all are green. Stop before the separate owner merge gate;
 keep simulation/replay encoding, asset APIs, #47-#50, and unfinished S22 outside the branch.

@@ -13,10 +13,11 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 **Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and
 prove the hardened boundary without changing simulation behavior, replay encoding, asset APIs, or
 starting Phase 4.
-**Outcome:** implementation is repaired and under final revalidation on draft PR #51. Candidate
+**Outcome:** repaired implementation and local acceptance are complete on draft PR #51. Candidate
 `a89caf6` passed its full local matrix and GitHub checks, but its required security review found three
 real gaps, so it was not promoted. Focused repairs for cleanup object binding, real-renderer corrupt
-state, and fail-closed CLI grammar are green; full final-head acceptance remains the readiness gate.
+state, and fail-closed CLI grammar pass the complete local matrix; fresh full reviews and exact-head
+GitHub checks remain the readiness gate.
 Merge remains a separate owner action.
 
 ### What changed
@@ -49,7 +50,7 @@ Merge remains a separate owner action.
   configuration. Debug-ASan passes 39/39 and clang-cl 19.1.5 plus UBSan passes 6/6.
 - The first ASan pass exposed a missing app-local runtime beside `visualize.exe` (`0xc0000135`). The
   target now uses the repository's existing staging helper, after which the complete suite passed.
-- A guarded fresh clone of checkpoint `79721a8` configured, built 92 targets, passed 39/39, and
+- A guarded fresh clone of repaired checkpoint `f0a56c4` configured, built 92 targets, passed 39/39, and
   completed `SANDBOX_SMOKE=PASS`. A retained RTX 4070 Ti run completed 90 validation-clean frames;
   its visually inspected 1280×720 screenshot is 2,764,854 bytes.
 - The direct 10,000-tick proof still reports 923 commands, final `0x637628abff59c823`, stream
@@ -61,7 +62,7 @@ Merge remains a separate owner action.
 
 ### Next
 
-Commit the focused repairs, rerun the full local matrix, obtain fresh-context security and acceptance verdicts on the final recorded head, require exact-head
+Obtain fresh-context security and acceptance verdicts on the final recorded head, require exact-head
 CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
 the squash merge and supersession closure of #26/#27/#29–#46. Retain their branches/worktrees; open
 M4.0 only from the resulting synchronized green `main`.

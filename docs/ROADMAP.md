@@ -590,7 +590,7 @@ interphase security gate below is the remaining pre-Phase-4 boundary.
 
 ---
 
-### Interphase security consolidation — boundary hardening  · S  🔒 FINAL REVALIDATION IN PROGRESS 2026-08-13
+### Interphase security consolidation — boundary hardening  · S  🔒 REPAIRED LOCAL ACCEPTANCE COMPLETE 2026-08-13
 **Goal:** reconcile the accepted security drafts into one reviewable head before asset APIs expand the
 runtime boundary.
 **Observed:** PR #51 retains or strengthens every approved hunk from #27 and #29–#46. Core allocation
@@ -607,8 +607,8 @@ becomes ready. Merge and stale-draft retirement remain separately owner-approved
 is part of this consolidation.
 **Review correction:** candidate `a89caf6` was kept draft after security review found a cleanup
 path-swap interval, a real-renderer corrupt-count gap, and fail-open CLI grammar. Object-bound cleanup,
-shared renderer preflight, and complete fail-closed grammar repairs are focused-green; the full final
-matrix and both reviews are being rerun on a new exact head.
+shared renderer preflight, and complete fail-closed grammar repairs now pass the full local matrix at
+code checkpoint `f0a56c4`; fresh full security/acceptance reviews remain before ready state.
 
 ---
 
