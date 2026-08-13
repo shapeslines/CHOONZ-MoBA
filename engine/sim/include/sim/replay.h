@@ -12,7 +12,9 @@ static const uint32_t REPLAY_FORMAT_VERSION = 1;
 // Manually reviewed compatibility key. Bump whenever deterministic behavior or
 // command encoding changes. REPLAY_FORMAT_VERSION changes only when the container
 // layout changes. This separation makes incompatibility deliberate and visible.
-static const uint64_t SIM_LOGIC_HASH = 0x7902599e173f87a6ULL;
+// M3.2 contract key: first 64 bits of SHA-256 over
+// "M3.2|ordered-cache|damage-event-v1|same-tick|explicit-schedule-v1".
+static const uint64_t SIM_LOGIC_HASH = 0xab96814425ba80a4ULL;
 
 static const uint64_t REPLAY_MAX_TICKS = 1000000ULL; // >9 hours at 30 Hz
 static const size_t REPLAY_HEADER_ENCODED_SIZE = 44;

@@ -1,15 +1,13 @@
 #include "sim/sim.h"
 
 #include "core/assert.h"
-
-static mm::fix fix_add_wrap(mm::fix a, mm::fix b) {
-    return static_cast<mm::fix>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
-}
+#include "sim/systems.h"
 
 static bool sim_config_valid(SimWorldConfig config) {
     return config.max_entities > 0u && config.max_entities <= HANDLE_INDEX_MASK + 1u &&
            config.initial_unit_count <= SIM_MAX_UNITS &&
-           config.initial_unit_count <= config.max_entities;
+           config.initial_unit_count <= config.max_entities &&
+           config.damage_event_capacity > 0u;
 }
 
 static bool add_required(size_t* total, size_t required) {
@@ -19,7 +17,8 @@ static bool add_required(size_t* total, size_t required) {
 }
 
 SimWorldConfig sim_world_config_default(void) {
-    return SimWorldConfig{SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS};
+    return SimWorldConfig{
+        SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY};
 }
 
 size_t sim_world_memory_required(SimWorldConfig config) {
@@ -31,7 +30,9 @@ size_t sim_world_memory_required(SimWorldConfig config) {
         !add_required(&total, velocity_pool_memory_required(
                                   config.max_entities, config.max_entities)) ||
         !add_required(&total, health_pool_memory_required(
-                                  config.max_entities, config.max_entities))) return 0u;
+                                  config.max_entities, config.max_entities)) ||
+        !add_required(&total, damage_event_queue_memory_required(
+                                  config.damage_event_capacity))) return 0u;
 
     size_t destroy_bytes = sizeof(EntityId) * static_cast<size_t>(config.max_entities);
     if (destroy_bytes > SIZE_MAX - (alignof(EntityId) - 1u) ||
@@ -53,7 +54,9 @@ bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig confi
         !velocity_pool_init(&staged.velocities, arena,
                             config.max_entities, config.max_entities) ||
         !health_pool_init(&staged.health, arena,
-                          config.max_entities, config.max_entities)) {
+                          config.max_entities, config.max_entities) ||
+        !damage_event_queue_init(&staged.damage_events, arena,
+                                 config.damage_event_capacity)) {
         temp_end(temp);
         return false;
     }
@@ -111,6 +114,10 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
         world->transforms.membership.capacity != world->config.max_entities ||
         world->velocities.membership.capacity != world->config.max_entities ||
         world->health.membership.capacity != world->config.max_entities ||
+        !damage_event_queue_is_valid(&world->damage_events) ||
+        world->damage_events.capacity != world->config.damage_event_capacity ||
+        world->damage_events.counts[world->damage_events.read_index] != 0u ||
+        world->damage_events.counts[world->damage_events.write_index] != 0u ||
         !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
         return false;
 
@@ -137,12 +144,14 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
     if (commands->count > SIM_MAX_COMMANDS_PER_TICK) return false;
     if (commands->count > 0 && !commands->commands) return false;
 
+    uint32_t damage_count = 0u;
     for (uint32_t i = 0; i < commands->count; ++i) {
         const SimCommand& command = commands->commands[i];
         if (!sim_command_is_canonical(&command, SIM_MAX_PLAYERS, SIM_MAX_UNITS) ||
             world->unit_entities[command.unit_index].h == HANDLE_NULL) return false;
+        if (command.kind == SIM_COMMAND_DAMAGE) ++damage_count;
     }
-    return true;
+    return damage_count <= world->damage_events.capacity;
 }
 
 bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
@@ -150,73 +159,24 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
     // any record is malformed, so callers can reject a packet atomically.
     if (!sim_validate_commands(world, commands)) return false;
 
-    if (commands) {
-        for (uint32_t i = 0; i < commands->count; ++i) {
-            const SimCommand& command = commands->commands[i];
-            EntityId entity = world->unit_entities[command.unit_index];
-            if (command.kind == SIM_COMMAND_SET_VELOCITY) {
-                VelocityView velocity{};
-                bool found = velocity_pool_get(&world->velocities, entity, &velocity);
-                ENSURE(found);
-                *velocity.velocity_x = command.value_x;
-                *velocity.velocity_y = command.value_y;
-            } else {
-                HealthView health{};
-                bool found = health_pool_get(&world->health, entity, &health);
-                ENSURE(found);
-                if (command.amount >= *health.current) *health.current = 0;
-                else *health.current -= command.amount;
-                if (command.amount > 0) *health.damage_cooldown = 3u;
-            }
-        }
-    }
-
-    // Stable replay slots, not dense pool order, define the deterministic schedule.
-    for (uint32_t i = 0; i < SIM_MAX_UNITS; ++i) {
-        EntityId entity = world->unit_entities[i];
-        if (entity.h == HANDLE_NULL) continue;
-        TransformView transform{};
-        VelocityView velocity{};
-        HealthView health{};
-        bool found = transform_pool_get(&world->transforms, entity, &transform) &&
-                     velocity_pool_get(&world->velocities, entity, &velocity) &&
-                     health_pool_get(&world->health, entity, &health);
-        ENSURE(found);
-        mm::fix dx = mm::fix_mul(*velocity.velocity_x, SIM_DT_FIXED);
-        mm::fix dy = mm::fix_mul(*velocity.velocity_y, SIM_DT_FIXED);
-        *transform.position_x = fix_add_wrap(*transform.position_x, dx);
-        *transform.position_y = fix_add_wrap(*transform.position_y, dy);
-        if (*health.damage_cooldown > 0u) --*health.damage_cooldown;
-    }
-
-    (void)mm::pcg32_next(&world->rng); // exercise the serialized/hashed sim RNG stream each tick
-
-    // Destruction is the tick-boundary commit. Requests retain their literal order;
-    // typed pools may swap dense storage, but each subsequent request resolves by
-    // exact EntityId and release order deterministically defines free-stack order.
-    for (uint32_t request = 0u; request < world->pending_destroy_count; ++request) {
-        EntityId entity = world->pending_destroy[request];
-        if (health_pool_has(&world->health, entity)) {
-            bool removed = health_pool_remove(&world->health, entity);
-            ENSURE(removed);
-        }
-        if (velocity_pool_has(&world->velocities, entity)) {
-            bool removed = velocity_pool_remove(&world->velocities, entity);
-            ENSURE(removed);
-        }
-        if (transform_pool_has(&world->transforms, entity)) {
-            bool removed = transform_pool_remove(&world->transforms, entity);
-            ENSURE(removed);
-        }
-        for (uint32_t unit = 0u; unit < SIM_MAX_UNITS; ++unit) {
-            if (world->unit_entities[unit].h == entity.h)
-                world->unit_entities[unit] = EntityId{HANDLE_NULL};
-        }
-        bool released = entity_manager_release(&world->entities, entity);
-        ENSURE(released);
-        world->pending_destroy[request] = EntityId{HANDLE_NULL};
-    }
-    world->pending_destroy_count = 0u;
+    // Literal M3.2 schedule. Damage is intentionally published and resolved in
+    // the same tick; moving publish to the next tick boundary is the retained
+    // next-tick experiment seam.
+    bool applied = sys_apply_commands(world, commands);
+    ENSURE(applied);
+    bool moved = sys_movement(world);
+    ENSURE(moved);
+    bool published = damage_event_queue_publish(&world->damage_events);
+    ENSURE(published);
+    bool resolved = sys_combat_resolve(world);
+    ENSURE(resolved);
+    bool consumed = damage_event_queue_consume(&world->damage_events);
+    ENSURE(consumed);
+    bool cooled_down = sys_cooldown_tick(world);
+    ENSURE(cooled_down);
+    sys_rng_advance(world);
+    bool destroyed = sys_flush_destroy(world);
+    ENSURE(destroyed);
     ++world->tick;
     return true;
 }

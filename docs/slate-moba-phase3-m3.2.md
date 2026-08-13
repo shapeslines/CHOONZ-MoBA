@@ -2,7 +2,7 @@
 type: record
 title: "SLATE - Phase 3 M3.2 systems and ordered schedule"
 kind: slate
-status: queued
+status: complete
 project: moba
 axis: "simulation systems scheduling"
 queued: 2026-08-12
@@ -14,11 +14,12 @@ related:
   - "docs/ROADMAP.md M3.2"
   - "docs/slate-moba-phase3-m3.1.md"
   - "PR #15 / M3.1 entity model"
+  - "PR #17 / M3.2 systems and schedule"
 ---
 
 # Slate - Phase 3 M3.2 systems and ordered schedule
 
-**Status:** queued behind the owner-approved merge of PR #15. Do not stack on the M3.1 branch.
+**Status:** complete on PR #17 and ready for owner review; merge remains separately owner-approved.
 
 ## Goal
 
@@ -27,10 +28,16 @@ iteration and append-only typed events, while retaining the M3.1 replay command 
 
 ## Entry gate
 
-- [ ] PR #15 is owner-approved, merged, and present on updated `main`.
-- [ ] Create `moba/slate-phase3-systems` from that updated `main`.
-- [ ] Re-run the untouched M3.1 Debug/Release 10,000-tick stream and record
+- [x] PR #15 is owner-approved, merged, and present on updated `main`.
+- [x] Create `moba/slate-phase3-systems` from that updated `main`.
+- [x] Re-run the untouched M3.1 Debug/Release 10,000-tick stream and record
   `0x981212877a575730` before schedule changes.
+
+Observed 2026-08-12: PR #15 merged the exact reviewed head
+`45b317b9ea45bd7b2352f924208e471b634ba01f` as squash `7ce2b45`. The untouched
+branch point builds under `/WX`; all 22 CTest entries pass in Debug and Release,
+both 10,000-tick runs retain the M3.1 golden, and the controlled divergence remains
+`tick=4321 field=position_x entity=7`.
 
 ## Fence
 
@@ -49,6 +56,9 @@ iteration and append-only typed events, while retaining the M3.1 replay command 
   state remains ordered by entity index.
 - Event queues are fixed-capacity, arena-backed, append-only POD records drained in append order.
   Overflow and invalid events fail without partial mutation; there are no callbacks or observers.
+- M3.2 resolves command-produced damage in the same tick to preserve the M3.1 command contract.
+  The queue owns explicit read/write phases so a later measured switch to next-tick delivery changes
+  schedule policy rather than queue storage or event encoding.
 - Systems are plain free functions in one hand-written schedule. No auto-discovery, dependency graph,
   virtual dispatch, heap allocation, or unordered iteration enters `eng_sim`.
 - Replay stays version 1 with 16-byte unit-slot commands. Any deterministic behavior change receives
@@ -58,16 +68,56 @@ iteration and append-only typed events, while retaining the M3.1 replay command 
 
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
-| S0 | Land and rebaseline | branch starts at merged PR #15 and the untouched M3.1 Debug/Release oracle is recorded | queued |
-| S1 | Ordered iteration cache | membership churn rebuilds a unique ascending entity-index view; dense reorder cannot affect it | queued |
-| S2 | Typed event queues | fixed-capacity double buffers append/drain deterministically and reject overflow atomically | queued |
-| S3 | Plain systems | movement and damage-resolution systems consume typed views/events with no storage-order dependency | queued |
-| S4 | Explicit schedule | one literal `sim_tick` order runs commands, movement, damage, cleanup, RNG, and tick-boundary destruction | queued |
-| S5 | Determinism migration | canonical hash/diff covers authoritative queues/system state; 10,000 ticks and exact mutation proof pass in Debug/Release | queued |
-| S6 | Close M3.2 | full `/WX` matrix, all CTest, boundary scan, docs, independent acceptance, and GitHub gates are green | queued |
+| S0 | Land and rebaseline | branch starts at merged PR #15 and the untouched M3.1 Debug/Release oracle is recorded | done 2026-08-12 |
+| S1 | Ordered iteration cache | membership churn rebuilds a unique ascending entity-index view; dense reorder cannot affect it | done 2026-08-12 |
+| S2 | Typed event queues | fixed-capacity double buffers append/drain deterministically and reject overflow atomically | done 2026-08-12 |
+| S3 | Plain systems | movement and damage-resolution systems consume typed views/events with no storage-order dependency | done 2026-08-12 |
+| S4 | Explicit schedule | one literal `sim_tick` order runs commands, movement, damage, cleanup, RNG, and tick-boundary destruction | done 2026-08-12 |
+| S5 | Determinism migration | canonical hash/diff covers authoritative queues/system state; 10,000 ticks and exact mutation proof pass in Debug/Release | done 2026-08-12 |
+| S6 | Close M3.2 | full `/WX` matrix, all CTest, boundary scan, docs, independent acceptance, and GitHub gates are green | done 2026-08-12 |
 
 ## Exit gate
 
 M3.2 closes only when movement and damage events run through the explicit schedule, every
 order-sensitive traversal is ascending by entity index, event overflow is atomic, and the complete
 Debug/Release replay oracle and boundary gates remain green. M3.3 stays a separate slate.
+
+## Slice evidence
+
+- **S1:** `ComponentPool` now owns an arena-backed derived `EntityId` cache. Successful membership
+  changes mark it dirty; the ordered-view API validates the complete sparse/dense mapping before an
+  atomic rebuild by ascending sparse index. Focused Debug tests cover divergent dense layouts,
+  swap-remove/re-add churn, stable clean-cache reads, and failure atomicity. The affected sim targets,
+  M3.1 golden stream, exact tick-4321 diagnostic, and sim-boundary test remain green.
+- **S2:** Added the typed 12-byte `DamageEvent` and an arena-backed two-buffer queue with explicit
+  append, publish, read, and consume phases. The world configuration owns queue capacity (256 by
+  default), sizing and initialization remain transactional, overflow/invalid/unread-publish failures
+  are byte-for-byte mutation-free, and a focused test demonstrates that deferring only `publish`
+  produces the future next-tick policy. All affected sim/replay targets and the unchanged M3.1 oracle
+  remain green.
+- **S3:** Extracted command production, ordered movement, append-order combat resolution, ordered
+  cooldown ticking, deterministic RNG advance, and destruction cleanup into prefixed free functions.
+  Focused tests prove command/event order, identical movement across divergent dense layouts, and
+  whole-read-phase combat validation before damage mutation. The affected Debug targets, destruction
+  suite, sim boundary, unchanged 10,000-tick golden, and exact divergence diagnostic remain green.
+- **S4:** `sim_tick` now names the literal schedule directly: validate, apply commands, ordered
+  movement, publish damage, combat resolve, consume, cooldown, RNG, deferred destruction, tick
+  increment. Schedule tests distinguish same-tick command/movement and damage/cooldown order, prove
+  one event-buffer swap and RNG advance per tick, retain end-boundary destruction, and reject event
+  overflow byte-for-byte before an earlier velocity command can mutate state.
+- **S5:** Canonical state now adds event capacity plus logical damage read/write counts and records
+  in phase/append order. It excludes ordered caches, physical event-buffer indices, pointers, padding,
+  and unused queue capacity; `sim_diff_state` mirrors that exact order and reports phase plus ordinal.
+  Replay remains format v1 with 16-byte commands and deliberately moves to logic hash
+  `0xab96814425ba80a4` (derived from the recorded M3.2 contract string). Exact M3.1 recordings are
+  rejected as exit class 2. Debug and Release both finish the 10,000-tick stream at
+  `0x637628abff59c823`, while the controlled mutation remains exactly
+  `tick=4321 field=position_x entity=7`.
+- **S6 local gate:** Complete `/WX` Debug and Release builds are green; all 25 CTest entries pass in
+  both configurations. `sim_boundary` scans 17 headers/sources and confirms the direct dependency
+  seam remains `core + math + serialize`. Architecture, roadmap, journal, next-session, and this
+  slate are updated, and M3.3 has its own queued slate with no implementation pulled forward.
+- **S6 acceptance gate:** Independent acceptance passed the complete implementation at `e999439`
+  and re-confirmed PASS on exact successor `fe337f6`, whose only delta is seven EOF blank-line
+  deletions. The full GitHub gate on `fe337f6` is green: MSVC Debug, MSVC Release, CodeQL C/C++,
+  and workflow analysis all passed. PR #17 is mergeable; owner approval remains the merge gate.

@@ -10,6 +10,7 @@ typedef enum SimStateField : uint8_t {
     SIM_STATE_FIELD_TICK,
     SIM_STATE_FIELD_CONFIG_MAX_ENTITIES,
     SIM_STATE_FIELD_CONFIG_INITIAL_UNIT_COUNT,
+    SIM_STATE_FIELD_CONFIG_DAMAGE_EVENT_CAPACITY,
     SIM_STATE_FIELD_RNG_STATE,
     SIM_STATE_FIELD_RNG_INC,
     SIM_STATE_FIELD_ENTITY_CAPACITY,
@@ -22,6 +23,14 @@ typedef enum SimStateField : uint8_t {
     SIM_STATE_FIELD_UNIT_ENTITY,
     SIM_STATE_FIELD_PENDING_DESTROY_COUNT,
     SIM_STATE_FIELD_PENDING_DESTROY_ENTITY,
+    SIM_STATE_FIELD_DAMAGE_EVENT_READ_COUNT,
+    SIM_STATE_FIELD_DAMAGE_EVENT_READ_SOURCE,
+    SIM_STATE_FIELD_DAMAGE_EVENT_READ_TARGET,
+    SIM_STATE_FIELD_DAMAGE_EVENT_READ_AMOUNT,
+    SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_COUNT,
+    SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_SOURCE,
+    SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_TARGET,
+    SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_AMOUNT,
     SIM_STATE_FIELD_TRANSFORM_COUNT,
     SIM_STATE_FIELD_TRANSFORM_ENTITY,
     SIM_STATE_FIELD_POSITION_X,
@@ -48,13 +57,15 @@ typedef struct SimStateDiff {
 } SimStateDiff;
 
 // FNV-1a/64 over explicit little-endian fields:
-//   tick; config max/initial; RNG state/inc; entity capacity/live/next/free;
+//   tick; config max/initial/event capacity; RNG state/inc; entity capacity/live/next/free;
 //   generations then liveness through next_fresh; free-stack order; all 64 unit
-//   mappings; pending count/order; then Transform, Velocity, and Health.
+//   mappings; pending-destroy count/order; logical damage read/write phases;
+//   then Transform, Velocity, and Health.
 // Each component pool encodes count, then a membership byte per allocated entity
 // index and, when present, exact EntityId plus its SoA fields. This makes entity
 // index the semantic order and excludes pointers, padding, unused capacity,
-// allocator state, and sparse/dense storage order. Invalid worlds hash to zero.
+// allocator state, sparse/dense storage order, ordered-query caches, physical
+// event-buffer indices, and unused event capacity. Invalid worlds hash to zero.
 uint64_t sim_hash_state(const SimWorld* world);
 
 // Walks the exact canonical order above. index is an entity index for generation,

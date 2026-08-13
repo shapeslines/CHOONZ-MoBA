@@ -8,6 +8,48 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 09 — 2026-08-12 — M3.2: deterministic systems and ordered schedule
+
+**Scope:** move the M3.1 ECS through explicit ordered systems and typed events without beginning the
+platform accumulator, presentation snapshot, or gameplay layers.
+**Outcome:** M3.2 is implementation-complete on PR #17. The simulation now has derived ascending-
+entity views, a phase-buffered `DamageEvent` seam, and one literal plain-function tick schedule.
+
+### What landed
+
+- Each `ComponentPool` owns an arena-backed ordered `EntityId` cache. Successful membership changes
+  invalidate it; a validated ascending sparse-index scan rebuilds it atomically. Cache state and dense
+  history are not hash authority.
+- The arena-backed two-buffer `DamageEvent` queue has explicit append, publish, read, and consume
+  phases. Invalid events, overflow, and unread-phase publication are mutation-free.
+- `sys_apply_commands`, `sys_movement`, `sys_combat_resolve`, `sys_cooldown_tick`,
+  `sys_rng_advance`, and `sys_flush_destroy` are plain prefixed free functions. `sim_tick` calls them
+  in one source-visible schedule with no registry, query DSL, dependency graph, or virtual dispatch.
+- Command damage publishes and resolves in the same tick to retain M3.1 behavior. The phase API
+  scaffolds a later next-tick experiment by moving only publication; stale-target policy and the
+  extra combat latency remain the explicit tradeoffs to measure.
+- Replay format remains v1 with 16-byte commands. Logic hash deliberately moves to
+  `0xab96814425ba80a4`; canonical state covers logical event phases and excludes physical buffers,
+  query caches, pointers, padding, unused capacity, and dense order.
+
+### Verification
+
+- MSVC `ci` preset (`/WX`): complete Debug and Release builds clean.
+- **25/25 CTest entries green** in both configurations, adding event, system, and schedule suites.
+- Debug and Release independently end the 10,000-tick stream at `0x637628abff59c823`.
+- Controlled mutation remains `tick=4321 field=position_x entity=7`.
+- Replay record→inspect→verify remains byte-exact; exact M3.1 logic-hash files reject with exit 2.
+- `sim_boundary` scans 17 sim headers/sources and the link seam remains core + math + serialize.
+
+### Next
+
+PR #17 is independently accepted, ready, mergeable, and green under GitHub CI/CodeQL. Owner-review
+and merge it as the remaining gate. Then branch M3.3 from updated `main` and execute
+[`slate-moba-phase3-m3.3.md`](slate-moba-phase3-m3.3.md). Do not fold M3.3 platform/presentation
+work into this branch.
+
+---
+
 ## Session 08 — 2026-08-12 — M3.1: arena entity model and sparse-set SoA
 
 **Scope:** replace the M3.0 placeholder arrays with deterministic arena-backed identity and typed

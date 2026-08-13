@@ -55,6 +55,15 @@ try {
     [IO.File]::WriteAllBytes($badLogic, $bytes)
     Invoke-ExpectExit 2 @('verify', $badLogic)
 
+    $m31Logic = Copy-ReplayBytes 'moba_replay_m31_logic.mbr'
+    $created.Add($m31Logic)
+    $bytes = [IO.File]::ReadAllBytes($m31Logic)
+    # Exact little-endian M3.1 logic hash: 0x7902599e173f87a6.
+    [byte[]]$oldLogic = 0xa6, 0x87, 0x3f, 0x17, 0x9e, 0x59, 0x02, 0x79
+    [Array]::Copy($oldLogic, 0, $bytes, 12, $oldLogic.Length)
+    [IO.File]::WriteAllBytes($m31Logic, $bytes)
+    Invoke-ExpectExit 2 @('verify', $m31Logic)
+
     $badRate = Copy-ReplayBytes 'moba_replay_bad_rate.mbr'
     $created.Add($badRate)
     $bytes = [IO.File]::ReadAllBytes($badRate)

@@ -44,9 +44,14 @@ TEST(sim_component_pool, initialization_is_arena_backed_and_atomic) {
     CHECK(pool.entity_capacity == 8u);
     CHECK(pool.capacity == 4u);
     CHECK(pool.count == 0u);
+    CHECK(pool.ordered_count == 0u);
+    CHECK(pool.ordered_dirty == 1u);
     CHECK(arena.offset <= component_pool_memory_required(8u, 4u));
     for (uint32_t i = 0; i < 8u; ++i) CHECK(pool.sparse[i] == 0u);
-    for (uint32_t i = 0; i < 4u; ++i) CHECK(pool.dense_entities[i].h == HANDLE_NULL);
+    for (uint32_t i = 0; i < 4u; ++i) {
+        CHECK(pool.dense_entities[i].h == HANDLE_NULL);
+        CHECK(pool.ordered_entities[i].h == HANDLE_NULL);
+    }
 
     alignas(16) uint8_t short_storage[8]{};
     Arena short_arena;
@@ -149,4 +154,75 @@ TEST(sim_component_pool, long_churn_preserves_both_mapping_directions) {
         }
         check_bidirectional_membership(&pool, active, generations, 32u);
     }
+}
+
+TEST(sim_component_pool, ordered_view_is_unique_ascending_and_dense_order_independent) {
+    alignas(16) uint8_t storage_a[512]{};
+    alignas(16) uint8_t storage_b[512]{};
+    Arena arena_a, arena_b;
+    arena_init_fixed(&arena_a, storage_a, sizeof(storage_a));
+    arena_init_fixed(&arena_b, storage_b, sizeof(storage_b));
+    ComponentPool a{}, b{};
+    CHECK(component_pool_init(&a, &arena_a, 8u, 8u));
+    CHECK(component_pool_init(&b, &arena_b, 8u, 8u));
+
+    const uint32_t order_a[] = {6u, 1u, 4u, 2u};
+    const uint32_t order_b[] = {2u, 4u, 6u, 1u};
+    for (uint32_t i = 0u; i < 4u; ++i) {
+        CHECK(component_pool_add(&a, pool_entity(order_a[i]), nullptr));
+        CHECK(component_pool_add(&b, pool_entity(order_b[i]), nullptr));
+    }
+    CHECK(a.dense_entities[0].h != b.dense_entities[0].h);
+
+    ComponentPoolOrderedView view_a{}, view_b{};
+    CHECK(component_pool_ordered_view(&a, &view_a));
+    CHECK(component_pool_ordered_view(&b, &view_b));
+    CHECK(view_a.count == 4u);
+    CHECK(view_b.count == view_a.count);
+    const uint32_t expected[] = {1u, 2u, 4u, 6u};
+    for (uint32_t i = 0u; i < view_a.count; ++i) {
+        CHECK(handle_index(view_a.entities[i].h) == expected[i]);
+        CHECK(view_a.entities[i].h == view_b.entities[i].h);
+    }
+    CHECK(a.ordered_dirty == 0u);
+    CHECK(b.ordered_dirty == 0u);
+}
+
+TEST(sim_component_pool, ordered_view_rebuilds_only_after_successful_membership_churn) {
+    alignas(16) uint8_t storage[512]{};
+    Arena arena;
+    arena_init_fixed(&arena, storage, sizeof(storage));
+    ComponentPool pool{};
+    CHECK(component_pool_init(&pool, &arena, 8u, 8u));
+    CHECK(component_pool_add(&pool, pool_entity(0u), nullptr));
+    CHECK(component_pool_add(&pool, pool_entity(3u), nullptr));
+    CHECK(component_pool_add(&pool, pool_entity(7u), nullptr));
+
+    ComponentPoolOrderedView view{};
+    CHECK(component_pool_ordered_view(&pool, &view));
+    CHECK(view.count == 3u);
+    CHECK(pool.ordered_dirty == 0u);
+    const EntityId* stable_cache = view.entities;
+    CHECK(component_pool_ordered_view(&pool, &view));
+    CHECK(view.entities == stable_cache);
+    CHECK(pool.ordered_dirty == 0u);
+
+    ComponentPool before = pool;
+    uint8_t bytes_before[512];
+    std::memcpy(bytes_before, storage, sizeof(storage));
+    CHECK(!component_pool_add(&pool, pool_entity(3u), nullptr));
+    CHECK(!component_pool_remove(&pool, pool_entity(5u), nullptr));
+    CHECK(std::memcmp(&pool, &before, sizeof(pool)) == 0);
+    CHECK(std::memcmp(storage, bytes_before, sizeof(storage)) == 0);
+
+    CHECK(component_pool_remove(&pool, pool_entity(3u), nullptr));
+    CHECK(pool.ordered_dirty == 1u);
+    CHECK(component_pool_add(&pool, pool_entity(2u), nullptr));
+    CHECK(component_pool_add(&pool, pool_entity(5u), nullptr));
+    CHECK(component_pool_ordered_view(&pool, &view));
+    CHECK(view.count == 4u);
+    const uint32_t expected[] = {0u, 2u, 5u, 7u};
+    for (uint32_t i = 0u; i < view.count; ++i)
+        CHECK(handle_index(view.entities[i].h) == expected[i]);
+    CHECK(pool.ordered_dirty == 0u);
 }

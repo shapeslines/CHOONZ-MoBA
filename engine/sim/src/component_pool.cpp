@@ -29,6 +29,7 @@ size_t component_pool_memory_required(uint32_t entity_capacity, uint32_t capacit
     size_t sparse_bytes = sizeof(uint32_t) * static_cast<size_t>(entity_capacity);
     size_t dense_bytes = sizeof(EntityId) * static_cast<size_t>(capacity);
     return sparse_bytes + (alignof(uint32_t) - 1u) +
+           dense_bytes + (alignof(EntityId) - 1u) +
            dense_bytes + (alignof(EntityId) - 1u);
 }
 
@@ -42,6 +43,8 @@ bool component_pool_init(ComponentPool* pool, Arena* arena,
                         sizeof(uint32_t) * static_cast<size_t>(entity_capacity),
                         alignof(uint32_t)) ||
         !layout_advance(arena, &end, sizeof(EntityId) * static_cast<size_t>(capacity),
+                        alignof(EntityId)) ||
+        !layout_advance(arena, &end, sizeof(EntityId) * static_cast<size_t>(capacity),
                         alignof(EntityId))) return false;
 
     ComponentPool staged{};
@@ -49,8 +52,11 @@ bool component_pool_init(ComponentPool* pool, Arena* arena,
         arena, sizeof(uint32_t) * static_cast<size_t>(entity_capacity), alignof(uint32_t)));
     staged.dense_entities = static_cast<EntityId*>(arena_push_zero(
         arena, sizeof(EntityId) * static_cast<size_t>(capacity), alignof(EntityId)));
+    staged.ordered_entities = static_cast<EntityId*>(arena_push_zero(
+        arena, sizeof(EntityId) * static_cast<size_t>(capacity), alignof(EntityId)));
     staged.entity_capacity = entity_capacity;
     staged.capacity = capacity;
+    staged.ordered_dirty = 1u;
     *pool = staged;
     return true;
 }
@@ -80,6 +86,7 @@ bool component_pool_add(ComponentPool* pool, EntityId entity, uint32_t* dense_in
     pool->dense_entities[dense] = entity;
     pool->sparse[entity_index] = dense + 1u;
     ++pool->count;
+    pool->ordered_dirty = 1u;
     if (dense_index) *dense_index = dense;
     return true;
 }
@@ -111,6 +118,44 @@ bool component_pool_remove(ComponentPool* pool, EntityId entity,
     pool->dense_entities[last_dense] = EntityId{HANDLE_NULL};
     pool->sparse[entity_index] = 0u;
     --pool->count;
+    pool->ordered_dirty = 1u;
     if (result) *result = staged;
+    return true;
+}
+
+bool component_pool_ordered_view(ComponentPool* pool, ComponentPoolOrderedView* view) {
+    if (!pool || !view || !pool->sparse || !pool->dense_entities ||
+        !pool->ordered_entities || pool->count > pool->capacity) return false;
+
+    if (pool->ordered_dirty != 0u) {
+        // Validate the complete bidirectional mapping before touching the cache.
+        // The second pass then cannot fail, preserving failure atomicity.
+        uint32_t observed = 0u;
+        for (uint32_t index = 0u; index < pool->entity_capacity; ++index) {
+            uint32_t encoded_dense = pool->sparse[index];
+            if (encoded_dense == 0u) continue;
+            uint32_t dense = encoded_dense - 1u;
+            if (dense >= pool->count || dense >= pool->capacity ||
+                handle_gen(pool->dense_entities[dense].h) == 0u ||
+                handle_index(pool->dense_entities[dense].h) != index ||
+                observed >= pool->capacity) return false;
+            ++observed;
+        }
+        if (observed != pool->count) return false;
+
+        uint32_t ordered = 0u;
+        for (uint32_t index = 0u; index < pool->entity_capacity; ++index) {
+            uint32_t encoded_dense = pool->sparse[index];
+            if (encoded_dense != 0u)
+                pool->ordered_entities[ordered++] = pool->dense_entities[encoded_dense - 1u];
+        }
+        for (uint32_t i = ordered; i < pool->ordered_count; ++i)
+            pool->ordered_entities[i] = EntityId{HANDLE_NULL};
+        pool->ordered_count = ordered;
+        pool->ordered_dirty = 0u;
+    }
+
+    ComponentPoolOrderedView staged{pool->ordered_entities, pool->ordered_count};
+    *view = staged;
     return true;
 }

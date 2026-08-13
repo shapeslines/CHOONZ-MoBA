@@ -82,7 +82,7 @@ checks both source imports and `engine/sim/CMakeLists.txt`. `eng_sim` itself res
 | Math | `eng_math` | `fix` (Q16.16) + fixed vec/trig/rng for sim; `f32` vec/mat/quat/geom for render; deterministic PRNG | no | no |
 | Platform | `eng_platform` | Win32 window/input/timer/file I/O/DLL load, **page allocator**, **VkSurface creation + Vulkan loader bootstrap**, UDP sockets, dir-watch. The outer loop + accumulator. | **yes (only here)** | headers only (surface) |
 | Render | `eng_render` | Raw Vulkan backend behind the thin renderer seam; bring-up, frames-in-flight, own device-memory allocator, pipelines, instanced forward draw | no | **yes (only here)** |
-| Sim | `eng_sim` | arena-backed entity manager + typed sparse-set SoA world, deterministic tick/deferred destruction, canonical hash/diff, replay codec | no | no |
+| Sim | `eng_sim` | arena-backed sparse-set SoA world, ordered views, typed events, explicit systems/tick schedule, canonical hash/diff, replay codec | no | no |
 | Net | `eng_net` | Server loop driving sim_tick, per-client baseline/delta snapshots + interest management, client prediction/reconciliation, lag-comp history ring, own UDP reliability, command codec, replay, divergence detection | via platform seam | no |
 | Assets | `eng_assets` | Own PNG/glTF/WAV/TGA parsers, baked `.mba` container, runtime loader, resource registry | via platform seam | no (hands blobs to render seam) |
 | Serialize | `eng_serialize` | Bounded, sticky, allocation-free LE byte readers/writers shared by net + replay + asset codecs | no | no |
@@ -846,12 +846,13 @@ Forward rendering (light- and overdraw-modest scenes; deferred is unjustified). 
 
 The spine of the game (`eng_sim`): what exists in the world, and how it advances in time. Built backward from the determinism contract (§2.1).
 
-**M3.1 now implemented:** `SimWorldConfig` fixes entity capacity up front (16,384 by default) while
-retaining 64 stable replay command slots. `SimWorld` owns the entity manager, Transform/Velocity/
-Health pools, tick, PCG32 state, slot mappings, and an arena-backed deferred-destroy queue. Commands
-are validated as a complete buffer, applied in recorded order, and the current integration seam runs
-in ascending unit-slot order. M3.2 replaces that inline seam with explicit systems and ordered query
-caches; it does not change identity or storage ownership.
+**M3.1–M3.2 now implemented:** `SimWorldConfig` fixes entity capacity up front (16,384 by default),
+retains 64 stable replay command slots, and sizes the typed damage-event queue (256 by default).
+`SimWorld` owns the entity manager, Transform/Velocity/Health pools, derived ordered views, phase-
+buffered damage events, tick, PCG32 state, slot mappings, and an arena-backed deferred-destroy queue.
+Commands are validated as a complete buffer, then one literal schedule applies commands, moves in
+ascending entity order, resolves same-tick damage in append order, ticks cooldowns/RNG, and commits
+destruction at the boundary. Identity, typed storage, queues, and ordered caches remain arena-backed.
 
 ### 9.1 Entities & sparse-set SoA pools
 
@@ -873,7 +874,9 @@ bool     entity_manager_is_alive(const EntityManager*, EntityId);
 typedef struct {                  // one per component type; component DATA is SoA, declared per-type
     uint32_t *sparse;             // [max] entity index -> dense slot (+1; 0 = absent)
     EntityId *dense_entities;     // dense slot -> exact owning EntityId
-    uint32_t entity_capacity, capacity, count;
+    EntityId *ordered_entities;   // derived ascending-index query cache
+    uint32_t entity_capacity, capacity, count, ordered_count;
+    uint8_t ordered_dirty;
 } ComponentPool;
 // e.g. TransformPool { ComponentPool membership; fix *position_x,*position_y,*facing; }
 ```
@@ -884,31 +887,34 @@ typedef struct {                  // one per component type; component DATA is S
 
 Swap-remove reorders the dense array by destruction history. **Rule: order-sensitive systems iterate by ascending entity index** (via a per-pool sorted index list rebuilt only when membership changes — *not* every tick), never raw dense order. The query API's default is ordered; unordered dense iteration is an explicit opt-in reserved for *commutative* systems (e.g. pure integration), which are documented as such so the sort isn't paid where it isn't needed.
 
+The implemented `component_pool_ordered_view` validates the complete sparse↔dense mapping before an
+atomic lazy rebuild. Successful add/remove operations mark the cache dirty; rejected operations do
+not. Cache pointers, bytes, count, dirty state, and physical dense order are derived implementation
+state and never enter the canonical hash.
+
 > **Resolved — the flagship example uses the ordered API.** Earlier the `sys_movement` sample iterated raw dense order while the doc mandated ordered iteration. Canonical examples iterate the sorted index list; commutative-vs-order-dependent is stated per system, since paying an O(n log n) sort per pool per tick for commutative work is wasted budget at hundreds of units × many pools × 30 Hz.
 
 ### 9.3 The World, systems, schedule
 
-`SimWorld` currently aggregates configuration, the entity manager, every pool, stable unit mappings,
-`tick`, `Rng` (§2.8), and `pending_destroy`. M3.2 adds typed event queues and makes the existing
-fixed order an explicit system schedule. **Systems are plain free functions; the schedule is a
-hand-written fixed-order array** — no base classes, no auto-discovery, no dependency-graph solver.
-That array *is* the deterministic ordering.
+`SimWorld` aggregates configuration, the entity manager, every pool, stable unit mappings, typed
+damage events, `tick`, `Rng` (§2.8), and `pending_destroy`. **Systems are prefixed plain free
+functions; `sim_tick` is the one hand-written schedule** — no base classes, auto-discovery,
+function-pointer registry, dependency-graph solver, or virtual dispatch. Its source order *is* the
+deterministic ordering.
 
 ```c
-// M3.2 target schedule (not part of M3.1 storage):
-static void sim_tick(SimWorld* w, const CommandBuffer* cmds) {
-    events_swap(&w->events);            // last tick's outputs become this tick's inputs
-    sys_apply_commands(w, cmds);
-    sys_ai(w);                          // minion/tower target selection (tiny state machines)
-    sys_movement(w);                    // flow-field / A* desired velocity (§12)
-    sys_avoidance(w);                   // grid-bucketed separation (RVO-lite)
-    sys_abilities(w);                   // cast / cooldown
-    sys_projectiles(w);                 // advance / collide
-    sys_combat_resolve(w);              // drain DamageEvents in one place
-    sys_status_tick(w);                 // buffs/debuffs
-    sys_fog_update(w);                  // authoritative vision for ALL teams (§12)
-    sys_death_cleanup(w); sys_flush_destroy(w);
+bool sim_tick(SimWorld* w, const SimCommandBuffer* cmds) {
+    if (!sim_validate_commands(w, cmds)) return false;
+    sys_apply_commands(w, cmds);         // velocity state + DamageEvent production
+    sys_movement(w);                     // ascending Transform entity indices
+    damage_event_queue_publish(&w->damage_events);
+    sys_combat_resolve(w);               // append order, same tick
+    damage_event_queue_consume(&w->damage_events);
+    sys_cooldown_tick(w);                // ascending Health entity indices
+    sys_rng_advance(w);
+    sys_flush_destroy(w);                // recorded request order, tick boundary
     w->tick++;
+    return true;
 }
 ```
 
@@ -920,7 +926,18 @@ The fixed-timestep accumulator lives in the platform loop (§4.2) and calls `eng
 
 ### 9.5 Events without breaking determinism
 
-**Double-buffered, append-only typed event queues drained in deterministic order. No immediate callbacks, no observers, no virtual dispatch.** Systems emit POD event records (`DamageEvent`, `DeathEvent`, "play hit sound"); consumers drain in append order (deterministic because producers ran in deterministic order). Combat is event-driven: systems emit `DamageEvent`s; one central `sys_combat_resolve` applies mitigation, on-death, and kill-credit in one place. Events leaving the sim (audio/UI cues) are read on the presentation side — that's how audio/UI stay subordinate without coupling in.
+**Double-buffered, append-only typed event queues drain in deterministic order. No immediate
+callbacks, observers, or virtual dispatch.** M3.2 implements only the compact POD
+`DamageEvent { source, target, amount }`; a null source preserves the placeholder replay seam while
+leaving attribution available to later gameplay. Producers append to the write phase, the schedule
+publishes it, and `sys_combat_resolve` prevalidates the complete read phase before applying records in
+append order. Invalid records, overflow, and unread-phase publication are mutation-free.
+
+M3.2 deliberately publishes damage after movement and resolves it in the **same tick**, preserving
+M3.1 behavior. The storage API keeps append/publish/read/consume explicit: moving only `publish` to
+the next tick boundary is the future experiment for delayed delivery. That experiment must first
+settle stale-target/source policy and measure one-tick combat latency; it does not require a queue
+redesign. `DeathEvent` and presentation events remain gameplay/presentation work, not M3.2 scope.
 
 ### 9.6 Snapshots & the present glue (one fixed→float owner)
 
@@ -960,9 +977,10 @@ The sim is pure: a full match replays from `seed + input stream`. Three pieces:
    bump the format version; deterministic behavior or command encoding changes bump the logic hash.
 2. **Per-tick state hash:** after every `sim_tick`, FNV-1a/64 consumes explicit little-endian fields
    in this order: tick, world configuration, RNG, entity-manager scalars, generations/liveness,
-   free-stack order, all 64 unit mappings, pending-destroy order, then Transform, Velocity, and
-   Health membership/values in ascending entity-index order. It never hashes struct memory,
-   padding, unused capacity, allocator state, pointers, sparse/dense storage order, render, timing,
+   free-stack order, all 64 unit mappings, pending-destroy order, logical damage read/write counts
+   and records, then Transform, Velocity, and Health membership/values in ascending entity-index
+   order. It never hashes struct memory, padding, unused capacity, allocator state, pointers,
+   sparse/dense storage order, ordered-query caches, physical event-buffer indices, render, timing,
    or debug state.
 
 ```c
@@ -973,8 +991,9 @@ uint64_t sim_hash_state(const SimWorld* s); // canonical semantic ECS state, exp
 
 This is now executable in `sim_determinism_tests`: one run records 10,000 expected hashes and an
 independent replay matches every one. A second run perturbs entity index 7's `position_x` after tick
-4321 and must identify that exact first tick/field/index. The pinned M3.1 stream ends at
-`0x981212877a575730`. `moba_replay record|inspect|verify` exposes the same
+4321 and must identify that exact first tick/field/index. The pinned M3.2 stream ends at
+`0x637628abff59c823`, with replay logic hash `0xab96814425ba80a4`. `moba_replay
+record|inspect|verify` exposes the same
 codec through atomic platform-file persistence; malformed or incompatible files are classified
 separately from deterministic divergence.
 

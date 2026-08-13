@@ -27,10 +27,13 @@ add_executable(engine_tests
     sim/components_tests.cpp
     sim/deferred_destroy_tests.cpp
     sim/entity_tests.cpp
+    sim/events_tests.cpp
     sim/sim_config_tests.cpp
     sim/sim_hash_tests.cpp
     sim/replay_tests.cpp
+    sim/schedule_tests.cpp
     sim/sim_tests.cpp
+    sim/systems_tests.cpp
     render/render_tests.cpp
     tga/tga_tests.cpp
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
@@ -75,7 +78,10 @@ add_test(NAME sim_component_pool COMMAND engine_tests --suite sim_component_pool
 add_test(NAME sim_components COMMAND engine_tests --suite sim_components)
 add_test(NAME sim_destroy COMMAND engine_tests --suite sim_destroy)
 add_test(NAME sim_entity  COMMAND engine_tests --suite sim_entity)
+add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
+add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
+add_test(NAME sim_systems COMMAND engine_tests --suite sim_systems)
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
@@ -103,7 +109,7 @@ add_test(NAME replay_inspect
     COMMAND $<TARGET_FILE:moba_replay> inspect "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_inspect PROPERTIES
     FIXTURES_REQUIRED replay_file
-    PASS_REGULAR_EXPRESSION "logic_hash=0x7902599e173f87a6")
+    PASS_REGULAR_EXPRESSION "logic_hash=0xab96814425ba80a4")
 
 add_test(NAME replay_verify
     COMMAND $<TARGET_FILE:moba_replay> verify "${REPLAY_FIXTURE_FILE}")

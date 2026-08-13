@@ -7,12 +7,14 @@
 #include "math/rng.h"
 #include "sim/components.h"
 #include "sim/entity.h"
+#include "sim/events.h"
 #include "sim/sim_config.h"
 
 static const uint32_t SIM_MAX_UNITS = 64;
 static const uint32_t SIM_MAX_PLAYERS = 10;
 static const uint32_t SIM_MAX_COMMANDS_PER_TICK = 256;
 static const uint32_t SIM_DEFAULT_MAX_ENTITIES = 16384;
+static const uint32_t SIM_DEFAULT_DAMAGE_EVENT_CAPACITY = SIM_MAX_COMMANDS_PER_TICK;
 
 typedef enum SimCommandKind : uint8_t {
     SIM_COMMAND_SET_VELOCITY = 1,
@@ -41,6 +43,7 @@ typedef struct SimCommandBuffer {
 typedef struct SimWorldConfig {
     uint32_t max_entities;
     uint32_t initial_unit_count;
+    uint32_t damage_event_capacity;
 } SimWorldConfig;
 
 typedef struct SimWorld {
@@ -52,6 +55,7 @@ typedef struct SimWorld {
     VelocityPool velocities;
     HealthPool health;
     EntityId unit_entities[SIM_MAX_UNITS];
+    DamageEventQueue damage_events;
     EntityId* pending_destroy;
     uint32_t pending_destroy_count;
 } SimWorld;

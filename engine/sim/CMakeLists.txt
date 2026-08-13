@@ -4,9 +4,11 @@ add_library(eng_sim STATIC
     src/component_pool.cpp
     src/components.cpp
     src/entity.cpp
+    src/events.cpp
     src/replay.cpp
     src/sim.cpp
-    src/sim_hash.cpp)
+    src/sim_hash.cpp
+    src/systems.cpp)
 add_library(eng::sim ALIAS eng_sim)
 
 target_include_directories(eng_sim
