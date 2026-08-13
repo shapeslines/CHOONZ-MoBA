@@ -31,7 +31,7 @@ commit/push the green checkpoint, and advance only on evidence.
 - [x] ARC compiler self-test passed: 1169 checks.
 - [x] Static manifest validates and renders deterministically.
 - [x] Untouched Debug baseline and M3.4 oracle captured.
-- [ ] Draft consolidation PR opened after first implementation slice.
+- [x] Draft consolidation PR opened after first implementation slice.
 - [ ] Full local acceptance green.
 - [ ] Fresh security and independent acceptance verdicts green.
 - [ ] Exact-head CI and CodeQL green; PR ready.
@@ -59,13 +59,15 @@ Goal: add manual recovery and fail-closed cleanup.
 Done means: unsafe paths fail before mutation; push/manual workflow contracts, all checkout pins, and
 explicit winget source are tested; full fresh-walk passes; draft PR is open.
 
-Status: implementation complete; publication pending. PowerShell parse checks pass. The focused CTest
+Status: complete. PowerShell parse checks pass. The focused CTest
 gate passes 2/2 and covers system root, temp root, source/outside root, nested directory, file, and
 junction rejection without sentinel mutation. The first full walk exposed and then drove a repair for
 a source checkout that itself lives as a direct temp child. The corrected exact commit completed a
 fresh 88-target Debug build, 34/34 CTests, and a 90-frame validation-clean Vulkan run with a
 2,764,854-byte screenshot. Workflow contract coverage proves push, pull request, manual dispatch,
-global `contents: read`, all three verified checkout pins, and both explicit winget sources.
+global `contents: read`, all three verified checkout pins, and both explicit winget sources. Commit
+`0ed4b6e919b48ced0f8f018487ff64ea62696141` is pushed; draft PR #51 is open and mergeable, with
+exact-head MSVC Debug/RelWithDebInfo/Release, clang-cl/UBSan, fresh-walk, and CodeQL green.
 
 ### S3 — Core memory and containers
 
@@ -131,5 +133,5 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Push the green S2 checkpoint, open the single draft consolidation PR, record its exact URL/head, then
-advance to the PR #41/#42/#43/#46 core-memory slice only.
+Reconcile PR #41/#42/#43/#46 into the core-memory slice, add persistent no-mutation and invariant
+tripwires, and do not import the preserved unfinished S22 or PRs #47-#50.

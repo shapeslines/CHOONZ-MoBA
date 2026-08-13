@@ -15,9 +15,14 @@ Inventory captured from GitHub on 2026-08-13 against `main` at
   unique `docs/gap-analysis-report.md` is an obsolete snapshot whose durable facts are represented by
   the current gap ledger, M3.3/M3.4 slates, journal, and handoff; it contains no required code or
   current state absent from `main`.
-- Explicitly excluded and retained: PR #47 (`e3271bf`), PR #48 (`714e01c`), and PR #49
-  (`c187dc7`). They were opened after the approved consolidation boundary and are not retirement
-  targets. PR #49 changes only `tools/sandbox/src/tga_direct.cpp`; all its checks are green.
+- Explicitly excluded and retained: PR #47 (`e3271bf`), PR #48 (`714e01c`), PR #49 (`c187dc7`), and
+  PR #50 (`972f328`). They were opened after the approved consolidation boundary and are not
+  retirement targets. Their one-path subjects are string aliasing, renderer-handle free-list state,
+  TGA allocator callbacks, and rejected render-batch rollback respectively.
+- Preserved unfinished work: `codex/security-platform-memory-boundary` at base `63f0b1de`, worktree
+  `.worktrees/security-platform-memory`, with modified `engine/platform/src/win32/win32_mem.cpp` and
+  untracked disposable S22 probe/receipt files. It was stopped before commit, push, or PR and is not a
+  consolidation input.
 
 ## Exact source inventory
 
@@ -93,8 +98,13 @@ In progress. This section must account for every source diff before ready state.
   `SANDBOX_SMOKE=PASS`; 90 validation-clean frames; screenshot 2,764,854 bytes; cleanup complete.
 - Repair loop: first full walk rejected S2 because the temp-root checkout could target itself; the
   source-repository equality guard was added and the complete walk rerun green.
-- S2 disposition: PASS pending push and draft PR creation.
+- Published head: `0ed4b6e919b48ced0f8f018487ff64ea62696141` on draft PR #51.
+- Exact-head GitHub snapshot: MSVC Debug/RelWithDebInfo/Release, clang-cl/UBSan, fresh-walk, CodeQL
+  Actions/C++, and workflow CodeQL all green; PR open, draft, mergeable.
+- Single-writer recovery: the older loop stopped at S21/PR #50 and handed off unfinished S22 without
+  commit, push, PR, or external action in flight.
+- S2 disposition: PASS.
 
 ## NEXT
 
-Push S2, open the draft consolidation PR, record it, then reconcile PRs #41/#42/#43/#46 only.
+Reconcile PRs #41/#42/#43/#46 only; preserve PRs #47-#50 and unfinished S22 separately.
