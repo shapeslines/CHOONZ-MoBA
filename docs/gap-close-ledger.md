@@ -42,10 +42,10 @@ is the execution ledger.
 | 4 | `moba/gap-close-w4` | #22 | `4d250b2` | merged 2026-08-13; renderer robustness plus recovery of the Wave 2b `MOBA_VULKAN_REQUIRED` CMake gate |
 | 5 | `moba/gap-close-w5` | #23 | `ab774ed` | merged 2026-08-13 from exact green head `6a39c17`; ADR-0014 and roadmap ownership amendments; acceptance corrections continue in #28 |
 | 6 | `moba/gap-close-w6` | #24 | `ca5ad22` | merged 2026-08-13 from exact green head `c56ade4`, before the cadence/presentation acceptance repair was complete |
-| acceptance repair | `codex/m3.3-acceptance-repair` | #28 | pending | non-rewriting correction for #23/#24: platform cadence, transactional snapshots, exact boundary tests, and final M3.3 evidence |
+| acceptance repair | `codex/m3.3-acceptance-repair` | #28 | `b03f545` | merged 2026-08-13 from accepted exact head `8cc42c1`; platform cadence, transactional snapshots, strict hosted Vulkan classifier, boundary tests, and final M3.3 evidence |
 
 PRs #23/#24 were externally merged while the acceptance worktree was active. Their immutable merge
-history is retained; #28 repairs the contracts forward. Remote `moba/gap-close-w5` and
+history is retained; #28 repairs the contracts forward and is green after merge. Remote `moba/gap-close-w5` and
 `moba/gap-close-w6` refs were restored to their exact merged heads and are intentionally retained.
 
 ## Gap status
