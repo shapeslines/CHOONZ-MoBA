@@ -8,50 +8,58 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
-## Session 10 — 2026-08-12 — M3.3: fixed-tick loop and the SIM/PRESENTATION boundary
+## Session 10 — 2026-08-13 — M3.3 acceptance repair and presentation boundary
 
-**Scope:** execute the M3.3 slate (gap-close Wave 6): the platform-owned 30 Hz
-accumulator, fixed-only snapshot extraction, double-buffered prev/curr, and the game
-present glue that owns interpolation and the single fixed→float conversion.
-**Outcome:** M3.3 complete. `eng_game` (game/present.h) is the boundary owner; the
-sandbox now runs a deterministic 64-unit orbit demo through the full sim→snapshot→
-interpolate→DrawItem path, validation-clean.
+**Scope:** land gap-close PRs #21–#24 in order, repair the hosted Vulkan gate, and close M3.3 without
+starting M3.4. Commands remain same-tick; the runtime loop is shaped for a future per-tick input/net
+source by generating one fresh buffer for every owed tick.
+**Outcome:** PRs #21–#24 reached `main` in order. PRs #23/#24 were externally merged before their
+acceptance corrections landed, so history was preserved and corrective PR #28 carries the complete
+non-rewriting M3.3 repair. Local implementation and hardware gates are green; exact-head independent
+acceptance, GitHub checks, and squash merge remain the final external closure loop.
 
 ### What landed
 
-- **`engine/game/`** — `RenderSnapshot` (slot-indexed fixed-only units + stable
-  EntityIds), `snapshot_extract` (const, hash-neutral), `present_advance` (accumulator
-  clamped by `SIM_MAX_CATCHUP_S`, whole-tick `sim_tick` calls, prev/curr double
-  buffer), and `present_build_draw_items` (the one fixed→float + interpolation point;
-  sim-y maps to world-z, facing rotates cubes). The renderer seam is untouched — it
-  still receives only `DrawItem[]` + `FrameView`.
-- **Sandbox rework** — the programmatic 500-cube field is gone; 64 sim units orbit
-  deterministically (per-tick `SET_VELOCITY` from `fix_sin`/`fix_cos` tables, no RNG,
-  no floats). Sim ticks even when rendering is skipped (minimized/null) — the M0.3
-  "sim keeps ticking" policy, now real.
-- **Present suite** (5 tests, CTest `present`): extraction is fixed/non-mutating/
-  slot-ordered; render-rate independence is proven headlessly (60/30/mixed-fps frame
-  splits over one sim-second → identical 30 ticks and identical hashes); the 0.25 s
-  catch-up clamp runs exactly 7 ticks; prev/curr double-buffer semantics; interpolation
-  math at alpha=0.5 (x=50, sim-y→world-z) and dead-slot skipping.
+- The gap stack landed as PR #21 → `8defa10`, #22 → `4d250b2`, #23 → `ab774ed`, and #24 →
+  `ca5ad22`. PR #20 and recovery #25 are superseded by #21. Remote wave branches are retained.
+- The Vulkan smoke classifier now skips only exact “no physical device/compatible driver” or
+  ADR-0012 minimum-spec rejection logs. Any other initialization, validation, exit, or missing-image
+  outcome fails and prints the sandbox log. CI and the fresh-walk script invoke one shared classifier.
+  A first independent acceptance pass caught that matching the phrase before the exit status could
+  mask an unrelated failure; the repaired classifier checks exit and failure diagnostics first and
+  has 14 adversarial CTest cases, including Vulkan validation WARN and ERROR records.
+- `PlatformFixedStep` is window-independent platform code: initialize, clamp accumulated frame debt,
+  query/consume whole 30 Hz ticks, and calculate alpha. It has no game or sim dependency.
+- The sandbox generates orbit commands inside each owed-tick iteration and consumes debt only after
+  `sim_tick` and post-tick snapshot capture succeed. Minimized rendering does not pause simulation.
+- `eng_game` owns two arena-backed fixed snapshots, const extraction over all 64 stable unit slots,
+  actual live counts, previous→current interpolation, identity-change suppression, and the sole
+  fixed→float conversion. Presentation no longer owns clocks or an accumulator.
+- clang-cl’s dynamic ASan runtime is staged beside CTest/replay executables, closing the Windows
+  environment ambiguity where CTest could drop the compiler bin from a duplicated `Path`/`PATH`.
 
 ### Verification
 
-- MSVC `ci` preset (`/WX`): Debug + Release clean; **26/26 CTest entries green** in
-  both configs (25 existing + `present`).
-- Oracle untouched: `sim_determinism` still ends at `0x637628abff59c823`; mutation
-  still `tick=4321 field=position_x entity=7`; the full-capacity test (G32) and the
-  hash-coverage guard (G24) ride along.
-- Sandbox (RTX 4070 Ti, validation on): `objects=64 batches=1 scene_draws=1
-  total_draws=3 allocs=12`; 600-frame run with screenshot; zero validation messages;
-  clean exit. Deterministic per-run: same seed, same orbit, same stats.
-- Boundary intact: `eng_game → sim + render_common + core + math`; render still has no
-  sim include; `engine_tests` remains user32-free (window TU never linked).
+- MSVC `ci` preset (`/WX`): complete Debug, RelWithDebInfo, and Release builds; **28/28 CTest** in
+  each configuration. Debug-ASan also passes **28/28**.
+- The unchanged 10,000-tick oracle ends at `0x637628abff59c823`; controlled divergence remains
+  `tick=4321 field=position_x entity=7`; replay v1 and logic hash `0xab96814425ba80a4` are unchanged.
+- Focused cadence/presentation tests cover 60 Hz, 30 Hz, mixed grouping, catch-up clamping,
+  minimized rendering, two distinct command generations in a two-tick frame, retained debt on tick
+  failure, under-budget initialization atomicity, alpha 0/midpoint/near-1, destruction, and reuse.
+- `sim_boundary` and `present_boundary` prove `eng_sim → core + math + serialize`,
+  `eng_game → core + math + sim + render_common`, no renderer→sim dependency, and no
+  platform-cadence→game/sim dependency.
+- A fresh clone of the final corrective tree completed configure, build, all 28 Debug tests, and a
+  90-frame validation-clean sandbox run. RTX 4070 Ti evidence produced a 2,764,854-byte 1280×720
+  screenshot with 64 objects, one batch, one scene draw, three total draws, and 12 allocations.
 
 ### Next
 
-M3.4 (sim flag pinning + isolation gate) is the separate slate; Phase 4 (assets) and
-Phase 5 (gameplay) may begin once M3.4 holds.
+Close PR #28 only from its exact independently accepted green head, then synchronize `main`. Open
+[`slate-moba-phase3-m3.4.md`](slate-moba-phase3-m3.4.md) separately for centralized sim flags,
+game/test binary parity, stronger isolation linting, and the clang-cl/UBSan stretch gate. Phase 4
+remains blocked until M3.4 closes.
 
 ---
 

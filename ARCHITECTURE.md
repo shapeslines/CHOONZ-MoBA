@@ -2,25 +2,21 @@
 
 > Reference map back to the canonical System-Architecture library. This repo stays the
 > authoritative home of its own implementation docs; the deep-dive linked below is the
-> system-level synthesis. Generated 2026-06-17; refreshed 2026-08-12 (M3.2 merged, ADR
+> system-level synthesis. Generated 2026-06-17; refreshed 2026-08-13 (M3.3 accepted, ADR
 > index current). Refresh from the library when it changes.
 
 **Layer:** Game · standalone C++/Vulkan engine — **off-spine**, a separate universe from the Shapes//Lines data spine
 **Role:** Custom from-scratch MOBA/RTS-hybrid game engine (C++17, raw Vulkan 1.3, own ECS, netcode, and math); no shared auth, no database, no GromDB relation — isolation is by design.
-<<<<<<< HEAD
-**Status:** Phase 3 M3.0–M3.3 complete (PRs #14/#15/#17 + gap-close Wave 6; M3.2 tagged `v0.3.0-m3.2`, 2026-08-12). The platform-free 30 Hz Q16.16 simulation owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal plain-function schedule, deferred tick-boundary destruction, canonical ECS state hash/diff, replay-v1 codec and CLI, an exact 10,000-tick determinism proof — and, since M3.3, the game/present glue (`eng_game`) owning the fixed-tick accumulator, snapshot double-buffer, and the single fixed→float conversion. M3.4 (flag pinning/isolation) is the next slate.
-=======
-**Status:** Phase 3 M3.0–M3.2 complete (PRs #14/#15/#17 merged, tagged `v0.3.0-m3.2`, 2026-08-12). The platform-free 30 Hz Q16.16 simulation now owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal plain-function schedule, deferred tick-boundary destruction, canonical ECS state hash/diff, replay-v1 codec and CLI, and an exact 10,000-tick determinism proof. M3.3 presentation timing is queued separately in `docs/slate-moba-phase3-m3.3.md`.
->>>>>>> origin/main
+**Status:** Phase 3 M3.0–M3.3 complete. The platform-free 30 Hz Q16.16 simulation owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal schedule, canonical state hash/diff, replay-v1 codec and CLI, and an exact 10,000-tick determinism proof. Platform now owns fixed-step cadence and interpolation alpha; `eng_game` owns arena-backed snapshots, interpolation, fixed→float conversion, and `DrawItem` construction. M3.4 structural determinism is queued separately in `docs/slate-moba-phase3-m3.4.md`.
 
 **Canonical deep-dive:** https://github.com/shapeslines/System-Architecture/blob/main/projects/moba.md
 &nbsp;&nbsp;(local sibling: `../System-Architecture/projects/moba.md`)
 **Library:** [whitepaper](https://github.com/shapeslines/System-Architecture/blob/main/whitepaper.md) · [system-map](https://github.com/shapeslines/System-Architecture/blob/main/system-map.md) · [patterns](https://github.com/shapeslines/System-Architecture/tree/main/patterns) · [decisions (ADRs 0001–0009)](https://github.com/shapeslines/System-Architecture/tree/main/decisions)
 
 ## House patterns instanced
-- **determinism-contract** — the one house pattern MOBA-proto instances, and it instances it globally: Q16.16 fixed-point everywhere in `eng_sim`, a 30 Hz fixed tick (ADR-0001), arena-backed generational identity plus sparse-set SoA state, ascending-entity ordered views, append-order typed events, one explicit system schedule, `pcg32` inside `SimWorld` (hashed + replayed), a per-tick canonical FNV-1a hash with run-twice self-check, a sim-boundary CTest, and direct `eng_sim → core + math + serialize` isolation. The **sim / present seam** is its concrete shape: `fixed→float` happens in exactly one place (the present glue), and nothing downstream can feed back into the sim.
+- **determinism-contract** — the one house pattern MOBA-proto instances, and it instances it globally: Q16.16 fixed-point everywhere in `eng_sim`, a platform-owned 30 Hz fixed step (ADR-0001), arena-backed generational identity plus sparse-set SoA state, ascending-entity ordered views, append-order typed events, one explicit system schedule, `pcg32` inside `SimWorld` (hashed + replayed), a per-tick canonical FNV-1a hash with run-twice self-check, sim/presentation boundary CTests, and direct `eng_sim → core + math + serialize` isolation. The **sim / present seam** is concrete: fixed snapshots flow one way into `eng_game`, `fixed→float` happens there exactly once, and nothing downstream can feed back into the sim.
 
-*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0013):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
+*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0014):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
 
 ## Alignment with locked decisions
 - **DATA-1 (Supabase only)** — N/A. No database; all game state is ephemeral in-memory `SimWorld`; persistent player data is explicitly deferred to Phase 8+.
@@ -31,4 +27,4 @@
 - None — off the data spine.
 
 ---
-*This map records alignment status only — it does not resolve open forks (those ride as Phase-0 ledger entries in the relevant execution-roadmaps). The in-repo ADR index (`docs/DECISIONS/README.md`) is current through ADR-0012.*
+*This map records alignment status only — it does not resolve open forks (those ride as Phase-0 ledger entries in the relevant execution-roadmaps). The in-repo ADR index (`docs/DECISIONS/README.md`) is current through ADR-0014.*

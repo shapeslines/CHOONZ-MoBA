@@ -448,7 +448,7 @@ so Phase 4 consumes exactly this. **Exercises:** Renderer seam, Build (PRIVATE V
 **determinism harness built before there is content to break it.** This is the project's spine and the
 reviews' most-watched risk.
 
-> **Complete:** M3.0–M3.2. **Now:** M3.3 → M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
+> **Complete:** M3.0–M3.3. **Now:** M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
 > 🔴 Determinism is global and fragile: one stray float, unordered iteration, or wall-clock read
 > desyncs. The state-hash self-check is the only humane way to catch it — **build it first.**
 
@@ -519,21 +519,14 @@ mutation. Replay remains format v1 with 16-byte commands and logic hash `0xab968
 canonical state includes logical event phases while excluding physical buffers and ordered caches.
 Debug and Release `/WX` builds pass all 25 CTest entries, the new 10,000-tick golden is
 `0x637628abff59c823`, and the controlled mutation still reports exactly
-`tick=4321 field=position_x entity=7`. M3.3 is queued separately in
+`tick=4321 field=position_x entity=7`. M3.3 followed on its separate completed execution record in
 [`slate-moba-phase3-m3.3.md`](slate-moba-phase3-m3.3.md).
 **Risks:** 🔴 accidental dense-order iteration in an order-dependent system; per-tick sort budget at
 scale. **Exercises:** ECS, Determinism.
 
 ---
 
-### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M  ✅ COMPLETE 2026-08-12
-**Status:** complete (gap-close Wave 6). The game/present glue (`eng_game`,
-`game/present.h`) owns the fixed-tick accumulator (clamped by `SIM_MAX_CATCHUP_S`),
-double-buffered fixed-only `RenderSnapshot`s, and the single fixed→float conversion;
-`snapshot_extract` is const and hash-neutral; the renderer still never sees `SimWorld`.
-Headless tests prove render-rate independence (60/30/mixed fps → identical tick count
-and hash) and the sandbox runs the deterministic orbit demo validation-clean
-(64 units, one batch). M3.4 remains the separate flag-pinning/isolation slate.
+### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M  ✅ COMPLETE 2026-08-13
 **Goal:** the accumulator loop and the single, one-directional fixed→float interpolation seam.
 **Deliverables:**
 - The accumulator lives in the **platform's outer loop** (it owns the OS pump + clock); the ECS
@@ -550,10 +543,22 @@ and hash) and the sandbox runs the deterministic orbit demo validation-clean
 **DoD:** sim ticks at fixed 30 Hz independent of render rate; objects render smoothly interpolated;
 minimized window keeps ticking (sim) while skipping render; determinism self-check unaffected by render
 rate.
-**Risks:** 🔴 the float→fixed boundary is exactly where determinism silently rots — enforce
-one-directional flow by construction (renderer can't see sim). **No-float enforcement is
-convention+hash, not a compiler flag:** put sim in its own lib, add a CI/grep check for
-`\bfloat\b|\bdouble\b|<math.h>` in `sim/*.c`, and rely on the run-twice hash as the real backstop.
+**Observed:** `eng_platform` now owns a window-independent `PlatformFixedStep` helper that clamps
+total debt to 0.25 seconds, reports/consumes owed ticks, and computes alpha without seeing game or
+sim. The sandbox generates a fresh same-tick command buffer inside every owed-tick iteration, then
+runs `sim_tick` → `present_capture` → consume; failure retains debt and terminates the loop.
+`eng_game` transactionally allocates two fixed 64-slot snapshots from an arena, extracts through
+const Transform views, records actual live count, interpolates previous→current, and uses current
+state directly across an `EntityId` change. Debug, RelWithDebInfo, Release, and Debug-ASan pass all
+28 CTest entries, including 14 adversarial hosted-smoke classifications. Render-rate grouping and
+minimized-loop tests preserve the unchanged
+`0x637628abff59c823` oracle; a two-tick catch-up frame proves distinct per-tick command generation;
+the controlled mutation remains `tick=4321 field=position_x entity=7`. The fresh-clone path and a
+90-frame validation-clean RTX 4070 Ti run produce a 1280×720 screenshot with 64 objects.
+**Risks:** 🔴 the fixed→float boundary is exactly where determinism silently rots — enforce
+one-directional flow by construction (renderer can't see sim). The sim and presentation boundary
+CTest scans plus the run-twice hash are the current backstops; M3.4 centralizes compiler policy and
+proves the runnable/test binary paths cannot drift.
 **Exercises:** ECS, Platform (loop), Renderer (consumes glue output), Tooling.
 
 ---
@@ -569,6 +574,8 @@ self-check passes from both the test binary and the game binary.
 **M3.0 baseline already landed:** the direct link isolation, `/fp:precise`, source scan, and dedicated
 test-binary self-check are active now. M3.4 extends that gate over the mature ECS and proves the game
 binary path after M3.1–M3.3; it is not otherwise pulled forward.
+Execute this as the separate [`M3.4 structural determinism slate`](slate-moba-phase3-m3.4.md).
+Phase 4 remains blocked until that slate closes.
 **Risks:** flag drift between binaries is a silent desync source — single toolchain include prevents it.
 **Exercises:** Build (sim isolation), Tooling, Determinism.
 
@@ -806,7 +813,9 @@ the sim is bit-stable — which it is.
 replay + net); replay-version policy = **version-locked debugging artifacts** (record in ADR). In the
 server-authoritative model the network source is "**client → server commands**" on the client side and
 "**merged per-tick command set**" on the server side; both reduce to the same source interface feeding
-`sim_tick`.
+`sim_tick`. Per ADR-0014, M6.0 also replaces today's atomic whole-buffer rejection with
+per-command rejection reason codes; that deliberate behavior/encoding change requires a reviewed
+`SIM_LOGIC_HASH` bump.
 **DoD:** a recorded match replays bit-identically (the M3.0 self-check, now over real gameplay
 commands); swapping the command source (local / replay / network) requires no sim change.
 **Risks:** codec drift between replay and net — single shared codec prevents it. **Exercises:** Netcode,

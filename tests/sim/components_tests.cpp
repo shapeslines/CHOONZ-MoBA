@@ -24,14 +24,19 @@ TEST(sim_components, typed_values_round_trip_through_pointer_views) {
     CHECK(health_pool_add(&health, entity, 70, 100, 6u));
 
     TransformView transform{};
+    ConstTransformView const_transform{};
     VelocityView velocity{};
     HealthView health_view{};
     CHECK(transform_pool_get(&transforms, entity, &transform));
+    CHECK(transform_pool_get_const(&transforms, entity, &const_transform));
     CHECK(velocity_pool_get(&velocities, entity, &velocity));
     CHECK(health_pool_get(&health, entity, &health_view));
     CHECK(*transform.position_x == 11);
     CHECK(*transform.position_y == -22);
     CHECK(*transform.facing == 33);
+    CHECK(*const_transform.position_x == 11);
+    CHECK(*const_transform.position_y == -22);
+    CHECK(*const_transform.facing == 33);
     CHECK(*velocity.velocity_x == -44);
     CHECK(*velocity.velocity_y == 55);
     CHECK(*health_view.current == 70);

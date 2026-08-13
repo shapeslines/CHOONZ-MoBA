@@ -93,6 +93,18 @@ bool transform_pool_get(TransformPool* pool, EntityId entity, TransformView* vie
     return true;
 }
 
+bool transform_pool_get_const(const TransformPool* pool, EntityId entity,
+                              ConstTransformView* view) {
+    if (!pool || !view) return false;
+    uint32_t dense = component_pool_dense_index(&pool->membership, entity);
+    if (dense == COMPONENT_POOL_INVALID_DENSE || !pool->position_x || !pool->position_y ||
+        !pool->facing) return false;
+    ConstTransformView staged{
+        &pool->position_x[dense], &pool->position_y[dense], &pool->facing[dense]};
+    *view = staged;
+    return true;
+}
+
 size_t velocity_pool_memory_required(uint32_t entity_capacity, uint32_t capacity) {
     return typed_pool_memory_required(entity_capacity, capacity, 2u,
                                       sizeof(mm::fix), alignof(mm::fix));

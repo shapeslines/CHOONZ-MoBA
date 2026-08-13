@@ -1,152 +1,265 @@
-// M3.3 present-glue tests — snapshot extraction, the fixed-tick accumulator, and the
-// single fixed->float interpolation point (docs/slate-moba-phase3-m3.3.md, S1-S5).
-// Headless: no window, no renderer; the renderer seam is only DrawItem structs.
+// M3.3 acceptance: platform cadence drives the sim; eng_game owns only fixed
+// snapshots, capture, interpolation, and the fixed->float edge.
 #include "test.h"
+
+#include "core/sim_config.h"
 #include "game/present.h"
-#include "sim/sim.h"
+#include "platform/platform_fixed_step.h"
 #include "sim/sim_hash.h"
 
 #include <cstring>
 
-static const size_t PRESENT_WORLD_BYTES = 2u * 1024u * 1024u;
-alignas(16) static uint8_t g_present_storage[PRESENT_WORLD_BYTES];
+static const size_t PRESENT_WORLD_BYTES = 128u * 1024u;
+static const size_t PRESENT_ARENA_BYTES = 8u * 1024u;
+alignas(16) static uint8_t g_present_world_storage[8][PRESENT_WORLD_BYTES];
+alignas(16) static uint8_t g_present_arena_storage[8][PRESENT_ARENA_BYTES];
 
-static bool present_world_init(SimWorld* world, Arena* arena, uint64_t seed) {
-    arena_init_fixed(arena, g_present_storage, PRESENT_WORLD_BYTES);
-    return sim_init(world, arena, seed, sim_world_config_default());
+typedef struct PresentFixture {
+    SimWorld world;
+    Arena world_arena;
+    PresentState present;
+    Arena present_arena;
+} PresentFixture;
+
+static bool present_fixture_init(PresentFixture* fixture, uint32_t storage_index, uint64_t seed) {
+    if (!fixture || storage_index >= 8u) return false;
+    *fixture = PresentFixture{};
+    arena_init_fixed(&fixture->world_arena, g_present_world_storage[storage_index],
+                     PRESENT_WORLD_BYTES);
+    arena_init_fixed(&fixture->present_arena, g_present_arena_storage[storage_index],
+                     PRESENT_ARENA_BYTES);
+    const SimWorldConfig config{128u, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY};
+    return sim_init(&fixture->world, &fixture->world_arena, seed, config) &&
+           present_init(&fixture->present, &fixture->present_arena, &fixture->world);
 }
 
-static SimCommand velocity_command(uint16_t unit, mm::fix vx, mm::fix vy) {
+static bool pointer_in_arena(const void* pointer, const Arena* arena) {
+    const uintptr_t value = reinterpret_cast<uintptr_t>(pointer);
+    const uintptr_t begin = reinterpret_cast<uintptr_t>(arena->base);
+    return value >= begin && value < begin + arena->reserved;
+}
+
+static SimCommand tick_velocity_command(const SimWorld* world) {
     SimCommand command{};
     command.kind = SIM_COMMAND_SET_VELOCITY;
-    command.unit_index = unit;
-    command.value_x = vx;
-    command.value_y = vy;
+    command.unit_index = 0u;
+    command.value_x = mm::fix_from_int(static_cast<int32_t>(world->tick + 1u));
     return command;
 }
 
-TEST(present, snapshot_extract_is_fixed_non_mutating_and_slot_ordered) {
-    SimWorld world{};
-    Arena arena{};
-    CHECK(present_world_init(&world, &arena, 7u));
+typedef struct TickTrace {
+    uint64_t generated_at[16];
+    mm::fix velocity_x[16];
+    uint32_t count;
+} TickTrace;
 
-    // Units spawn on an 8x8 grid (sim.cpp); read the start position, then move.
-    TransformView start{};
-    CHECK(transform_pool_get(&world.transforms, world.unit_entities[3], &start));
-    const mm::fix start_x = *start.position_x;
-    const mm::fix start_y = *start.position_y;
+static bool drive_frame(PresentFixture* fixture, PlatformFixedStep* step, double delta,
+                        bool build_draws, TickTrace* trace) {
+    if (!fixture || !step) return false;
+    platform_fixed_step_add_frame_delta(step, delta);
+    while (platform_fixed_step_tick_owed(step)) {
+        SimCommand command = tick_velocity_command(&fixture->world);
+        if (trace) {
+            if (trace->count >= 16u) return false;
+            trace->generated_at[trace->count] = fixture->world.tick;
+            trace->velocity_x[trace->count] = command.value_x;
+            ++trace->count;
+        }
+        const SimCommandBuffer buffer{&command, 1u};
+        if (!sim_tick(&fixture->world, &buffer) ||
+            !present_capture(&fixture->present, &fixture->world) ||
+            !platform_fixed_step_consume_tick(step)) {
+            return false;
+        }
+    }
 
-    SimCommand commands[] = { velocity_command(3u, mm::fix_from_int(4), mm::fix_from_int(6)) };
-    SimCommandBuffer buffer{commands, 1u};
-    CHECK(sim_tick(&world, &buffer));
-    uint64_t hash_after_tick = sim_hash_state(&world);
-
-    RenderSnapshot snap{};
-    CHECK(snapshot_extract(&world, &snap) == SIM_MAX_UNITS);
-    CHECK(snap.tick == 1u);
-    CHECK(snap.units[3].entity.h == world.unit_entities[3].h);
-    CHECK(snap.units[3].x == start_x + mm::fix_mul(mm::fix_from_int(4), SIM_DT_FIXED));
-    CHECK(snap.units[3].y == start_y + mm::fix_mul(mm::fix_from_int(6), SIM_DT_FIXED));
-    CHECK(snap.units[0].entity.h == world.unit_entities[0].h);
-    CHECK(snap.units[63].entity.h == world.unit_entities[63].h);
-
-    CHECK(sim_hash_state(&world) == hash_after_tick);   // extraction does not mutate
-
-    // Dead unit -> slot marked HANDLE_NULL (count stays at the last live slot).
-    CHECK(sim_destroy_deferred(&world, world.unit_entities[10]));
-    CHECK(sim_tick(&world, nullptr));
-    CHECK(snapshot_extract(&world, &snap) == SIM_MAX_UNITS);
-    CHECK(snap.units[10].entity.h == HANDLE_NULL);
-    CHECK(snap.units[9].entity.h != HANDLE_NULL);
+    if (build_draws) {
+        DrawItem items[SIM_MAX_UNITS]{};
+        const uint32_t count = present_build_draw_items(
+            &fixture->present, platform_fixed_step_alpha(step),
+            MeshHandle{handle_make(1u, 1u)}, MaterialHandle{handle_make(1u, 1u)},
+            items, SIM_MAX_UNITS);
+        if (count != fixture->present.current.live_count) return false;
+    }
+    return true;
 }
 
-TEST(present, advance_runs_whole_ticks_and_clamps_catchup) {
-    // S3: the accumulator owes whole 30 Hz ticks; render rate must not change the
-    // sim. Three worlds, same seed, different frame splits — each covering exactly
-    // one second of sim time — must run the same 30 ticks with the same hash. This
-    // is the headless proof that "render rate never affects sim hashes".
-    SimWorld a{}, b{}, c{};
-    Arena arena_a{}, arena_b{}, arena_c{};
-    CHECK(present_world_init(&a, &arena_a, 99u));
-    CHECK(present_world_init(&b, &arena_b, 99u));
-    CHECK(present_world_init(&c, &arena_c, 99u));
-    PresentState pa{}, pb{}, pc{};
-    present_init(&pa); present_init(&pb); present_init(&pc);
+TEST(present, init_is_transactional_arena_backed_and_starts_from_world) {
+    PresentFixture fixture{};
+    CHECK(present_fixture_init(&fixture, 0u, 7u));
+    CHECK(present_memory_required() <= PRESENT_ARENA_BYTES);
+    CHECK(pointer_in_arena(fixture.present.previous.units, &fixture.present_arena));
+    CHECK(pointer_in_arena(fixture.present.current.units, &fixture.present_arena));
+    CHECK(fixture.present.previous.units != fixture.present.current.units);
+    CHECK(fixture.present.previous.tick == 0u);
+    CHECK(fixture.present.current.tick == 0u);
+    CHECK(fixture.present.previous.live_count == SIM_MAX_UNITS);
+    CHECK(fixture.present.current.live_count == SIM_MAX_UNITS);
+    CHECK(std::memcmp(fixture.present.previous.units, fixture.present.current.units,
+                      sizeof(RenderSnapshotUnit) * SIM_MAX_UNITS) == 0);
 
-    uint32_t ticks_a = 0u, ticks_b = 0u, ticks_c = 0u;
-    const double dt = 1.0 / 30.0;
-    for (int frame = 0; frame < 60; ++frame) {                 // 60 fps
-        ticks_a += present_advance(&pa, dt / 2.0, &a, nullptr);
-    }
-    for (int frame = 0; frame < 30; ++frame) {                 // 30 fps
-        ticks_b += present_advance(&pb, dt, &b, nullptr);
-    }
-    for (int frame = 0; frame < 30; ++frame) {                 // mixed 60/20 fps
-        double mixed = (frame % 2 == 0) ? dt / 2.0 : dt * 1.5;   // 15 x 1/60 + 15 x 1/20 = 1s
-        ticks_c += present_advance(&pc, mixed, &c, nullptr);
-    }
-    CHECK(ticks_a == 30u && ticks_b == 30u && ticks_c == 30u);
-    CHECK(a.tick == 30u && b.tick == 30u && c.tick == 30u);
-    CHECK(sim_hash_state(&a) == sim_hash_state(&b));
-    CHECK(sim_hash_state(&b) == sim_hash_state(&c));
+    alignas(16) uint8_t short_storage[PRESENT_ARENA_BYTES]{};
+    Arena short_arena{};
+    arena_init_fixed(&short_arena, short_storage, present_memory_required() - 1u);
+    PresentState untouched{};
+    untouched.previous.tick = 111u;
+    untouched.current.tick = 222u;
+    untouched.previous.units = reinterpret_cast<RenderSnapshotUnit*>(uintptr_t{1u});
+    untouched.current.units = reinterpret_cast<RenderSnapshotUnit*>(uintptr_t{2u});
+    PresentState before = untouched;
+    CHECK(!present_init(&untouched, &short_arena, &fixture.world));
+    CHECK(std::memcmp(&untouched, &before, sizeof(before)) == 0);
+    CHECK(short_arena.offset == 0u);
 
-    // Minimize/unfocus stall: a single huge frame delta is clamped to
-    // SIM_MAX_CATCHUP_S (0.25 s) -> 7 ticks, not 30.
-    PresentState stall{};
-    present_init(&stall);
-    CHECK(present_advance(&stall, 1.0, &a, nullptr) == 7u);
-    CHECK(a.tick == 37u);
-    CHECK(stall.accumulator < dt);
+    Arena invalid_arena{};
+    arena_init_fixed(&invalid_arena, short_storage, sizeof(short_storage));
+    CHECK(!present_init(&untouched, &invalid_arena, nullptr));
+    CHECK(std::memcmp(&untouched, &before, sizeof(before)) == 0);
+    CHECK(invalid_arena.offset == 0u);
 }
 
-TEST(present, double_buffer_prev_is_last_tick_curr_is_latest) {
-    SimWorld world{};
-    Arena arena{};
-    CHECK(present_world_init(&world, &arena, 5u));
-    PresentState p{};
-    present_init(&p);
+TEST(present, extraction_is_const_atomic_slot_stable_and_hash_neutral) {
+    PresentFixture fixture{};
+    CHECK(present_fixture_init(&fixture, 1u, 11u));
+    const uint64_t initial_hash = sim_hash_state(&fixture.world);
+    CHECK(present_capture(&fixture.present, &fixture.world));
+    CHECK(sim_hash_state(&fixture.world) == initial_hash);
 
-    SimCommand commands[] = { velocity_command(1u, mm::fix_from_int(8), mm::fix_from_int(0)) };
-    SimCommandBuffer buffer{commands, 1u};
-    TransformView start{};
-    CHECK(transform_pool_get(&world.transforms, world.unit_entities[1], &start));
-    const mm::fix start_x = *start.position_x;
-    CHECK(present_advance(&p, 1.0 / 30.0 * 2.0, &world, &buffer) == 2u);
-    CHECK(p.prev.tick == 1u);
-    CHECK(p.curr.tick == 2u);
-    const mm::fix step = mm::fix_mul(mm::fix_from_int(8), SIM_DT_FIXED);
-    CHECK(p.prev.units[1].x == start_x + step);              // after tick 1
-    CHECK(p.curr.units[1].x == start_x + step * 2);          // after tick 2
+    SimCommand command = tick_velocity_command(&fixture.world);
+    const SimCommandBuffer buffer{&command, 1u};
+    CHECK(sim_tick(&fixture.world, &buffer));
+    const uint64_t hash_after_tick = sim_hash_state(&fixture.world);
+    CHECK(present_capture(&fixture.present, &fixture.world));
+    CHECK(sim_hash_state(&fixture.world) == hash_after_tick);
+    CHECK(fixture.present.previous.tick == 0u);
+    CHECK(fixture.present.current.tick == 1u);
+    CHECK(fixture.present.current.live_count == SIM_MAX_UNITS);
+    CHECK(fixture.present.current.units[0].entity.h == fixture.world.unit_entities[0].h);
+    CHECK(fixture.present.current.units[63].entity.h == fixture.world.unit_entities[63].h);
+
+    CHECK(sim_destroy_deferred(&fixture.world, fixture.world.unit_entities[10]));
+    CHECK(sim_tick(&fixture.world, nullptr));
+    CHECK(present_capture(&fixture.present, &fixture.world));
+    CHECK(fixture.present.current.live_count == SIM_MAX_UNITS - 1u);
+    CHECK(fixture.present.current.units[10].entity.h == HANDLE_NULL);
+    CHECK(fixture.present.current.units[63].entity.h != HANDLE_NULL);
+
+    RenderSnapshotUnit output_units[SIM_MAX_UNITS]{};
+    RenderSnapshot output{999u, 55u, output_units};
+    RenderSnapshot before = output;
+    RenderSnapshotUnit bytes_before[SIM_MAX_UNITS]{};
+    std::memcpy(bytes_before, output_units, sizeof(output_units));
+    SimWorld invalid = fixture.world;
+    invalid.unit_entities[5] = EntityId{handle_make(5u, 2u)};
+    CHECK(!snapshot_extract(&invalid, &output));
+    CHECK(output.tick == before.tick && output.live_count == before.live_count &&
+          output.units == before.units);
+    CHECK(std::memcmp(output_units, bytes_before, sizeof(output_units)) == 0);
 }
 
-TEST(present, build_draw_items_interpolates_and_converts_fixed_to_float) {
-    // S4: interpolation math. Manual snapshots: unit 0 moves x: 0 -> 100 over one
-    // tick; at alpha 0.5 the item must sit at 50 world units (float), y (sim) mapped
-    // to world z. This is the single fixed->float owner.
-    PresentState p{};
-    present_init(&p);
-    p.prev.tick = 1u; p.prev.count = 1u;
-    p.prev.units[0] = RenderSnapshotUnit{ EntityId{handle_make(0u, 1u)}, 0, mm::fix_from_int(20), 0 };
-    p.curr.tick = 2u; p.curr.count = 1u;
-    p.curr.units[0] = RenderSnapshotUnit{ EntityId{handle_make(0u, 1u)}, mm::fix_from_int(100), mm::fix_from_int(60), 0 };
-    p.alpha = 0.5;
+TEST(present, cadence_grouping_minimize_and_catchup_preserve_hash_stream) {
+    PresentFixture at_60{}, at_30{}, mixed{}, rendered{}, minimized{}, catchup{};
+    CHECK(present_fixture_init(&at_60, 0u, 99u));
+    CHECK(present_fixture_init(&at_30, 1u, 99u));
+    CHECK(present_fixture_init(&mixed, 2u, 99u));
+    CHECK(present_fixture_init(&rendered, 3u, 123u));
+    CHECK(present_fixture_init(&minimized, 4u, 123u));
+    CHECK(present_fixture_init(&catchup, 5u, 321u));
 
-    uint8_t arena_buf[64 * 1024];
-    Arena arena;
-    arena_init_fixed(&arena, arena_buf, sizeof(arena_buf));
-    DrawItem items[8]{};
-    uint32_t n = present_build_draw_items(&p, MeshHandle{handle_make(1, 1)},
-                                          MaterialHandle{handle_make(1, 1)}, &arena,
-                                          items, 8);
-    CHECK(n == 1u);
-    CHECK_APPROX(items[0].model.m[3][0], 50.0f, 0.01f);    // lerped x
-    CHECK_APPROX(items[0].model.m[3][2], 40.0f, 0.01f);    // sim y -> world z, lerped
-    CHECK(items[0].mesh.h == handle_make(1, 1));
+    PlatformFixedStep step_60{}, step_30{}, step_mixed{}, step_rendered{}, step_minimized{};
+    platform_fixed_step_init(&step_60);
+    platform_fixed_step_init(&step_30);
+    platform_fixed_step_init(&step_mixed);
+    platform_fixed_step_init(&step_rendered);
+    platform_fixed_step_init(&step_minimized);
+    for (uint32_t frame = 0u; frame < 60u; ++frame) {
+        CHECK(drive_frame(&at_60, &step_60, SIM_DT_SECONDS * 0.5, false, nullptr));
+        CHECK(drive_frame(&rendered, &step_rendered, SIM_DT_SECONDS * 0.5, true, nullptr));
+        CHECK(drive_frame(&minimized, &step_minimized, SIM_DT_SECONDS * 0.5, false, nullptr));
+    }
+    for (uint32_t frame = 0u; frame < 30u; ++frame) {
+        CHECK(drive_frame(&at_30, &step_30, SIM_DT_SECONDS, false, nullptr));
+        const double delta = (frame & 1u) ? SIM_DT_SECONDS * 1.5 : SIM_DT_SECONDS * 0.5;
+        CHECK(drive_frame(&mixed, &step_mixed, delta, false, nullptr));
+    }
 
-    // Dead slots are skipped, capacity is honored.
-    p.curr.count = 2u;
-    p.curr.units[1] = RenderSnapshotUnit{};
-    CHECK(present_build_draw_items(&p, MeshHandle{handle_make(1, 1)},
-                                   MaterialHandle{handle_make(1, 1)}, &arena,
-                                   items, 1) == 1u);
+    CHECK(at_60.world.tick == 30u && at_30.world.tick == 30u && mixed.world.tick == 30u);
+    CHECK(sim_hash_state(&at_60.world) == sim_hash_state(&at_30.world));
+    CHECK(sim_hash_state(&at_30.world) == sim_hash_state(&mixed.world));
+    CHECK(rendered.world.tick == 30u && minimized.world.tick == 30u);
+    CHECK(sim_hash_state(&rendered.world) == sim_hash_state(&minimized.world));
+
+    PlatformFixedStep step_catchup{};
+    platform_fixed_step_init(&step_catchup);
+    TickTrace trace{};
+    CHECK(drive_frame(&catchup, &step_catchup, 1.0, false, &trace));
+    CHECK(catchup.world.tick == 7u);
+    CHECK(trace.count == 7u);
+    CHECK_APPROX(platform_fixed_step_alpha(&step_catchup), 0.5, 1.0e-9);
+}
+
+TEST(present, multi_tick_frame_generates_fresh_commands_and_captures_each_tick) {
+    PresentFixture fixture{};
+    CHECK(present_fixture_init(&fixture, 6u, 55u));
+    PlatformFixedStep step{};
+    platform_fixed_step_init(&step);
+    TickTrace trace{};
+    CHECK(drive_frame(&fixture, &step, SIM_DT_SECONDS * 2.0, false, &trace));
+    CHECK(trace.count == 2u);
+    CHECK(trace.generated_at[0] == 0u && trace.generated_at[1] == 1u);
+    CHECK(trace.velocity_x[0] == mm::fix_from_int(1));
+    CHECK(trace.velocity_x[1] == mm::fix_from_int(2));
+    CHECK(fixture.present.previous.tick == 1u);
+    CHECK(fixture.present.current.tick == 2u);
+
+    platform_fixed_step_add_frame_delta(&step, SIM_DT_SECONDS);
+    SimCommand invalid{};
+    invalid.kind = SIM_COMMAND_SET_VELOCITY;
+    invalid.unit_index = static_cast<uint16_t>(SIM_MAX_UNITS);
+    const SimCommandBuffer invalid_buffer{&invalid, 1u};
+    const double debt_before = step.accumulator_seconds;
+    const uint64_t tick_before = fixture.world.tick;
+    CHECK(!sim_tick(&fixture.world, &invalid_buffer));
+    CHECK(platform_fixed_step_tick_owed(&step));
+    CHECK(step.accumulator_seconds == debt_before);
+    CHECK(fixture.world.tick == tick_before);
+}
+
+TEST(present, interpolation_is_previous_to_current_and_identity_aware) {
+    PresentFixture fixture{};
+    CHECK(present_fixture_init(&fixture, 7u, 88u));
+    for (uint32_t slot = 0u; slot < SIM_MAX_UNITS; ++slot) {
+        fixture.present.previous.units[slot] = RenderSnapshotUnit{};
+        fixture.present.current.units[slot] = RenderSnapshotUnit{};
+    }
+
+    const EntityId original{handle_make(0u, 1u)};
+    fixture.present.previous.live_count = 1u;
+    fixture.present.current.live_count = 1u;
+    fixture.present.previous.units[0] = RenderSnapshotUnit{
+        original, 0, mm::fix_from_int(20), 0};
+    fixture.present.current.units[0] = RenderSnapshotUnit{
+        original, mm::fix_from_int(100), mm::fix_from_int(60), 0};
+
+    DrawItem items[2]{};
+    const MeshHandle mesh{handle_make(1u, 1u)};
+    const MaterialHandle material{handle_make(2u, 1u)};
+    CHECK(present_build_draw_items(&fixture.present, 0.0, mesh, material, items, 2u) == 1u);
+    CHECK_APPROX(items[0].model.m[3][0], 0.0f, 0.01f);
+    CHECK_APPROX(items[0].model.m[3][2], 20.0f, 0.01f);
+    CHECK(present_build_draw_items(&fixture.present, 0.5, mesh, material, items, 2u) == 1u);
+    CHECK_APPROX(items[0].model.m[3][0], 50.0f, 0.01f);
+    CHECK_APPROX(items[0].model.m[3][2], 40.0f, 0.01f);
+    CHECK(present_build_draw_items(&fixture.present, 0.999, mesh, material, items, 2u) == 1u);
+    CHECK_APPROX(items[0].model.m[3][0], 99.9f, 0.02f);
+
+    // Same slot, different generation: render current directly even at alpha zero.
+    fixture.present.current.units[0].entity = EntityId{handle_make(0u, 2u)};
+    CHECK(present_build_draw_items(&fixture.present, 0.0, mesh, material, items, 2u) == 1u);
+    CHECK_APPROX(items[0].model.m[3][0], 100.0f, 0.01f);
+    CHECK_APPROX(items[0].model.m[3][2], 60.0f, 0.01f);
+
+    fixture.present.current.units[0] = RenderSnapshotUnit{};
+    fixture.present.current.live_count = 0u;
+    CHECK(present_build_draw_items(&fixture.present, 0.5, mesh, material, items, 2u) == 0u);
 }

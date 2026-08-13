@@ -6,11 +6,12 @@
 # path so every suite finds "test.h".
 
 # --- Headless aggregate: the non-window/non-Vulkan engine libs the test binary links.
-# eng_platform is here ONLY for its OS page-allocator backend (plat_mem_*, the one OS
-# dependency core's arenas need — ADR-0005); its window/input code is never called by
-# tests. As sim/net/assets land they join this group, with their OS impls kept in the
-# app layer (ADR-0006) so headless testing holds. Splitting the page backend out of
-# the Win32 window TU so this group is literally window-free is a later cleanup.
+# eng_platform is here ONLY for its OS page-allocator + file-I/O backends (plat_mem_*,
+# platform_file_*, the OS deps core's arenas and the file suites need — ADR-0005);
+# those live in their own TUs (win32_mem.cpp/win32_file.cpp/win32_log.cpp, G14), so
+# the window TU is never pulled into the test executables. As sim/net/assets land
+# they join this group, with their OS impls kept in the app layer (ADR-0006) so
+# headless testing holds.
 add_library(engine_core_group INTERFACE)
 target_link_libraries(engine_core_group INTERFACE
     eng::core eng::math eng::serialize eng::sim eng::platform)
@@ -34,7 +35,7 @@ add_executable(engine_tests
     sim/schedule_tests.cpp
     sim/sim_tests.cpp
     sim/systems_tests.cpp
-    present/present_tests.cpp          # M3.3: snapshots, accumulator, fixed->float glue
+    present/present_tests.cpp          # M3.3: cadence integration + snapshot/present glue
     render/render_tests.cpp
     tga/tga_tests.cpp
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
@@ -68,6 +69,9 @@ add_executable(sim_determinism_tests test_main.cpp sim/sim_determinism_tests.cpp
 target_include_directories(sim_determinism_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sim_determinism_tests PRIVATE eng::sim moba_warnings moba_options)
 
+# App-local MSVC ASan runtime for every test executable in this output directory.
+moba_stage_asan_runtime()
+
 # --- CTest registration: one entry per suite so a red test names the right module.
 # enable_testing() lives at the top level (required for add_test to register).
 add_test(NAME mem         COMMAND engine_tests --suite mem)
@@ -83,7 +87,7 @@ add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
 add_test(NAME sim_systems COMMAND engine_tests --suite sim_systems)
-add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 snapshots/accumulator/glue
+add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 cadence/snapshot/glue
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
@@ -96,6 +100,18 @@ set_tests_properties(sim_determinism PROPERTIES
 add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_boundary.cmake")
+
+add_test(NAME present_boundary
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/present/check_present_boundary.cmake")
+
+add_test(NAME sandbox_smoke_classifier
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/platform/sandbox_smoke_classifier_tests.ps1"
+            -Classifier "${CMAKE_SOURCE_DIR}/tools/classify-sandbox-smoke.ps1"
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
+set_tests_properties(sandbox_smoke_classifier PROPERTIES
+    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 14 adversarial cases passed")
 
 # --- replay CLI: one fixture records a real file; consumers independently inspect,
 #     verify, and exercise exact public exit classes before cleanup runs.

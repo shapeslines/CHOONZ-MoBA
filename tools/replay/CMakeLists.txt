@@ -3,4 +3,4 @@
 add_executable(moba_replay src/main.cpp)
 target_link_libraries(moba_replay PRIVATE
     eng::sim eng::platform moba_warnings moba_options)
-
+moba_stage_asan_runtime()

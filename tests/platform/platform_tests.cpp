@@ -3,12 +3,73 @@
 // removed at the end of each case (remove() — the seam has no delete on purpose).
 #include "test.h"
 #include "core/mem.h"
+#include "core/sim_config.h"
 #include "platform/platform.h"
+#include "platform/platform_fixed_step.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <io.h>         // _chmod (force a rename failure via a read-only destination)
 #include <sys/stat.h>   // _S_IREAD / _S_IWRITE
+
+static uint32_t consume_all_owed_ticks(PlatformFixedStep* step) {
+    uint32_t count = 0u;
+    while (platform_fixed_step_tick_owed(step)) {
+        CHECK(platform_fixed_step_consume_tick(step));
+        ++count;
+    }
+    return count;
+}
+
+TEST(platform, fixed_step_groups_render_deltas_into_the_same_ticks) {
+    PlatformFixedStep at_60{}, at_30{}, mixed{};
+    platform_fixed_step_init(&at_60);
+    platform_fixed_step_init(&at_30);
+    platform_fixed_step_init(&mixed);
+
+    uint32_t ticks_60 = 0u;
+    uint32_t ticks_30 = 0u;
+    uint32_t ticks_mixed = 0u;
+    for (uint32_t frame = 0u; frame < 60u; ++frame) {
+        platform_fixed_step_add_frame_delta(&at_60, SIM_DT_SECONDS * 0.5);
+        ticks_60 += consume_all_owed_ticks(&at_60);
+    }
+    for (uint32_t frame = 0u; frame < 30u; ++frame) {
+        platform_fixed_step_add_frame_delta(&at_30, SIM_DT_SECONDS);
+        ticks_30 += consume_all_owed_ticks(&at_30);
+    }
+    for (uint32_t frame = 0u; frame < 30u; ++frame) {
+        const double delta = (frame & 1u) ? SIM_DT_SECONDS * 1.5 : SIM_DT_SECONDS * 0.5;
+        platform_fixed_step_add_frame_delta(&mixed, delta);
+        ticks_mixed += consume_all_owed_ticks(&mixed);
+    }
+
+    CHECK(ticks_60 == 30u);
+    CHECK(ticks_30 == 30u);
+    CHECK(ticks_mixed == 30u);
+    CHECK_APPROX(platform_fixed_step_alpha(&at_60), 0.0, 1.0e-9);
+    CHECK_APPROX(platform_fixed_step_alpha(&at_30), 0.0, 1.0e-9);
+    CHECK_APPROX(platform_fixed_step_alpha(&mixed), 0.0, 1.0e-9);
+}
+
+TEST(platform, fixed_step_clamps_and_consumes_only_when_owed) {
+    PlatformFixedStep step{};
+    platform_fixed_step_init(&step);
+    CHECK(!platform_fixed_step_tick_owed(&step));
+    CHECK(!platform_fixed_step_consume_tick(&step));
+    CHECK(step.accumulator_seconds == 0.0);
+
+    platform_fixed_step_add_frame_delta(&step, -1.0);
+    CHECK(step.accumulator_seconds == 0.0);
+    platform_fixed_step_add_frame_delta(&step, 10.0);
+    CHECK(step.accumulator_seconds == SIM_MAX_CATCHUP_S);
+    CHECK(consume_all_owed_ticks(&step) == 7u);
+    CHECK_APPROX(platform_fixed_step_alpha(&step), 0.5, 1.0e-9);
+
+    const double before = step.accumulator_seconds;
+    CHECK(!platform_fixed_step_consume_tick(&step));
+    CHECK(step.accumulator_seconds == before);
+}
 
 static Allocator test_arena_alloc(Arena* a, uint8_t* buf, size_t n) {
     arena_init_fixed(a, buf, n);

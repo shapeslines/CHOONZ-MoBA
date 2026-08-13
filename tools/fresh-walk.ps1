@@ -65,16 +65,20 @@ if (-not (Test-Path $sandbox)) { Fail "sandbox.exe not at the README path" }
 $log = Join-Path $CloneDir "sandbox.log"
 cmd /c "cd /d `"$CloneDir`" && `"$sandbox`" --frames 90 --screenshot out.bmp > `"$log`" 2>&1"
 $code = $LASTEXITCODE
-$output = Get-Content $log -Raw
 $screenshot = Join-Path $CloneDir "out.bmp"
-$noDevice = $output -match 'renderer: no Vulkan physical device(?:s| or compatible driver)' -or
-            $output -match 'renderer: no device meets the minimum spec'
-if ($noDevice -and -not (Test-Path $screenshot)) {
-    Write-Output "SKIP: no Vulkan driver/1.3 device - render path compiled but not executed"
-} elseif ($code -ne 0) {
-    Fail "sandbox exited $code. Log: $output"
-} elseif (-not (Test-Path $screenshot)) {
-    Fail "sandbox exited 0 but produced no out.bmp"
+$classifier = Join-Path $PSScriptRoot "classify-sandbox-smoke.ps1"
+$classifierArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $classifier,
+                    "-LogPath", $log, "-ScreenshotPath", $screenshot,
+                    "-ProcessExitCode", $code)
+$classification = @(& powershell.exe @classifierArgs 2>&1 | ForEach-Object { "$_" })
+$classifierCode = $LASTEXITCODE
+$classification | Write-Output
+if ($classifierCode -ne 0) {
+    Write-Output "sandbox log:"
+    Get-Content $log
+    Fail "sandbox smoke classifier rejected the run"
+} elseif ($classification -contains "SANDBOX_SMOKE=SKIP") {
+    Write-Output "SKIP: exact Vulkan device gate; render path compiled but not executed"
 } else {
     $len = (Get-Item $screenshot).Length
     Write-Output "sandbox: 90 validation-clean frames, screenshot $len bytes"

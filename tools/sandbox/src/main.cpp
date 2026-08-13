@@ -10,6 +10,7 @@
 // M2.3: an orbit camera (arrows rotate, wheel zooms) feeds view/proj into the
 // renderer's per-frame set=0 UBO through the seam.
 #include "platform/platform.h"
+#include "platform/platform_fixed_step.h"
 #include "render/renderer.h"
 #include "math/math.h"
 #include "sim/sim.h"
@@ -168,21 +169,32 @@ int main(int argc, char** argv) {
     // M3.3: one deterministic SimWorld drives presentation through the present glue.
     // Units orbit the origin on deterministic per-tick SET_VELOCITY commands (pure
     // integer math — fix_sin tables — so the runtime stream is reproducible).
-    Arena world_arena;
+    Arena world_arena{};
+    Arena present_arena{};
     SimWorld world{};
     PresentState present{};
-    if (!platform_arena_reserve(&world_arena, sim_world_memory_required(sim_world_config_default())) ||
-        !sim_init(&world, &world_arena, 0x4D4F4241u, sim_world_config_default())) {
-        std::printf("sandbox: sim world init failed\n");
+    const SimWorldConfig world_config = sim_world_config_default();
+    if (!platform_arena_reserve(&world_arena, sim_world_memory_required(world_config)) ||
+        !sim_init(&world, &world_arena, 0x4D4F4241u, world_config) ||
+        !platform_arena_reserve(&present_arena, present_memory_required()) ||
+        !present_init(&present, &present_arena, &world)) {
+        std::printf("sandbox: sim/presentation init failed\n");
+        platform_arena_release(&present_arena);
+        platform_arena_release(&world_arena);
+        renderer_destroy_material(rnd, material, 0);
+        renderer_destroy_texture(rnd, texture, 0);
+        renderer_destroy_mesh(rnd, mesh, 0);
+        renderer_destroy(rnd);
+        platform_window_close(win);
         return 1;
     }
-    present_init(&present);
+    PlatformFixedStep fixed_step{};
+    platform_fixed_step_init(&fixed_step);
 
     // M3.3: deterministic per-tick orbit commands (pure integer math — fix_sin/cos
     // tables; no RNG, no floats). Each unit circles the origin at its own phase.
-    // Commands are generated once per FRAME from the tick about to run; multi-tick
-    // frames reuse the same buffer (still deterministic — the stream is whatever it
-    // is, and the hash oracle in tests is independent of this demo content).
+    // The caller invokes this once for each owed tick. That keeps the loop ready for
+    // a future per-tick input/net command source without changing same-tick semantics.
     auto orbit_commands = [](const SimWorld* world, SimCommand* out, uint32_t* out_count) {
         uint32_t n = 0;
         const int32_t step = (int32_t)((world->tick * 4u) % 360u);
@@ -209,6 +221,7 @@ int main(int argc, char** argv) {
     int32_t last_height = desc.height;
     bool last_focused = true;
     bool last_minimized = false;
+    bool simulation_failed = false;
 
     // M2.3 orbit camera: yaw/pitch/distance around the world origin. Arrows rotate,
     // wheel zooms; --orbit auto-rotates for scripted screenshot verification.
@@ -225,21 +238,33 @@ int main(int argc, char** argv) {
         prev = now;
         ++frame;
 
-        // M3.3: the sim runs at a fixed 30 Hz regardless of render rate; the present
-        // glue owns the accumulator and the interpolation. Runs even when the
-        // renderer is skipped (minimized / null backend) — the policy is "sim keeps
-        // ticking".
-        SimCommand commands[SIM_MAX_COMMANDS_PER_TICK]{};
-        uint32_t command_count = 0;
-        orbit_commands(&world, commands, &command_count);
-        SimCommandBuffer command_buffer{commands, command_count};
-        uint32_t ticks = present_advance(&present, dt, &world, &command_buffer);
+        // Platform owns cadence. Generate a fresh command buffer for every owed tick,
+        // advance, capture the completed state, then consume time. A failed tick keeps
+        // the debt intact and terminates the app instead of silently dropping time.
+        platform_fixed_step_add_frame_delta(&fixed_step, dt);
+        while (platform_fixed_step_tick_owed(&fixed_step)) {
+            SimCommand commands[SIM_MAX_COMMANDS_PER_TICK]{};
+            uint32_t command_count = 0u;
+            orbit_commands(&world, commands, &command_count);
+            SimCommandBuffer command_buffer{commands, command_count};
+            if (!sim_tick(&world, &command_buffer) ||
+                !present_capture(&present, &world) ||
+                !platform_fixed_step_consume_tick(&fixed_step)) {
+                std::printf("sandbox: simulation tick/capture failed at tick %llu\n",
+                            (unsigned long long)world.tick);
+                simulation_failed = true;
+                break;
+            }
+        }
+        if (simulation_failed) break;
+
         DrawItem unit_items[SIM_MAX_UNITS]{};
         uint32_t unit_count = 0;
         if (rnd)
-            unit_count = present_build_draw_items(&present, mesh, material, nullptr,
+            unit_count = present_build_draw_items(&present,
+                                                  platform_fixed_step_alpha(&fixed_step),
+                                                  mesh, material,
                                                   unit_items, SIM_MAX_UNITS);
-        (void)ticks;
 
         if (in.fb_width != last_width || in.fb_height != last_height) {
             std::printf("sandbox: event resize %dx%d -> %dx%d\n",
@@ -360,7 +385,9 @@ int main(int argc, char** argv) {
     renderer_destroy_texture(rnd, texture, 0);
     renderer_destroy_mesh(rnd, mesh, 0);
     renderer_destroy(rnd);
+    platform_arena_release(&present_arena);
+    platform_arena_release(&world_arena);
     platform_window_close(win);
     std::printf("sandbox: clean exit after %ld frames (%.2fs)\n", frame, elapsed);
-    return 0;
+    return simulation_failed ? 1 : 0;
 }
