@@ -17,7 +17,7 @@
 #include "sim/oracle.h"
 #include "sim/sim.h"
 #include "game/present.h"
-#include "assets/tga.h"
+#include "assets/assets.h"
 #include <windows.h>       // SetProcessDpiAwarenessContext (G28)
 #include <cstdio>
 #include <cstdlib>
@@ -38,6 +38,26 @@ static const uint16_t CUBE_INDICES[36] = {
      0, 1, 2, 0, 2, 3,  4, 5, 6, 4, 6, 7,  8, 9,10, 8,10,11,
     12,13,14,12,14,15, 16,17,18,16,18,19, 20,21,22,20,22,23,
 };
+
+static TextureHandle sandbox_asset_create_texture(void* user, const uint8_t* rgba8,
+                                                   uint32_t width, uint32_t height) {
+    TextureHandle invalid{HANDLE_NULL};
+    Renderer* renderer = (Renderer*)user;
+    if (!renderer || !rgba8 || width == 0u || height == 0u) return invalid;
+    TextureDesc desc{};
+    desc.pixels = rgba8;
+    desc.width = width;
+    desc.height = height;
+    desc.format = RENDERER_TEXTURE_RGBA8_SRGB;
+    return renderer_create_texture(renderer, &desc);
+}
+
+static void sandbox_asset_destroy_texture(void* user, TextureHandle texture,
+                                          uint32_t frames_until_free) {
+    Renderer* renderer = (Renderer*)user;
+    if (renderer && !handle_is_null(texture.h))
+        renderer_destroy_texture(renderer, texture, frames_until_free);
+}
 
 // Minimal 24-bit bottom-up BMP, same shape tools/visualize writes. `rgba8` rows are
 // top-down (end-frame capture contract); BMP wants bottom-up BGR with 4-byte row pad.
@@ -161,7 +181,7 @@ int main(int argc, char** argv) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 
     PlatformWindowDesc desc;
-    desc.title = "MOBA - sandbox (Phase 2 complete; F1 overlay)";
+    desc.title = "MOBA - sandbox (Phase 4 M4.0 assets; F1 overlay)";
     desc.width = 1280; desc.height = 720;
     desc.resizable = true; desc.fullscreen = false;
 
@@ -173,6 +193,11 @@ int main(int argc, char** argv) {
     MeshHandle mesh{HANDLE_NULL};
     TextureHandle texture{HANDLE_NULL};
     MaterialHandle material{HANDLE_NULL};
+    AssetRegistry asset_registry{};
+    Arena asset_persistent_arena{};
+    Arena asset_level_arena{};
+    Arena asset_global_arena{};
+    Arena asset_io_arena{};
     if (rnd) {
         MeshDesc mesh_desc{};
         mesh_desc.vertices = CUBE_VERTICES;
@@ -185,45 +210,41 @@ int main(int argc, char** argv) {
         mesh = renderer_create_mesh(rnd, &mesh_desc);
     }
 
-    // Direct TGA -> typed texture/material. Missing/bad/oversized input is non-fatal.
+    // M4.0 loose TGA -> AssetRegistry -> renderer upload callback. The registry owns
+    // the texture handle and level lifetime; the sandbox owns only its material.
     if (rnd) {
-        // The arena holds BOTH the raw file AND its decoded RGBA8 at once. A 24bpp TGA
-        // (3 B/px) decodes to 4 B/px, so worst-case live bytes ~= 7/3 * file. Cap the
-        // file at 3/8 of the arena (< 3/7, with slack) so a valid-but-huge TGA is
-        // rejected here rather than overrunning the arena's hard abort (platform.h:
-        // an on-disk size must never be able to trigger it).
-        const size_t TEX_ARENA_BYTES = 64u * 1024 * 1024;
-        const size_t TGA_FILE_CAP    = TEX_ARENA_BYTES / 8 * 3;   // ~24 MiB; 24 + 4/3*24 = 56 < 64
-        Arena tex_arena;
-        if (platform_arena_reserve(&tex_arena, TEX_ARENA_BYTES)) {
-            char tga_path[512];
-            std::snprintf(tga_path, sizeof(tga_path), "%s/uv_test.tga", MOBA_ASSET_DIR);
-            PlatformFile file = {};
-            TgaImage img = {};
-            size_t tga_size = 0;
-            if (!platform_file_size(tga_path, &tga_size) || tga_size > TGA_FILE_CAP)
-                std::printf("sandbox: texture missing or oversized: %s\n", tga_path);
-            else if (!platform_file_read(tga_path, arena_allocator(&tex_arena), &file))
-                std::printf("sandbox: texture unreadable: %s\n", tga_path);
-            else if (!tga_decode(file.data, file.size, arena_allocator(&tex_arena), &img))
-                std::printf("sandbox: %s is not a supported TGA\n", tga_path);
-            else {
-                TextureDesc texture_desc{};
-                texture_desc.pixels = img.rgba8;
-                texture_desc.width = img.width;
-                texture_desc.height = img.height;
-                texture_desc.format = RENDERER_TEXTURE_RGBA8_SRGB;
-                texture = renderer_create_texture(rnd, &texture_desc);
+        AssetRegistryConfig asset_config = asset_registry_config_default(MOBA_ASSET_DIR);
+        asset_config.capacity = 64u;
+        const size_t registry_bytes = asset_registry_memory_required(asset_config);
+        const size_t LEVEL_BYTES = 64u * 1024u * 1024u;
+        const size_t GLOBAL_BYTES = 8u * 1024u * 1024u;
+        const size_t IO_BYTES = 64u * 1024u * 1024u;
+        const bool arenas_ready = registry_bytes != 0u &&
+            platform_arena_reserve(&asset_persistent_arena, registry_bytes) &&
+            platform_arena_reserve(&asset_level_arena, LEVEL_BYTES) &&
+            platform_arena_reserve(&asset_global_arena, GLOBAL_BYTES) &&
+            platform_arena_reserve(&asset_io_arena, IO_BYTES);
+        AssetRendererApi asset_renderer{rnd, sandbox_asset_create_texture,
+                                        sandbox_asset_destroy_texture};
+        if (arenas_ready &&
+            asset_registry_init(&asset_registry, &asset_persistent_arena,
+                                &asset_level_arena, &asset_global_arena,
+                                &asset_io_arena, asset_renderer, asset_config)) {
+            AssetHandle texture_asset = asset_load_texture_tga(
+                &asset_registry, "uv_test.tga", ASSET_LIFETIME_LEVEL);
+            AssetTextureView texture_view{};
+            if (asset_get_texture(&asset_registry, texture_asset, &texture_view)) {
+                texture = texture_view.gpu;
                 MaterialDesc material_desc{};
                 material_desc.albedo = texture;
                 material_desc.sampler = RENDERER_SAMPLER_LINEAR_REPEAT;
                 material = renderer_create_material(rnd, &material_desc);
                 if (!handle_is_null(material.h))
-                    std::printf("sandbox: typed cube material loaded (%ux%u from uv_test.tga)\n",
-                                img.width, img.height);
+                    std::printf("sandbox: asset-managed cube material loaded (%ux%u id=0x%016llx)\n",
+                                texture_view.width, texture_view.height,
+                                (unsigned long long)texture_view.id);
             }
-            platform_arena_release(&tex_arena);
-        }
+        } else std::printf("sandbox: asset registry initialization failed\n");
     }
 
     const uint64_t freq = platform_time_frequency();
@@ -246,9 +267,13 @@ int main(int argc, char** argv) {
         platform_arena_release(&present_arena);
         platform_arena_release(&world_arena);
         renderer_destroy_material(rnd, material, 0);
-        renderer_destroy_texture(rnd, texture, 0);
+        asset_registry_shutdown(&asset_registry, 0);
         renderer_destroy_mesh(rnd, mesh, 0);
         renderer_destroy(rnd);
+        platform_arena_release(&asset_io_arena);
+        platform_arena_release(&asset_global_arena);
+        platform_arena_release(&asset_level_arena);
+        platform_arena_release(&asset_persistent_arena);
         platform_window_close(win);
         return 1;
     }
@@ -446,9 +471,13 @@ int main(int argc, char** argv) {
                     stats.total_draw_calls, stats.live_device_allocations);
     }
     renderer_destroy_material(rnd, material, 0);
-    renderer_destroy_texture(rnd, texture, 0);
+    asset_registry_shutdown(&asset_registry, 0);
     renderer_destroy_mesh(rnd, mesh, 0);
     renderer_destroy(rnd);
+    platform_arena_release(&asset_io_arena);
+    platform_arena_release(&asset_global_arena);
+    platform_arena_release(&asset_level_arena);
+    platform_arena_release(&asset_persistent_arena);
     platform_arena_release(&present_arena);
     platform_arena_release(&world_arena);
     platform_window_close(win);

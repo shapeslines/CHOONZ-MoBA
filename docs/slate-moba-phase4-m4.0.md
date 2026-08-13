@@ -29,7 +29,7 @@ record and commit the green checkpoint, then advance.
 - [x] Land/rebaseline gate.
 - [x] Stable `AssetId` plus transactional arena-backed registry and lifetime tests.
 - [x] Promote TGA and add bounded WAV parsing/file loads.
-- [ ] Route the sandbox texture through `eng_assets` and prove unload ownership.
+- [x] Route the sandbox texture through `eng_assets` and prove unload ownership.
 - [ ] Full Debug/RelWithDebInfo/Release, ASan, oracle, boundary, fresh review, and PR.
 
 ## Locked decisions
@@ -63,3 +63,13 @@ record and commit the green checkpoint, then advance.
 - Loose file loads use a bounded allocator during the open/read race, rewind the
   I/O arena after every outcome, and preserve durable state on failure.
 - Focused asset/TGA/WAV tests: 4/4. Full Debug CTest: 42/42.
+
+### Sandbox ownership
+
+- `assets_boundary` proves `eng_assets` has no render/Vulkan/sim import and the
+  sandbox no longer decodes TGA or reads its texture file directly.
+- Real Vulkan smoke: RTX 4070 Ti, validation enabled, asset-managed 64x64 texture
+  id `0x3d9bff0eddada061`, 64 objects, one scene draw, clean three-frame exit.
+- Material teardown precedes registry shutdown; registry shutdown returns texture
+  destruction through the renderer callback before renderer destruction.
+- Focused asset/boundary/oracle gate: 6/6. Full Debug CTest: 43/43.

@@ -94,6 +94,9 @@ add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
 add_test(NAME asset_id    COMMAND engine_tests --suite asset_id)
 add_test(NAME assets      COMMAND engine_tests --suite assets)
+add_test(NAME assets_boundary
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_assets_boundary.cmake")
 add_test(NAME core_invariant_tripwire
     COMMAND ${CMAKE_COMMAND}
             -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>
