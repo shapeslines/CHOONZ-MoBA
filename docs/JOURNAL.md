@@ -69,16 +69,18 @@ Merge remains a separate owner action.
 - The direct 10,000-tick proof still reports 923 commands, final `0x637628abff59c823`, stream
   `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`. Controlled mutation still first diverges at
   `tick=4321 field=position_x entity=7` across 178,690 checks.
-- Every source path from #27/#29–#46 is present and semantically retained or strengthened. PR #26's
-  only absent unique artifact is a stale gap-analysis snapshot; #47–#50 touch four explicitly
-  excluded paths absent from the consolidation.
+- Every source path from #27/#29–#46 is present and semantically retained or strengthened. While
+  final checks ran, PR #26 independently landed its gap-analysis report and advanced `main` to
+  `dc380a1`; merge `227fc80` preserves that report unchanged. #47–#50 touch four explicitly excluded
+  paths absent from the consolidation. The reconciled tree passes Debug 39/39 and `git diff --check`.
 
 ### Next
 
 Publish the final evidence record, obtain fresh-context full security and acceptance verdicts on the
 final recorded head, require exact-head
 CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
-the squash merge and supersession closure of #26/#27/#29–#46. Retain their branches/worktrees; open
+the squash merge and supersession closure of #27/#29–#46. PR #26 is already merged; retain all
+branches/worktrees and open
 M4.0 only from the resulting synchronized green `main`.
 
 ---

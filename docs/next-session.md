@@ -2,7 +2,8 @@
 
 ## State @ PR #51 final local acceptance · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
-Phase 3 M3.0–M3.4 is complete on `main` at `63f0b1de`. The active interphase security
+Phase 3 M3.0–M3.4 is complete. Current `main` is `dc380a1` after documentation PR #26 landed; merge
+commit `227fc80` reconciles that base into the active interphase security
 consolidation is `codex/security-consolidation` / draft PR #51. Candidate `a89caf6` passed its full
 local and GitHub gates but failed the required security review, so it was not promoted. All three
 findings passed the complete matrix at `f0a56c4`/`7a0d130`, but fresh full security review found one
@@ -19,7 +20,8 @@ Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 - PR #27 and PRs #29–#46 are accounted for in
   [`security-consolidation-ledger.md`](security-consolidation-ledger.md); every approved source hunk
-  is retained or strengthened. PR #26 is stale/superseded. PRs #47–#50 and the unfinished platform
+  is retained or strengthened. PR #26 is already merged base provenance and its report is preserved
+  unchanged. PRs #47–#50 and the unfinished platform
   memory worktree remain explicitly outside this slate.
 - CI has `workflow_dispatch`, `contents: read`, three immutable checkout v5.0.1 pins, and explicit
   winget community-source selection. Fresh-walk deletion is constrained to a non-root direct temp
@@ -53,7 +55,7 @@ Merge is still a separate owner decision. Do not begin M4.0 from this branch.
    then mark PR #51 ready.
 3. Stop for separate owner merge approval. After an exact-head squash merge, verify the merged tree
    and `main` run (manual dispatch only if automatic push registration fails), then close
-   #26/#27/#29–#46 with the landing SHA. Retain all source branches/worktrees.
+   #27/#29–#46 with the landing SHA. PR #26 is already merged. Retain all source branches/worktrees.
 4. Only from synchronized green `main`, open a separate Phase 4 M4.0 asset-pipeline slate.
 
 ## M4.0 boundary

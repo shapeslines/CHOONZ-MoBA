@@ -3,7 +3,8 @@ title: "Interphase Security Consolidation Slate"
 status: active
 phase: interphase
 branch: codex/security-consolidation
-base: 63f0b1dedad1c3f509843f68f32c24f6f52aa55e
+opened_base: 63f0b1dedad1c3f509843f68f32c24f6f52aa55e
+base: dc380a1742b71e3337196aad8676fc80a6c60fc3
 created: 2026-08-13
 updated: 2026-08-13
 ---
@@ -13,8 +14,9 @@ updated: 2026-08-13
 ## Goal
 
 Land the approved security set from PR #27 and PRs #29-#46 through one coherent, reviewed exact-green
-head before M4.0. Merged milestone PRs #35/#38 are base provenance, not source changes. PRs #47-#49
-are explicitly excluded and remain independent drafts.
+head before M4.0. Merged milestone PRs #35/#38 are base provenance, not source changes. PR #26
+landed independently during final acceptance and is now base provenance too. PRs #47-#50 are
+explicitly excluded and remain independent drafts.
 
 ## Loop contract
 
@@ -26,6 +28,7 @@ commit/push the green checkpoint, and advance only on evidence.
 
 - [x] Owner authorized implementation and PR publication.
 - [x] Isolated worktree created from synchronized `main` at `63f0b1de`.
+- [x] Current `main` at `dc380a1` reconciled by merge commit; PR #26 report preserved unchanged.
 - [x] Dirty root checkout and source branches left untouched.
 - [x] Exact PR heads, files, and historical checks inventoried.
 - [x] ARC compiler self-test passed: 1169 checks.
@@ -160,6 +163,8 @@ clang-cl 19.1.5 proves UBSan active and passes 6/6; Debug/Release direct determi
 tests and 178,690 checks; and the fresh walk configures, builds 92 targets, passes 39/39, renders 90
 validation-clean frames with a 2,764,854-byte screenshot, removes read-only Git packs, and reports
 `FRESH-WALK OK`.
+After PR #26 advanced `main`, merge `227fc80` preserved its report as the sole base-tree addition;
+the reconciled tree passes Debug 39/39 and `git diff --check`.
 
 The first local-acceptance candidate (`a89caf6`) passed the `/WX`
 Debug/RelWithDebInfo/Release builds, all 39 CTest entries in each configuration, Debug-ASan,
@@ -181,8 +186,9 @@ shared staging helper is now applied there and the complete Debug-ASan suite pas
 clang-cl/UBSan gate passes 6/6, and the unchanged direct oracle plus controlled-divergence proof pass.
 A guarded fresh clone of `f0a56c4` builds 92 targets, passes 39/39, completes a classified 90-frame Vulkan
 run, and removes its leased directory. A separate validation-on RTX 4070 Ti run produced a visually inspected 2,764,854-byte 1280x720
-screenshot. All 17 approved source heads/paths were freshly reconciled; PR #26 has no required unique
-content, excluded #47-#50 are absent, and no sim/replay-codec/asset/logic-hash file changed.
+screenshot. All 17 approved source heads/paths were freshly reconciled; PR #26's independently
+landed report is preserved through current `main`, excluded #47-#50 are absent, and no
+sim/replay-codec/asset/logic-hash file changed.
 All focused repair rereviews are green; both full reviews must pass on the final exact head before
 ready state.
 

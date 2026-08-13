@@ -6,15 +6,17 @@ requests remain immutable audit inputs. Every final source hunk is marked `retai
 
 Inventory captured from GitHub on 2026-08-13 against `main` at
 `63f0b1dedad1c3f509843f68f32c24f6f52aa55e`.
+During final acceptance, PR #26 independently landed and advanced `main` to
+`dc380a1742b71e3337196aad8676fc80a6c60fc3`; merge commit `227fc80` reconciled that current base
+without rebasing or rewriting the consolidation history.
 
 ## Scope rulings
 
 - Consolidation sources: #27, #29-#34, #36-#37, and #39-#46.
-- Base provenance only: merged milestone PRs #35 and #38.
-- Expected superseded: PR #26. Its older M3.3 code was repaired and landed through #28/#35/#38. Its
-  unique `docs/gap-analysis-report.md` is an obsolete snapshot whose durable facts are represented by
-  the current gap ledger, M3.3/M3.4 slates, journal, and handoff; it contains no required code or
-  current state absent from `main`.
+- Base provenance only: merged milestone PRs #35 and #38, plus independently merged documentation PR
+  #26. PR #26's older M3.3 code was already repaired through #28/#35/#38; its final tree delta adds
+  `docs/gap-analysis-report.md`, now preserved unchanged from current `main`. It is no longer a
+  supersession or retirement target.
 - Explicitly excluded and retained: PR #47 (`e3271bf`), PR #48 (`714e01c`), PR #49 (`c187dc7`), and
   PR #50 (`972f328`). They were opened after the approved consolidation boundary and are not
   retirement targets. Their one-path subjects are string aliasing, renderer-handle free-list state,
@@ -49,24 +51,27 @@ Inventory captured from GitHub on 2026-08-13 against `main` at
 Historical check shorthand: D = Debug, RWD = RelWithDebInfo, R = Release. Every final claim must use
 fresh consolidated-head evidence, not these historical runs.
 
-## PR #26 supersession audit
+## PR #26 provenance audit
 
-Exact head: `c35637108c2c58ddca747c4ab27cf62ccf2198d7`; open, conflicting, historical checks green.
+Final head: `d5735960db0f07e7b279d86ac0570ec111875b18`; merged as
+`dc380a1742b71e3337196aad8676fc80a6c60fc3` on 2026-08-13 while consolidation checks were running.
 
 Its PR diff names `CMakeLists.txt`, `docs/gap-analysis-report.md`, `docs/gap-close-ledger.md`,
 `docs/next-session.md`, `engine/game/CMakeLists.txt`, `engine/game/include/game/present.h`,
 `engine/game/src/present.cpp`, `tests/CMakeLists.txt`, `tests/present/present_tests.cpp`,
 `tools/sandbox/CMakeLists.txt`, and `tools/sandbox/src/main.cpp`. Current `main` contains the accepted
-and later-hardened versions of the code/doc contracts through M3.3/M3.4. The only absent file is the
-historical report described above; its stale remaining-work claims make it unsuitable as current
-authority. Initial disposition: intentionally superseded after final provenance recheck.
+and later-hardened versions of the code/doc contracts through M3.3/M3.4. Relative to the prior
+`63f0b1de` base, the merged tree adds only `docs/gap-analysis-report.md`. Current `main` owns that
+historical report; consolidation merge `227fc80` preserves it byte-for-byte. Final disposition: base
+provenance, already landed, no closure action.
 
 ## Slice evidence
 
 ### S1 — ownership and baseline
 
 - Isolated worktree: `.worktrees/security-consolidation`.
-- Branch/base: `codex/security-consolidation` from exact `63f0b1de`.
+- Branch/base: `codex/security-consolidation` opened from exact `63f0b1de`; current `main` at
+  `dc380a1` reconciled through merge commit `227fc80`.
 - Root dirty checkout and all source worktrees untouched.
 - ARC compiler: `SELFTEST PASS (1169 checks)`; manifest `VALID`; `render --check` exit 0.
 - GitHub inventory: exact heads/files/checks above; historical #27/#29 failures confirmed external.
@@ -240,8 +245,8 @@ none is carried solely by source-branch history.
   clean exit; the retained 1280x720, 2,764,854-byte screenshot was visually inspected.
 - Provenance: live GitHub heads still match every recorded SHA. PRs #27/#29 retain one historical red
   fresh-walk each from the pre-code winget source failure; their other six checks are green. Every
-  approved source path is present in the consolidated diff. PR #26 has no required unique code or
-  current authority; excluded #47/#48/#49/#50 change `str.h`, `render_handle_table.cpp`,
+  approved source path is present in the consolidated diff. PR #26 subsequently landed its unique
+  report through current `main` and merge `227fc80`; excluded #47/#48/#49/#50 change `str.h`, `render_handle_table.cpp`,
   `tga_direct.cpp`, and `render_batch.cpp`, none of which is changed here.
 - Scope diff: no `engine/sim`, replay codec/container, asset API, or logic-hash file changed. The
   replay CLI parser is the only replay-facing implementation change and retains all on-disk bytes.
@@ -287,6 +292,9 @@ none is carried solely by source-branch history.
   passes 6/6; direct Debug/Release determinism each pass four tests/178,690 checks; the committed-head
   fresh walk configures, builds 92 targets, passes 39/39, completes a real 90-frame Vulkan screenshot,
   securely removes the clone including read-only Git packs, and reports `FRESH-WALK OK`.
+- Current-main reconciliation: PR #26 advanced `main` from `63f0b1de` to `dc380a1` with only
+  `docs/gap-analysis-report.md` as the tree delta. Merge `227fc80` preserves it unchanged; the
+  reconciled tree passes Debug 39/39 and `git diff --check`.
 - Focused full-auditor rereviews: PASS on descendant object binding, read-only handle disposition,
   the exact post-classification swap fixture, and reparse-safe fixture teardown.
 - S7 local disposition: PASS at `6ae70c9`. Candidate `7a0d130` remains superseded; fresh full
