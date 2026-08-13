@@ -90,14 +90,15 @@ Goal: reconcile PRs #31/#32/#37/#39.
 Done means: temporary collisions and malformed loader/shader paths fail closed while normal offline
 SPIR-V and Vulkan paths remain green.
 
-Status: complete locally. Predictable temporary files use create-only semantics and a collision test
+Status: complete and published at `216342d`. Predictable temporary files use create-only semantics and a collision test
 proves destination and sentinel bytes remain unchanged. Vulkan loader discovery is isolated from the
 window TU, restricted to System32 or a canonical existing drive-absolute `VULKAN_SDK` root, and its
 path helper is transactional. Shader declarations require real in-root files and case-insensitively
 unique output basenames; valid plus missing/directory/outside/duplicate/case-duplicate fixtures pass.
 Runtime shader paths use a tested bounded formatter and return before file access on truncation. Dev
 and `/WX` Debug/Release focused gates pass 4/4; full dev Debug passes 36/36; the real Vulkan sandbox
-completed 90 validation-on frames and wrote a visually inspected 2,764,854-byte screenshot.
+completed 90 validation-on frames and wrote a visually inspected 2,764,854-byte screenshot. Every
+exact-head MSVC, clang-cl/UBSan, fresh-walk, and CodeQL check passed.
 
 ### S5 — CLI and tooling inputs
 
@@ -106,7 +107,14 @@ Goal: reconcile PRs #29/#33/#34/#36/#40.
 Done means: every malformed input returns the documented exit class with no output/platform side
 effect; log boundaries pass at 4 MiB and fail at 4 MiB plus one.
 
-Status: pending.
+Status: complete locally. Sandbox frame counts now accept only canonical positive decimal integers
+and reject 14 malformed forms with exit 2 before DPI, window, or renderer activity. Replay numeric
+options reject signed, spaced, trailing, leading-zero, overflowing, and out-of-range values with exit
+1 and no output mutation. The test harness rejects seven missing/unknown selector cases before any
+test runs, and the visualizer validates all three output paths before creating a file. Classifier
+input is read through a bounded 4 MiB + 1 probe: exactly 4 MiB passes and 4 MiB + 1 fails, with all
+15 adversarial cases represented. Dev Debug and `/WX` Debug/Release focused gates pass 7/7; the full
+dev Debug suite passes 39/39.
 
 ### S6 — Renderer capacity arithmetic
 
@@ -146,5 +154,5 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Reconcile PR #29/#33/#34/#36/#40 into the CLI/tooling slice; keep replay encoding, asset APIs,
+Reconcile PR #44/#45 into the renderer-capacity slice; keep simulation/replay encoding, asset APIs,
 PRs #47-#50, and unfinished S22 outside the branch.

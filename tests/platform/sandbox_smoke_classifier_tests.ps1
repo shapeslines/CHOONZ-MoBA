@@ -19,6 +19,14 @@ function Write-BmpStub([string]$path) {
     [System.IO.File]::WriteAllBytes($path, $bytes)
 }
 
+function Pad-LogToExactBytes([string]$base, [int]$targetBytes) {
+    $baseBytes = $utf8.GetByteCount($base)
+    if ($baseBytes -gt $targetBytes) {
+        throw "base log is $baseBytes bytes, larger than requested $targetBytes-byte fixture"
+    }
+    return $base + (' ' * ($targetBytes - $baseBytes))
+}
+
 function Run-Case([string]$name, [string]$logText, [int]$processCode,
                   [bool]$withScreenshot, [string]$expectedMarker, [int]$expectedExit) {
     $dir = Join-Path $caseRoot $name
@@ -74,7 +82,9 @@ $minimum = "renderer: no device meets the minimum spec (Vulkan 1.3 + dynamicRend
            "reached 90 frames -> quit`n" +
            "sandbox: clean exit after 90 frames (0.60s)"
 
-Run-Case 'hardware-pass' $success 0 $true 'SANDBOX_SMOKE=PASS' 0
+$maxLogBytes = 4 * 1024 * 1024
+Run-Case 'hardware-pass-at-limit' (Pad-LogToExactBytes $success $maxLogBytes) 0 $true 'SANDBOX_SMOKE=PASS' 0
+Run-Case 'log-one-byte-over-limit' (Pad-LogToExactBytes $physical ($maxLogBytes + 1)) 0 $false 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'no-physical-skip' $physical 0 $false 'SANDBOX_SMOKE=SKIP' 0
 Run-Case 'no-driver-skip' $driver 0 $false 'SANDBOX_SMOKE=SKIP' 0
 Run-Case 'minimum-spec-skip' $minimum 0 $false 'SANDBOX_SMOKE=SKIP' 0
@@ -94,5 +104,5 @@ if ($script:failureCount -ne 0) {
     Write-Output "$script:failureCount sandbox smoke classifier case(s) failed"
     exit 1
 }
-Write-Output "sandbox smoke classifier: 14 adversarial cases passed"
+Write-Output "sandbox smoke classifier: 15 adversarial cases passed"
 exit 0

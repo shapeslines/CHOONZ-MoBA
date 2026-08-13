@@ -165,7 +165,19 @@ add_test(NAME sandbox_smoke_classifier
             -Classifier "${CMAKE_SOURCE_DIR}/tools/classify-sandbox-smoke.ps1"
             -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(sandbox_smoke_classifier PROPERTIES
-    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 14 adversarial cases passed")
+    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 15 adversarial cases passed")
+
+add_test(NAME sandbox_cli_errors
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/sandbox_cli_errors.ps1"
+            -Exe $<TARGET_FILE:sandbox_null>
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
+
+add_test(NAME test_harness_cli_errors
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/harness_cli_errors.ps1"
+            -Exe $<TARGET_FILE:engine_tests>
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 
 # --- replay CLI: one fixture records a real file; consumers independently inspect,
 #     verify, and exercise exact public exit classes before cleanup runs.

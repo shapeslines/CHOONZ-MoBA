@@ -108,6 +108,18 @@ In progress. This section must account for every source diff before ready state.
   case-duplicate shader declarations fail during configure; the normal five-shader offline build is green.
 - PR #39: retained and repaired. Bounded runtime shader path composition is factored into a
   Vulkan-free helper with exact-boundary and truncation tests; the caller returns before file access.
+- PR #29: retained and repaired. `--frames` is canonical positive decimal only, overflow-safe, and
+  parsed before DPI or platform initialization; 14 malformed forms prove exit 2 with no screenshot
+  or platform/renderer marker.
+- PR #33: retained and expanded. Replay numeric parsing is ASCII-digit-only canonical unsigned
+  decimal. Signed, spaced, trailing, leading-zero, overflowing, and range-invalid values return exit
+  1 without creating output or changing a pre-existing sentinel.
+- PR #34: retained and repaired. The visualizer composes and validates all three bounded paths before
+  drawing or opening any file, so one longer truncated name cannot leave shorter partial outputs.
+- PR #36: retained and repaired. The classifier reads at most 4 MiB + 1 bytes before decoding;
+  exactly 4 MiB succeeds, one byte over fails, and the permanent receipt reports 15 cases.
+- PR #40: retained and expanded. Missing, empty, or option-shaped selectors and unknown harness
+  options return exit 2 before any test body runs, while valid filter and list controls remain green.
 
 ### S2 — CI recovery and fresh-walk
 
@@ -159,9 +171,28 @@ In progress. This section must account for every source diff before ready state.
 - Full dev Debug: 36/36 CTests, including unchanged determinism, replay, and binary-parity gates.
 - Real Vulkan evidence: NVIDIA RTX 4070 Ti, Vulkan 1.3, validation on, 90 frames, clean exit,
   2,764,854-byte 1280x720 screenshot visually inspected.
-- S4 disposition: PASS pending checkpoint publication.
+- Published checkpoint: `216342d`; exact-head MSVC Debug/RelWithDebInfo/Release, clang-cl/UBSan,
+  fresh-walk, and CodeQL all passed.
+- S4 disposition: PASS.
+
+### S5 — CLI and tooling inputs
+
+- Sandbox: 14 malformed `--frames` forms return exit 2 with the canonical diagnostic before any
+  DPI/window/renderer marker and without creating the requested screenshot.
+- Replay: 24 malformed canonical-number cases across ticks/seed/players, three range failures, and
+  an existing-output sentinel all return exit 1 without file creation or mutation; corrupt replay
+  exit classes remain unchanged.
+- Harness and visualizer: seven invalid harness cases exit 2 before test output; valid filter/list
+  controls pass; an overlong visualizer directory fails before any of three BMPs can be created.
+- Classifier: the 15-case matrix passes with a valid hardware log padded to exactly 4,194,304 bytes
+  and a recognized device-gate log at 4,194,305 bytes rejected before classification.
+- Focused dev Debug and `/WX` Debug/Release: the five selected contracts expand through replay
+  fixtures to 7/7 passing CTest entries in every configuration.
+- Full dev Debug: all targets build and CTest passes 39/39, including unchanged determinism,
+  binary parity, replay, boundary, shader, and fresh-walk contract gates.
+- S5 disposition: PASS pending checkpoint publication.
 
 ## NEXT
 
-Reconcile PRs #29/#33/#34/#36/#40 only; preserve replay encoding, asset work, PRs #47-#50, and
+Reconcile PRs #44/#45 only; preserve simulation/replay encoding, asset work, PRs #47-#50, and
 unfinished S22 separately.

@@ -29,10 +29,48 @@ function Copy-ReplayBytes {
     return $path
 }
 
+function Invoke-ExpectRecordFailure {
+    param(
+        [string]$Name,
+        [string]$Option,
+        [string]$Value
+    )
+    $path = Join-Path $WorkDir "moba_replay_rejected_${Name}.mbr"
+    $null = $created.Add($path)
+    Invoke-ExpectExit 1 @('record', '--out', $path, $Option, $Value)
+    if (Test-Path -LiteralPath $path) {
+        throw "Malformed numeric option created output: $Option '$Value'"
+    }
+}
+
 $created = [Collections.Generic.List[string]]::new()
 try {
     Invoke-ExpectExit 1 @('verify', (Join-Path $WorkDir 'does-not-exist.mbr'))
     Invoke-ExpectExit 1 @('record', '--ticks', '1')
+
+    $numericValues = @(
+        '+1', '-1', ' 1', '1 ', '1x', '01', '00', '18446744073709551616'
+    )
+    $caseIndex = 0
+    foreach ($option in @('--ticks', '--seed', '--players')) {
+        foreach ($value in $numericValues) {
+            Invoke-ExpectRecordFailure "$($option.TrimStart('-'))-$caseIndex" $option $value
+            $caseIndex += 1
+        }
+    }
+    Invoke-ExpectRecordFailure 'ticks-out-of-range' '--ticks' '1000001'
+    Invoke-ExpectRecordFailure 'players-zero' '--players' '0'
+    Invoke-ExpectRecordFailure 'players-out-of-range' '--players' '11'
+
+    $sentinelPath = Join-Path $WorkDir 'moba_replay_existing_sentinel.mbr'
+    $sentinelBytes = [System.Text.Encoding]::ASCII.GetBytes('existing replay sentinel')
+    [IO.File]::WriteAllBytes($sentinelPath, $sentinelBytes)
+    $null = $created.Add($sentinelPath)
+    Invoke-ExpectExit 1 @('record', '--out', $sentinelPath, '--ticks', '+1')
+    $afterBytes = [IO.File]::ReadAllBytes($sentinelPath)
+    if ([Convert]::ToBase64String($afterBytes) -ne [Convert]::ToBase64String($sentinelBytes)) {
+        throw 'Malformed replay numeric input changed an existing output file'
+    }
 
     $badMagic = Copy-ReplayBytes 'moba_replay_bad_magic.mbr'
     $created.Add($badMagic)
