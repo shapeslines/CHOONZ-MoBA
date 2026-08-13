@@ -130,3 +130,9 @@ set_tests_properties(replay_cli_errors PROPERTIES FIXTURES_REQUIRED replay_file)
 add_test(NAME replay_cleanup
     COMMAND ${CMAKE_COMMAND} -E rm -f "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_cleanup PROPERTIES FIXTURES_CLEANUP replay_file)
+
+add_test(NAME fresh_walk_path_guard
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/fresh_walk_path_guard.ps1"
+            -Script "${CMAKE_SOURCE_DIR}/tools/fresh-walk.ps1"
+            -OutsideDir "${CMAKE_SOURCE_DIR}")

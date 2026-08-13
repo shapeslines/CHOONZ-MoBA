@@ -25,6 +25,29 @@ function Fail([string]$msg) {
     exit 1
 }
 
+$repoRoot = Split-Path $PSScriptRoot -Parent
+# Cleanup below is destructive: use one direct temp child and reject reparse points
+# so a bad -CloneDir cannot redirect Remove-Item outside the disposable clone.
+$tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+if (-not $tempRoot.EndsWith('\')) { $tempRoot += '\' }
+$clonePath = [System.IO.Path]::GetFullPath($CloneDir)
+$clonePathForCompare = $clonePath.TrimEnd('\')
+$tempRootForCompare = $tempRoot.TrimEnd('\')
+$cloneParent = (Split-Path -Parent $clonePath).TrimEnd('\')
+if ($clonePathForCompare.Equals($tempRootForCompare, [System.StringComparison]::OrdinalIgnoreCase) -or
+    -not $clonePath.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+    -not $cloneParent.Equals($tempRootForCompare, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Fail "CloneDir must be a non-root direct child of the system temp directory: $clonePath"
+}
+if (Test-Path -LiteralPath $clonePath) {
+    $cloneItem = Get-Item -LiteralPath $clonePath
+    if (-not $cloneItem.PSIsContainer) { Fail "CloneDir exists but is not a directory: $clonePath" }
+    if (($cloneItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Fail "CloneDir must not be a reparse point: $clonePath"
+    }
+}
+$CloneDir = $clonePath
+
 # 0. Locate the VS install + vcvars, like .github/workflows/ci.yml does (Node-free).
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { Fail "vswhere not found at $vswhere" }
@@ -42,8 +65,7 @@ function In-VsEnv([string]$dir, [string]$cmd) {
 }
 
 # 1. Clone fresh (no local state, byte-clean like the FIXES.md sweep).
-if (Test-Path $CloneDir) { Remove-Item -Recurse -Force $CloneDir }
-$repoRoot = Split-Path $PSScriptRoot -Parent
+if (Test-Path -LiteralPath $CloneDir) { Remove-Item -LiteralPath $CloneDir -Recurse -Force }
 git clone --quiet "file://$repoRoot" $CloneDir
 if ($LASTEXITCODE -ne 0) { Fail "git clone of $repoRoot" }
 
@@ -81,7 +103,7 @@ if ($noDevice -and -not (Test-Path $screenshot)) {
 }
 
 # 6. Hygiene: leave the temp clone only if asked.
-if (-not $Keep) { Remove-Item -Recurse -Force $CloneDir }
+if (-not $Keep) { Remove-Item -LiteralPath $CloneDir -Recurse -Force }
 
 Write-Output "FRESH-WALK OK - the stranger's path works end to end."
 exit 0
