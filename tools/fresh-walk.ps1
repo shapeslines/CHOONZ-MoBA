@@ -67,11 +67,13 @@ cmd /c "cd /d `"$CloneDir`" && `"$sandbox`" --frames 90 --screenshot out.bmp > `
 $code = $LASTEXITCODE
 $output = Get-Content $log -Raw
 if ($code -ne 0) {
-    if ($output -match 'no device meets the minimum spec') {
-        Write-Output "SKIP: no Vulkan 1.3 device - render path compiled but not executed"
+    if ($output -match 'no device meets the minimum spec' -or $output -match 'vkCreateInstance failed') {
+        Write-Output "SKIP: no Vulkan driver/1.3 device - render path compiled but not executed"
     } else {
         Fail "sandbox exited $code. Log: $output"
     }
+} elseif ($output -match 'vkCreateInstance failed') {
+    Write-Output "SKIP: no Vulkan driver on this machine - render path compiled but not executed"
 } elseif (-not (Test-Path (Join-Path $CloneDir "out.bmp"))) {
     Fail "sandbox exited 0 but produced no out.bmp"
 } else {
