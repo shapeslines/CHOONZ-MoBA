@@ -590,7 +590,7 @@ interphase security gate below is the remaining pre-Phase-4 boundary.
 
 ---
 
-### Interphase security consolidation — boundary hardening  · S  🔒 REPAIRED LOCAL ACCEPTANCE COMPLETE 2026-08-13
+### Interphase security consolidation — boundary hardening  · S  🔒 DESCENDANT REPAIR REVALIDATION 2026-08-13
 **Goal:** reconcile the accepted security drafts into one reviewable head before asset APIs expand the
 runtime boundary.
 **Observed:** PR #51 retains or strengthens every approved hunk from #27 and #29–#46. Core allocation
@@ -609,6 +609,10 @@ is part of this consolidation.
 path-swap interval, a real-renderer corrupt-count gap, and fail-open CLI grammar. Object-bound cleanup,
 shared renderer preflight, and complete fail-closed grammar repairs now pass the full local matrix at
 code checkpoint `f0a56c4`; fresh full security/acceptance reviews remain before ready state.
+Fresh full review of documentation head `7a0d130` then found descendants were still classified and
+recursively removed by path. Every node is now handle-bound with reparse points treated as leaf
+links; the exact child-replacement/outside-sentinel regression is focused-green and the full matrix
+is being rerun.
 
 ---
 

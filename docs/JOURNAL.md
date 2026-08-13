@@ -13,11 +13,13 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 **Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and
 prove the hardened boundary without changing simulation behavior, replay encoding, asset APIs, or
 starting Phase 4.
-**Outcome:** repaired implementation and local acceptance are complete on draft PR #51. Candidate
+**Outcome:** a second security repair is under revalidation on draft PR #51. Candidate
 `a89caf6` passed its full local matrix and GitHub checks, but its required security review found three
 real gaps, so it was not promoted. Focused repairs for cleanup object binding, real-renderer corrupt
-state, and fail-closed CLI grammar pass the complete local matrix; fresh full reviews and exact-head
-GitHub checks remain the readiness gate.
+state, and fail-closed CLI grammar passed the complete local matrix. Independent acceptance and
+exact-head GitHub checks then passed, but fresh full security review found descendants still deleted through paths
+after classification. The walker is now handle-bound for every node and its exact child-swap test is
+focused-green; the complete final gate must be rerun.
 Merge remains a separate owner action.
 
 ### What changed
@@ -41,6 +43,10 @@ Merge remains a separate owner action.
 - Fresh-walk final cleanup is object-bound: a non-delete-sharing handle stays open from lease
   validation through child removal, and the verified root receives its delete disposition through
   that handle. A post-validation test hook attempts the precise race and proves the move is blocked.
+- Descendant cleanup is object-bound too: each child is opened without delete sharing and with
+  `OPEN_REPARSE_POINT`, classified from that handle, retained through recursion, and deleted through
+  the same handle. Reparse points are leaf links; an exact child-replacement attempt cannot reach its
+  outside sentinel.
 - Sandbox and replay command grammars now reject missing, duplicate, option-shaped, unknown, and
   extra arguments before DPI/window/Vulkan or replay file effects.
 
@@ -62,7 +68,8 @@ Merge remains a separate owner action.
 
 ### Next
 
-Obtain fresh-context security and acceptance verdicts on the final recorded head, require exact-head
+Commit the descendant repair, rerun the complete local/fresh-walk matrix, obtain fresh-context
+security and acceptance verdicts on the final recorded head, require exact-head
 CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
 the squash merge and supersession closure of #26/#27/#29–#46. Retain their branches/worktrees; open
 M4.0 only from the resulting synchronized green `main`.

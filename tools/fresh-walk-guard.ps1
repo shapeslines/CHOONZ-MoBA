@@ -5,6 +5,7 @@ if (-not ("MobaFreshWalkNative" -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -104,6 +105,56 @@ public static class MobaFreshWalkNative {
         if (!SetFileInformationByHandle(handle, 4, ref information,
                                         (uint)Marshal.SizeOf(information)))
             throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    private static ByHandleFileInformation Information(SafeFileHandle handle) {
+        ByHandleFileInformation information;
+        if (!GetFileInformationByHandle(handle, out information))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        return information;
+    }
+
+    private static void DeleteChildrenBound(
+        SafeFileHandle directoryHandle, string directoryPath,
+        Action<string> afterChildValidation) {
+        ByHandleFileInformation parent = Information(directoryHandle);
+        const uint DirectoryAttribute = 0x10;
+        const uint ReparsePointAttribute = 0x400;
+        if ((parent.FileAttributes & DirectoryAttribute) == 0 ||
+            (parent.FileAttributes & ReparsePointAttribute) != 0)
+            throw new IOException("Cleanup parent is not a normal directory: " + directoryPath);
+
+        // Take only a name snapshot. Every returned name is opened with
+        // OPEN_REPARSE_POINT and without FILE_SHARE_DELETE before its type is
+        // trusted. A vanished or sharing-conflicted entry fails closed.
+        string[] children = Directory.GetFileSystemEntries(directoryPath);
+        foreach (string childPath in children) {
+            using (SafeFileHandle child = OpenDirectory(
+                childPath, DeleteAccess | FileReadAttributes, ShareRead | ShareWrite)) {
+                ByHandleFileInformation information = Information(child);
+                bool isDirectory = (information.FileAttributes & DirectoryAttribute) != 0;
+                bool isReparsePoint =
+                    (information.FileAttributes & ReparsePointAttribute) != 0;
+
+                if (afterChildValidation != null)
+                    afterChildValidation(childPath);
+
+                // Reparse points are deleted as the link object. They are never
+                // traversed. Normal directories keep their no-delete-share
+                // handle live for the complete recursive walk.
+                if (isDirectory && !isReparsePoint)
+                    DeleteChildrenBound(child, childPath, afterChildValidation);
+                MarkDirectoryForDelete(child);
+            }
+        }
+    }
+
+    public static void DeleteTreeContentsBound(
+        SafeFileHandle rootHandle, string rootPath,
+        Action<string> afterChildValidation) {
+        if (rootHandle == null || rootHandle.IsInvalid || rootHandle.IsClosed)
+            throw new ArgumentException("A live root handle is required.", "rootHandle");
+        DeleteChildrenBound(rootHandle, rootPath, afterChildValidation);
     }
 }
 '@
@@ -220,7 +271,10 @@ function Assert-FreshWalkLease($Lease, $DirectoryHandle = $null) {
     }
 }
 
-function Remove-FreshWalkLease($Lease, [scriptblock]$AfterValidation = $null) {
+function Remove-FreshWalkLease(
+    $Lease,
+    [scriptblock]$AfterValidation = $null,
+    [System.Action[string]]$AfterChildValidation = $null) {
     # Keep a non-delete-sharing handle on the exact leased directory from the
     # validation through final disposition. This closes the path-swap interval:
     # the root cannot be renamed or replaced while its children are removed, and
@@ -232,17 +286,8 @@ function Remove-FreshWalkLease($Lease, [scriptblock]$AfterValidation = $null) {
             & $AfterValidation
         }
 
-        foreach ($child in @(Get-ChildItem -Force -LiteralPath $Lease.ClonePath)) {
-            if (($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-                if ($child.PSIsContainer) {
-                    [System.IO.Directory]::Delete($child.FullName)
-                } else {
-                    [System.IO.File]::Delete($child.FullName)
-                }
-            } else {
-                Remove-Item -Force -Recurse -LiteralPath $child.FullName
-            }
-        }
+        [MobaFreshWalkNative]::DeleteTreeContentsBound(
+            $handle, $Lease.ClonePath, $AfterChildValidation)
 
         if ([MobaFreshWalkNative]::DirectoryIdentity($handle) -ne $Lease.Identity) {
             throw "CloneDir identity changed during cleanup: $($Lease.ClonePath)"

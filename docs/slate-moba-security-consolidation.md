@@ -32,7 +32,7 @@ commit/push the green checkpoint, and advance only on evidence.
 - [x] Static manifest validates and renders deterministically.
 - [x] Untouched Debug baseline and M3.4 oracle captured.
 - [x] Draft consolidation PR opened after first implementation slice.
-- [x] Full local acceptance green.
+- [ ] Full local acceptance green on the final repaired head.
 - [ ] Fresh security and independent acceptance verdicts green.
 - [ ] Exact-head CI and CodeQL green; PR ready.
 - [ ] Separate owner merge approval.
@@ -140,7 +140,17 @@ Goal: account for every source hunk and prove the full permanent regression batt
 Done means: retained/repaired/superseded map is complete, all local gates pass, two fresh reviews pass,
 and exact-head CI/CodeQL are green before ready state.
 
-Status: repaired local acceptance complete at code checkpoint `f0a56c4`. The first local-acceptance candidate (`a89caf6`) passed the `/WX`
+Status: second security repair under revalidation. Code checkpoint `f0a56c4` and documentation head
+`7a0d130` passed the complete local/GitHub matrices and independent acceptance, but the fresh full
+security review correctly found that only the cleanup root was object-bound: descendants were still
+classified and recursively deleted by path. The walker now opens every current child with
+`OPEN_REPARSE_POINT`, delete access, and no delete sharing before classifying from its handle; it
+holds normal-directory handles through recursion, never traverses reparse points, and deletes every
+node through its own verified handle. A post-child-validation hook attempts a rename plus
+outside-sentinel junction replacement and proves the rename is blocked and sentinel unchanged.
+The focused fixture and complete Debug suite pass; full final-head revalidation remains.
+
+The first local-acceptance candidate (`a89caf6`) passed the `/WX`
 Debug/RelWithDebInfo/Release builds, all 39 CTest entries in each configuration, Debug-ASan,
 clang-cl/UBSan, determinism, fresh-walk, and local Vulkan gates. Its fresh security review correctly
 rejected three remaining boundary gaps: a cleanup path-swap interval, missing corrupt-count defense
@@ -162,8 +172,8 @@ A guarded fresh clone of `f0a56c4` builds 92 targets, passes 39/39, completes a 
 run, and removes its leased directory. A separate validation-on RTX 4070 Ti run produced a visually inspected 2,764,854-byte 1280x720
 screenshot. All 17 approved source heads/paths were freshly reconciled; PR #26 has no required unique
 content, excluded #47-#50 are absent, and no sim/replay-codec/asset/logic-hash file changed.
-The focused repair review is green, but both full reviews must be run on the final exact head before
-ready state.
+The earlier focused root repair review was green; a focused descendant rereview and then both full
+reviews must pass on the final exact head before ready state.
 
 ### S8 — Owner-gated landing and retirement
 
@@ -185,6 +195,7 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Publish this local-acceptance record, obtain fresh security and acceptance verdicts, require exact-head CI/CodeQL, and mark PR #51
+Commit and push the descendant repair, rerun the full permanent matrix and fresh walk, obtain fresh
+security and acceptance verdicts, require exact-head CI/CodeQL, and mark PR #51
 ready only after all are green. Stop before the separate owner merge gate;
 keep simulation/replay encoding, asset APIs, #47-#50, and unfinished S22 outside the branch.

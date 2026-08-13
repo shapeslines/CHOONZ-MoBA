@@ -22,6 +22,9 @@ $swapTarget = Join-Path $tempRoot "$nonce-swap-target"
 $replacementPath = Join-Path $tempRoot "$nonce-replacement"
 $intervalPath = Join-Path $tempRoot "$nonce-interval"
 $intervalMoved = Join-Path $tempRoot "$nonce-interval-moved"
+$childRacePath = Join-Path $tempRoot "$nonce-child-race"
+$childRaceMoved = Join-Path $tempRoot "$nonce-child-race-moved"
+$childRaceOutside = Join-Path $tempRoot "$nonce-child-race-outside"
 
 function Invoke-Rejected([string]$name, [string]$path, [string]$pattern) {
     $output = @(
@@ -123,6 +126,47 @@ try {
         throw 'handle-bound cleanup left a post-validation race fixture behind'
     }
 
+    # Attempt a descendant replacement after that exact child has been opened
+    # and classified. The child's live no-delete-share handle must block the
+    # rename before an outside-target junction can replace it.
+    New-Item -ItemType Directory -Path $childRaceOutside | Out-Null
+    $childRaceSentinel = Join-Path $childRaceOutside 'sentinel.txt'
+    [System.IO.File]::WriteAllText($childRaceSentinel, 'child race sentinel')
+    $childRaceLease = New-FreshWalkLease $childRacePath $OutsideDir
+    New-Item -ItemType Directory -Path (Join-Path $childRacePath '.git') -Force | Out-Null
+    Initialize-FreshWalkLease $childRaceLease
+    $childRaceTarget = Join-Path $childRacePath 'payload'
+    New-Item -ItemType Directory -Path $childRaceTarget | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $childRaceTarget 'owned.txt'), 'owned')
+    $childRaceState = [pscustomobject]@{ MoveBlocked = $false; SwapSucceeded = $false }
+    $childHook = [System.Action[string]]{
+        param([string]$openedPath)
+        if (-not $openedPath.Equals(
+                $childRaceTarget, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+        try {
+            [System.IO.Directory]::Move($childRaceTarget, $childRaceMoved)
+        } catch [System.IO.IOException] {
+            $childRaceState.MoveBlocked = $true
+            return
+        }
+        New-Item -ItemType Junction -Path $childRaceTarget -Target $childRaceOutside | Out-Null
+        $childRaceState.SwapSucceeded = $true
+        throw 'post-validation child replacement unexpectedly succeeded'
+    }
+    Remove-FreshWalkLease -Lease $childRaceLease -AfterChildValidation $childHook
+    if (-not $childRaceState.MoveBlocked -or $childRaceState.SwapSucceeded) {
+        throw 'post-validation child path swap was not blocked by the child handle'
+    }
+    if ((Test-Path -LiteralPath $childRacePath) -or
+        (Test-Path -LiteralPath $childRaceMoved)) {
+        throw 'handle-bound child cleanup left a race fixture behind'
+    }
+    if ([System.IO.File]::ReadAllText($childRaceSentinel) -ne 'child race sentinel') {
+        throw 'post-validation child swap changed the outside sentinel'
+    }
+
     if ([System.IO.File]::ReadAllText($nestedSentinel) -ne 'nested sentinel') {
         throw 'nested sentinel changed'
     }
@@ -148,13 +192,17 @@ try {
     Write-Output 'fresh-walk path guard PASS: unsafe locations, existing targets, and cleanup swaps rejected without deletion'
     exit 0
 } finally {
-    foreach ($link in @($junctionPath, $swapPath)) {
+    foreach ($link in @($junctionPath, $swapPath, (Join-Path $childRacePath 'payload'))) {
         if (Test-Path -LiteralPath $link) {
-            [System.IO.Directory]::Delete($link)
+            $linkItem = Get-Item -Force -LiteralPath $link
+            if (($linkItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                [System.IO.Directory]::Delete($link)
+            }
         }
     }
     foreach ($path in @($fixtureRoot, $existingDir, $filePath, $junctionTarget,
-                         $swapTarget, $replacementPath, $intervalPath, $intervalMoved)) {
+                         $swapTarget, $replacementPath, $intervalPath, $intervalMoved,
+                         $childRacePath, $childRaceMoved, $childRaceOutside)) {
         if (Test-Path -LiteralPath $path) {
             Remove-Item -LiteralPath $path -Recurse -Force
         }

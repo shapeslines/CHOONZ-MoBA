@@ -262,11 +262,21 @@ none is carried solely by source-branch history.
   the retained validation-on RTX 4070 Ti run each complete 90 frames with a 2,764,854-byte image.
 - Focused security rereview: PASS for all three repairs. A separate full final-head security verdict
   remains required alongside fresh independent acceptance.
-- S7 local disposition: PASS at code checkpoint `f0a56c4`. Fresh full security/acceptance verdicts
-  and final exact-head GitHub checks remain before ready state.
+- Review correction on exact head `7a0d130`: independent acceptance and all eight GitHub checks
+  passed, but fresh full security review found a remaining descendant cleanup race. The root handle
+  prevented root replacement, yet descendants were classified from cached path metadata and then
+  recursively removed by path, leaving a child replacement interval. The head stayed draft.
+- Descendant repair: the native walker opens every child with `OPEN_REPARSE_POINT`, delete/read-
+  attributes access, and no delete sharing before handle classification. It retains directory
+  handles across recursive walks, treats every reparse point as an untraversed leaf, and applies
+  disposition through each verified handle. The exact post-child-validation hook attempts a rename
+  and outside-target junction replacement; the move is blocked and the sentinel remains byte exact.
+- Focused descendant fixture and complete Debug suite pass. Full final-head matrix and fresh reviews
+  must be rerun.
+- S7 disposition: IN PROGRESS. Candidate `7a0d130` is superseded; no head is ready yet.
 
 ## NEXT
 
-Publish the local-acceptance record, obtain both independent verdicts, require exact-head CI/CodeQL,
+Publish the descendant repair, rerun the complete matrix, obtain both independent verdicts, require exact-head CI/CodeQL,
 and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
 unfinished S22 separately; stop before owner merge.

@@ -1,13 +1,14 @@
 # MOBA-proto — next session
 
-## State @ PR #51 repaired local acceptance · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ PR #51 descendant security repair · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
 Phase 3 M3.0–M3.4 is complete on `main` at `63f0b1de`. The active interphase security
 consolidation is `codex/security-consolidation` / draft PR #51. Candidate `a89caf6` passed its full
 local and GitHub gates but failed the required security review, so it was not promoted. All three
-findings now pass the complete local matrix at code checkpoint `f0a56c4`; fresh full reviews and
-exact-head GitHub checks remain. Merge is still a separate owner decision. Do not begin M4.0 from
-this branch.
+findings passed the complete matrix at `f0a56c4`/`7a0d130`, but fresh full security review found one
+remaining descendant cleanup race after root validation. The handle-bound descendant walker and
+exact child-swap/outside-sentinel fixture are focused-green; full final-head revalidation remains.
+Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## Consolidation delivered
 
@@ -41,7 +42,7 @@ this branch.
 
 ## First action
 
-1. Publish the local-acceptance evidence record.
+1. Commit/push the descendant cleanup repair and rerun the complete local/fresh-walk matrix.
 2. Obtain fresh security and acceptance verdicts and require that exact head's MSVC matrix,
    clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
    then mark PR #51 ready.
