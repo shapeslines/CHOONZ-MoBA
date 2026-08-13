@@ -8,6 +8,95 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 12 — 2026-08-13 — Interphase security consolidation
+
+**Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and
+prove the hardened boundary without changing simulation behavior, replay encoding, asset APIs, or
+starting Phase 4.
+**Outcome:** repaired implementation and local acceptance are complete on draft PR #51 at `6716796`. Candidate
+`a89caf6` passed its full local matrix and GitHub checks, but its required security review found three
+real gaps, so it was not promoted. Focused repairs for cleanup object binding, real-renderer corrupt
+state, and fail-closed CLI grammar passed the complete local matrix. Independent acceptance and
+exact-head GitHub checks then passed, but fresh full security review found descendants still deleted through paths
+after classification. The walker is now handle-bound for every node; the exact child-swap test and
+focused security rereview pass.
+The first committed-head fresh walk then passed configure/build/tests/Vulkan but failed safely during
+cleanup on Git's read-only pack files. A superseded repair cleared only `READONLY` through the bound
+handle; it successfully removed the preserved partial clone, and the permanent fixture covers a
+read-only file plus a descendant junction with an unchanged outside sentinel.
+That candidate's fresh full security audit subsequently found three deeper binding issues: cleanup
+handles still shared writes during name enumeration, read-only deletion could alter an outside hard
+link's shared attributes, and the create-only file-write temporary was closed before path-based
+commit. Cleanup now excludes write/delete sharing, uses `FileDispositionInfoEx` with
+`IGNORE_READONLY`, and attacks the exact interval with a real `FSCTL_SET_REPARSE_POINT` plus an
+outside read-only hard link. Atomic writes retain the exclusive temporary through handle-based
+rename/disposition and an exact post-flush replacement attack. On committed checkpoint `6716796`,
+`/WX` Debug/RelWithDebInfo/Release pass 39/39 each, Debug-ASan passes 39/39, clang-cl/UBSan passes
+6/6, direct Debug/Release determinism retains the exact oracle and tick-4321 diagnostic, and a fresh
+92-target/39-test/90-frame walk completes secure cleanup. Focused security rereview also passes;
+fresh full exact-head reviews and hosted checks remain.
+Merge remains a separate owner action.
+
+### What changed
+
+- CI now supports manual recovery, has an explicit `contents: read` scope, pins all three checkout
+  uses to the verified v5.0.1 commit, and selects the winget community source explicitly. Fresh-walk
+  cleanup accepts only a non-root direct temp child and rejects roots, outside/nested paths, files,
+  source-self targets, and reparse points before deletion.
+- Array, arena, HashMap, Pool, and HandlePool guards cover allocation multiplication, capacity/address/
+  alignment/end arithmetic, transactional initialization, and corrupt intrusive free lists while
+  preserving their public signatures and normal allocation order.
+- Platform atomic writes create their predictable `.tmp` without overwrite, retain that exclusive
+  object through handle-based rename or failure disposition, and never clean it up by path; Vulkan loads only from
+  System32 or a validated explicit SDK path; offline declarations and runtime shader paths fail
+  closed on missing, outside, duplicate, or truncated inputs.
+- Sandbox, replay, test-harness, visualizer, and classifier inputs have explicit canonical/bounded
+  contracts and permanent no-side-effect fixtures. The classifier reads at most 4 MiB plus one probe
+  byte and reports the corrected 15-case adversarial matrix.
+- Debug draw and null-renderer submission capacity checks use ordered subtraction and guarded
+  multiplication. Corrupt or over-capacity state is rejected before caller-item reads or count/vertex
+  mutation.
+- Fresh-walk final cleanup is object-bound: a non-delete-sharing handle stays open from lease
+  validation through child removal, and the verified root receives its delete disposition through
+  that handle. A post-validation test hook attempts the precise race and proves the move is blocked.
+- Descendant cleanup is object-bound too: each child is opened without delete sharing and with
+  `OPEN_REPARSE_POINT`, classified from that handle, retained through recursion, and deleted through
+  the same handle. Reparse points are leaf links; an exact child-replacement attempt cannot reach its
+  outside sentinel.
+- Cleanup handles also deny write sharing so a validated empty directory cannot become a junction in
+  place before enumeration. Read-only entries are removed using disposition's ignore-read-only flag,
+  leaving attributes on outside hard links unchanged.
+- Sandbox and replay command grammars now reject missing, duplicate, option-shaped, unknown, and
+  extra arguments before DPI/window/Vulkan or replay file effects.
+
+### Verification and loop findings
+
+- `/WX` Debug, RelWithDebInfo, and Release builds pass; all 39 CTest entries pass in each
+  configuration. Debug-ASan passes 39/39 and clang-cl 19.1.5 plus UBSan passes 6/6.
+- The first ASan pass exposed a missing app-local runtime beside `visualize.exe` (`0xc0000135`). The
+  target now uses the repository's existing staging helper, after which the complete suite passed.
+- A guarded fresh clone of final implementation checkpoint `6ae70c9` configured, built 92 targets, passed 39/39, and
+  completed `SANDBOX_SMOKE=PASS`. A retained RTX 4070 Ti run completed 90 validation-clean frames;
+  its visually inspected 1280×720 screenshot is 2,764,854 bytes.
+- The direct 10,000-tick proof still reports 923 commands, final `0x637628abff59c823`, stream
+  `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`. Controlled mutation still first diverges at
+  `tick=4321 field=position_x entity=7` across 178,690 checks.
+- Every source path from #27/#29–#46 is present and semantically retained or strengthened. While
+  final checks ran, PR #26 independently landed its gap-analysis report and advanced `main` to
+  `dc380a1`; merge `227fc80` preserves that report unchanged. #47–#50 touch four explicitly excluded
+  paths absent from the consolidation. The reconciled tree passes Debug 39/39 and `git diff --check`.
+
+### Next
+
+Publish the final evidence record, obtain fresh-context full security and acceptance verdicts on the
+final recorded head, require exact-head
+CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
+the squash merge and supersession closure of #27/#29–#46. PR #26 is already merged; retain all
+branches/worktrees and open
+M4.0 only from the resulting synchronized green `main`.
+
+---
+
 ## Session 11 — 2026-08-13 — M3.4 structural determinism closure
 
 **Scope:** centralize the mature Phase 3 simulation compiler contract, prove the same `eng_sim`

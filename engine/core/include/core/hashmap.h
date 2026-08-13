@@ -40,13 +40,22 @@ struct HashMap {
     Allocator alloc;
 };
 
+inline size_t hashmap__allocation_bytes(uint32_t count, size_t slot_size) {
+    ENSURE_MSG(slot_size != 0 && (size_t)count <= SIZE_MAX / slot_size,
+               "HashMap allocation size overflow");
+    return (size_t)count * slot_size;
+}
+
 template<class K, class V> inline void hashmap_init(HashMap<K,V>* m, Allocator al) {
     static_assert(std::is_trivially_copyable<K>::value && std::is_trivially_copyable<V>::value,
                   "HashMap<K,V> stores K/V in raw slots; both must be trivially copyable");
     m->slots = nullptr; m->cap = 0; m->mask = 0; m->count = 0; m->alloc = al;
 }
 template<class K, class V> inline void hashmap_free(HashMap<K,V>* m) {
-    if (m->slots) mem_free(m->alloc, m->slots, (size_t)m->cap * sizeof(typename HashMap<K,V>::Slot));
+    if (m->slots) {
+        mem_free(m->alloc, m->slots,
+                 hashmap__allocation_bytes(m->cap, sizeof(typename HashMap<K,V>::Slot)));
+    }
     m->slots = nullptr; m->cap = 0; m->mask = 0; m->count = 0;
 }
 template<class K, class V> inline void hashmap_clear(HashMap<K,V>* m) {
@@ -72,19 +81,25 @@ template<class K, class V> inline void hashmap__place(HashMap<K,V>* m, K key, V 
 }
 template<class K, class V> inline void hashmap__rehash(HashMap<K,V>* m, uint32_t newcap) {
     typedef typename HashMap<K,V>::Slot Slot;
+    ENSURE_MSG(newcap != 0 && (newcap & (newcap - 1u)) == 0,
+               "HashMap capacity must be a nonzero power of two");
+    size_t new_bytes = hashmap__allocation_bytes(newcap, sizeof(Slot));
     Slot* old = m->slots; uint32_t oldcap = m->cap;
-    Slot* ns = (Slot*)mem_alloc(m->alloc, (size_t)newcap * sizeof(Slot), alignof(Slot));
+    Slot* ns = (Slot*)mem_alloc(m->alloc, new_bytes, alignof(Slot));
     ENSURE_MSG(ns != nullptr, "hashmap allocation failed");
     for (uint32_t i = 0; i < newcap; ++i) ns[i].occupied = 0;
     m->slots = ns; m->cap = newcap; m->mask = newcap - 1; m->count = 0;
     if (old) {
         for (uint32_t i = 0; i < oldcap; ++i) if (old[i].occupied) hashmap__place(m, old[i].key, old[i].val, old[i].hash);
-        mem_free(m->alloc, old, (size_t)oldcap * sizeof(Slot));
+        mem_free(m->alloc, old, hashmap__allocation_bytes(oldcap, sizeof(Slot)));
     }
 }
 template<class K, class V> inline void hashmap_set(HashMap<K,V>* m, K key, V val) {
     if (m->cap == 0) hashmap__rehash(m, 16);
-    else if (((size_t)m->count + 1) * 8 >= (size_t)m->cap * 7) hashmap__rehash(m, m->cap * 2);   // grow at 7/8
+    else if (((size_t)m->count + 1) * 8 >= (size_t)m->cap * 7) {
+        ENSURE_MSG(m->cap <= UINT32_MAX / 2u, "HashMap capacity overflow");
+        hashmap__rehash(m, m->cap * 2u);   // grow at 7/8
+    }
     hashmap__place(m, key, val, hashmap_hash(key));
 }
 template<class K, class V> inline V* hashmap_get(HashMap<K,V>* m, K key) {

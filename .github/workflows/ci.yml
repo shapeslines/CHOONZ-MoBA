@@ -13,6 +13,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# The workflow only reads the checkout. Keep the token scope explicit so a
+# repository setting cannot silently broaden it later.
+permissions:
+  contents: read
 
 # Newer pushes to a PR supersede in-flight runs for the same ref. NEVER cancel a
 # main-branch run, though — each commit on main should get a completed CI result
@@ -30,7 +36,7 @@ jobs:
       matrix:
         config: [Debug, RelWithDebInfo, Release]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
       # Vulkan SDK (G15): pinned 1.4.357.0 per README/CMakeLists. The build below
       # hard-requires it (-DMOBA_VULKAN_REQUIRED=ON) so the real backend, the
@@ -38,7 +44,7 @@ jobs:
       - name: Install LunarG Vulkan SDK (pinned 1.4.357.0)
         shell: pwsh
         run: |
-          winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --silent --accept-package-agreements --accept-source-agreements
+          winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --source winget --silent --accept-package-agreements --accept-source-agreements
           $sdk = "C:\VulkanSDK\1.4.357.0"                       # winget default install root
           if (-not (Test-Path $sdk)) { $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0" }
           if (-not (Test-Path $sdk)) { Write-Error "SDK not at C:\VulkanSDK\1.4.357.0 or Program Files after winget install"; exit 1 }
@@ -133,7 +139,7 @@ jobs:
     name: windows-clang-cl (UBSan capability)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Probe clang-cl + UBSan and run the determinism oracle
         shell: pwsh
         run: ./tools/check-clang-cl-determinism.ps1
@@ -144,11 +150,11 @@ jobs:
     name: fresh-walk (stranger's path)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Install LunarG Vulkan SDK (pinned 1.4.357.0)
         shell: pwsh
         run: |
-          winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --silent --accept-package-agreements --accept-source-agreements
+          winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --source winget --silent --accept-package-agreements --accept-source-agreements
           $sdk = "C:\VulkanSDK\1.4.357.0"                       # winget default install root
           if (-not (Test-Path $sdk)) { $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0" }
           if (-not (Test-Path $sdk)) { Write-Error "SDK not at C:\VulkanSDK\1.4.357.0 or Program Files after winget install"; exit 1 }

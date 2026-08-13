@@ -3,7 +3,8 @@
 # links eng_platform without pulling the window TU into the test executables.
 add_library(eng_platform STATIC
     src/platform_fixed_step.cpp       # window-free fixed-step cadence (M3.3)
-    src/win32/win32_platform.cpp     # window/input, clock, Vulkan loader + surface
+    src/win32/win32_platform.cpp     # window/input, clock, Vulkan surface
+    src/win32/win32_vulkan_loader.cpp # restricted System32/explicit-SDK loader
     src/win32/win32_mem.cpp          # OS page allocator + page-backed arenas
     src/win32/win32_file.cpp         # UTF-8 file I/O (atomic .tmp writes)
     src/win32/win32_log.cpp)         # platform_log / platform_fatal

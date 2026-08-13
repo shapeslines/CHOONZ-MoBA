@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <climits>
 
 struct SandboxVertex { float x, y, z, u, v; };
 static const SandboxVertex CUBE_VERTICES[24] = {
@@ -96,6 +97,21 @@ static int run_sim_self_check(void) {
     return 0;
 }
 
+static bool parse_frame_count(const char* text, int* out) {
+    if (!text || !out || text[0] == '\0' || text[0] == '0') return false;
+
+    int value = 0;
+    for (const char* cursor = text; *cursor != '\0'; ++cursor) {
+        if (*cursor < '0' || *cursor > '9') return false;
+        const int digit = *cursor - '0';
+        if (value > (INT_MAX - digit) / 10) return false;
+        value = value * 10 + digit;
+    }
+
+    *out = value;
+    return true;
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::strcmp(argv[1], "--sim-self-check") == 0)
         return run_sim_self_check();
@@ -105,19 +121,44 @@ int main(int argc, char** argv) {
     // displays. SYSTEM_AWARE: one scale, physical pixels everywhere. PER_MONITOR_V2
     // (per-monitor rescale) additionally needs WM_DPICHANGED handling in the
     // platform — a documented follow-up, not silently assumed.
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
-
     int max_frames = -1;
     const char* screenshot_path = nullptr;
     bool orbit = false;
+    bool saw_frames = false;
+    bool saw_screenshot = false;
+    bool saw_orbit = false;
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc)
-            max_frames = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc)
+        if (std::strcmp(argv[i], "--frames") == 0) {
+            if (saw_frames || i + 1 >= argc ||
+                !parse_frame_count(argv[i + 1], &max_frames)) {
+                std::fprintf(stderr,
+                             "sandbox: --frames expects a canonical positive integer\n");
+                return 2;
+            }
+            saw_frames = true;
+            ++i;
+        } else if (std::strcmp(argv[i], "--screenshot") == 0) {
+            if (saw_screenshot || i + 1 >= argc || argv[i + 1][0] == '\0' ||
+                argv[i + 1][0] == '-') {
+                std::fprintf(stderr, "sandbox: --screenshot expects one output path\n");
+                return 2;
+            }
             screenshot_path = argv[++i];
-        else if (std::strcmp(argv[i], "--orbit") == 0)
+            saw_screenshot = true;
+        } else if (std::strcmp(argv[i], "--orbit") == 0) {
+            if (saw_orbit) {
+                std::fprintf(stderr, "sandbox: duplicate option '--orbit'\n");
+                return 2;
+            }
             orbit = true;
+            saw_orbit = true;
+        } else {
+            std::fprintf(stderr, "sandbox: unknown option '%s'\n", argv[i]);
+            return 2;
+        }
     }
+
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 
     PlatformWindowDesc desc;
     desc.title = "MOBA - sandbox (Phase 2 complete; F1 overlay)";

@@ -3,7 +3,7 @@
 A multiplayer online battle arena built **from scratch in C++**, on a custom
 RTS-class game engine.
 
-> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0–M3.3 complete** (M3.2 tagged
+> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0–M3.4 complete** (M3.2 tagged
 > `v0.3.0-m3.2`; `main` is gated by required CI checks via the `main-gate` ruleset). Build spine, ADRs,
 > Win32 window, memory arenas, float/fixed-point
 > math, containers, and a self-registering test harness on CTest + a pre-push gate
@@ -26,9 +26,11 @@ RTS-class game engine.
 > M3.3 adds a platform-owned fixed-step accumulator, fresh same-tick commands for every owed tick,
 > and arena-backed previous/current presentation snapshots. `eng_game` is the sole interpolation and
 > fixed→float owner; the renderer still cannot see `SimWorld`.
-> **Phase 3 is acceptance-complete through M3.4 on PR #38.** Central compiler ownership,
-> test/game-binary parity, fail-closed isolation, and clang-cl/UBSan proofs are green. Phase 4 asset
-> work begins only after the owner-approved merge and a green synchronized `main`.
+> **Phase 3 is complete through M3.4 on `main`.** Central compiler ownership, test/game-binary
+> parity, fail-closed isolation, and clang-cl/UBSan proofs are green. Interphase security
+> consolidation on PR #51 hardens core arithmetic, platform/shader boundaries, CLI inputs, renderer
+> capacity checks, and CI recovery without changing simulation behavior or replay encoding. Phase 4
+> asset work begins only after that consolidation is owner-merged into a green synchronized `main`.
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -98,7 +100,8 @@ schedule/sim/presentation suites, `render`,
 `render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
 the generated sim-policy/include/source-owner audit, test/game-binary hash-stream parity, the
 configure-time sim target contract, adversarial isolation self-tests, the sim/presentation boundary
-scans, and replay CLI fixtures.
+scans, replay/CLI malformed-input matrices, create-only atomic-write collisions, shader declaration
+contracts, guarded fresh-walk cleanup, and renderer capacity corruption fixtures.
 The hosted renderer smoke classifier is also tested adversarially: only exact Vulkan device gates
 may skip; nonzero exits, Vulkan validation warnings/errors, incomplete runs, and missing/invalid
 screenshots fail.
@@ -111,8 +114,8 @@ build-ci\tools\replay\Debug\moba_replay.exe inspect match.mbr
 build-ci\tools\replay\Debug\moba_replay.exe verify match.mbr
 ```
 
-The memory-safety gate uses the dedicated preset; the ASan runtime is staged beside the test and
-replay executables so CTest does not depend on a developer-shell `PATH`:
+The memory-safety gate uses the dedicated preset; the ASan runtime is staged beside test, replay,
+sandbox, and visualizer executables so CTest does not depend on a developer-shell `PATH`:
 
 ```bat
 cmake --preset debug-asan

@@ -15,7 +15,9 @@ and a stance on runtime compilation.
 - A CMake helper, **`add_shader_library()`**, compiles shaders as a build step and
   emits `-MD/-MF` **depfiles** so incremental rebuilds are correct (edit a shader →
   only it recompiles). `.spv` outputs land in a known build directory and are loaded
-  at runtime as opaque bytes.
+  at runtime as opaque bytes. Every declaration must resolve to a real file under the source root,
+  and output basenames are unique under Windows case-folding; missing, outside-root, directory, or
+  duplicate inputs fail configure before a build rule is emitted.
 - **No runtime GLSL→SPIR-V compilation, ever.** Shader errors are build errors.
 
 ## Consequences

@@ -13,6 +13,7 @@
 #include "math/fix.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstddef>
 #include <cmath>
 
 using namespace mm;
@@ -86,10 +87,21 @@ static bool write_bmp(const char* path) {
     return true;
 }
 
+static bool make_output_path(char* out, size_t capacity, const char* dir,
+                             const char* filename) {
+    if (!out || capacity == 0 || !dir || !filename) return false;
+    const int written = std::snprintf(out, capacity, "%s/%s", dir, filename);
+    if (written < 0 || static_cast<size_t>(written) >= capacity) {
+        std::fprintf(stderr, "ERROR: output path too long\n");
+        return false;
+    }
+    return true;
+}
+
 static const double PI = 3.14159265358979323846;
 
 // fix_sin / fix_cos over [0,2pi) vs the libm reference.
-static bool draw_sin_cos(const char* dir) {
+static bool draw_sin_cos(const char* path) {
     clear(BG);
     const double lo = -1.15, hi = 1.15;
     for (int k = 0; k <= 4; ++k) vline((W - 1) * k / 4, GRID);          // 0, pi/2, pi, 3pi/2, 2pi
@@ -106,12 +118,11 @@ static bool draw_sin_cos(const char* dir) {
         dot(x, fs, SIN); dot(x, fc, COS);
         ps = fs; pc = fc;
     }
-    char path[512]; std::snprintf(path, sizeof(path), "%s/fix_sin_cos.bmp", dir);
     return write_bmp(path);
 }
 
 // The (fix - libm) error, magnified, with the +/-2e-3 band tests/det asserts.
-static bool draw_trig_error(const char* dir) {
+static bool draw_trig_error(const char* path) {
     clear(BG);
     const double lo = -3.0e-3, hi = 3.0e-3;             // full scale a touch past the tolerance
     for (int k = 0; k <= 4; ++k) vline((W - 1) * k / 4, GRID);
@@ -124,12 +135,11 @@ static bool draw_trig_error(const char* dir) {
         dot(x, ymap(es, lo, hi), SIN);
         dot(x, ymap(ec, lo, hi), COS);
     }
-    char path[512]; std::snprintf(path, sizeof(path), "%s/fix_trig_error.bmp", dir);
     return write_bmp(path);
 }
 
 // fix_sqrt over [0,64] vs libm, with the error magnified x4000 around the curve.
-static bool draw_sqrt(const char* dir) {
+static bool draw_sqrt(const char* path) {
     clear(BG);
     const double xmax = 64.0, lo = -0.5, hi = 8.5;
     for (int k = 0; k <= 8; ++k) vline((W - 1) * k / 8, GRID);
@@ -149,16 +159,24 @@ static bool draw_sqrt(const char* dir) {
         int ey = ymap(std::sqrt(xx) + (fv - std::sqrt(xx)) * 4000.0, lo, hi);
         put(x, ey, TOL);
     }
-    char path[512]; std::snprintf(path, sizeof(path), "%s/fix_sqrt.bmp", dir);
     return write_bmp(path);
 }
 
 int main(int argc, char** argv) {
     const char* dir = (argc > 1) ? argv[1] : ".";
+    char sin_cos_path[512];
+    char trig_error_path[512];
+    char sqrt_path[512];
+    if (!make_output_path(sin_cos_path, sizeof(sin_cos_path), dir, "fix_sin_cos.bmp") ||
+        !make_output_path(trig_error_path, sizeof(trig_error_path), dir,
+                          "fix_trig_error.bmp") ||
+        !make_output_path(sqrt_path, sizeof(sqrt_path), dir, "fix_sqrt.bmp")) {
+        return 1;
+    }
     std::printf("visualize -> %s\n", dir);
-    bool ok = draw_sin_cos(dir);           // each draw runs (left operand always evaluates)
-    ok = draw_trig_error(dir) && ok;
-    ok = draw_sqrt(dir) && ok;
+    bool ok = draw_sin_cos(sin_cos_path);  // each draw runs (left operand always evaluates)
+    ok = draw_trig_error(trig_error_path) && ok;
+    ok = draw_sqrt(sqrt_path) && ok;
     std::printf(ok ? "done.\n" : "FAILED.\n");
     return ok ? 0 : 1;
 }

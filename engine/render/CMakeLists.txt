@@ -6,6 +6,7 @@ add_library(eng_render_common STATIC
     src/render_batch.cpp
     src/render_debug_draw.cpp
     src/render_handle_table.cpp
+    src/shader_path.cpp
     src/pipeline_cache_check.cpp)
 
 target_include_directories(eng_render_common

@@ -21,9 +21,11 @@ Win32-specific code confined to `engine/platform/src/win32_*.cpp`:
 - **Page allocator** — `plat_mem_reserve / commit / release / page_size`. This is
   the *only* thing `eng_core`'s memory layer depends on (it builds all higher
   allocators on top, ADR-driven by ARCHITECTURE §6).
-- **File I/O takes a caller-supplied arena** —
-  `platform_file_read(vpath, Arena*, PlatformFile* out)` — so "the arena owns the
-  bytes" holds; the platform never hides allocations.
+- **File I/O takes caller-supplied storage** — `platform_file_read(vpath, Allocator,
+  PlatformFile* out)` — so "the arena owns the bytes" holds; the platform never hides
+  allocations. `platform_file_write` publishes through a predictable `.tmp`, but creates that
+  temporary with create-only semantics: a pre-existing temporary is never overwritten and a
+  collision leaves both it and the destination unchanged.
 - **DLL load** — `platform_lib_*` (used by the Vulkan loader and future hot-reload).
 - **UDP sockets** — `platform_net.h` is the OS-free seam; `platform_net_win32.cpp`
   is the Winsock2 impl (see [0006] for the headless-test split).

@@ -20,7 +20,27 @@ if (-not (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
 
 # The executable is compiled as UTF-8. Decode explicitly so Windows PowerShell 5.1
 # does not reinterpret the ADR-0012 em dash through the system ANSI code page.
-$output = [System.IO.File]::ReadAllText($LogPath, [System.Text.Encoding]::UTF8)
+$maxLogBytes = 4 * 1024 * 1024
+$buffer = New-Object byte[] ($maxLogBytes + 1)
+$stream = [System.IO.File]::Open(
+    $LogPath,
+    [System.IO.FileMode]::Open,
+    [System.IO.FileAccess]::Read,
+    [System.IO.FileShare]::ReadWrite)
+try {
+    $byteCount = 0
+    while ($byteCount -lt $buffer.Length) {
+        $read = $stream.Read($buffer, $byteCount, $buffer.Length - $byteCount)
+        if ($read -eq 0) { break }
+        $byteCount += $read
+    }
+} finally {
+    $stream.Dispose()
+}
+if ($byteCount -gt $maxLogBytes) {
+    Reject "sandbox log exceeds $maxLogBytes bytes"
+}
+$output = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $byteCount)
 $lines = @($output -split "`r?`n" | ForEach-Object { $_.Trim() } |
            Where-Object { $_.Length -ne 0 })
 

@@ -32,13 +32,21 @@ static void print_usage() {
 }
 
 static bool parse_u64(const char* text, uint64_t* out) {
-    if (!text || !out || text[0] == '\0' || text[0] == '-') return false;
+    if (!text || !out || text[0] == '\0' ||
+        (text[0] == '0' && text[1] != '\0')) return false;
+    for (const char* cursor = text; *cursor != '\0'; ++cursor) {
+        if (*cursor < '0' || *cursor > '9') return false;
+    }
     errno = 0;
     char* end = nullptr;
     unsigned long long value = std::strtoull(text, &end, 10);
     if (errno == ERANGE || !end || *end != '\0') return false;
     *out = static_cast<uint64_t>(value);
     return true;
+}
+
+static bool parse_path_argument(const char* text) {
+    return text && text[0] != '\0' && text[0] != '-';
 }
 
 static bool record_capacity(uint64_t tick_count, size_t* out_capacity) {
@@ -74,7 +82,8 @@ static int command_record(int argc, char** argv) {
     bool saw_players = false;
 
     for (int i = 2; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--out") == 0 && !saw_out && i + 1 < argc) {
+        if (std::strcmp(argv[i], "--out") == 0 && !saw_out && i + 1 < argc &&
+            parse_path_argument(argv[i + 1])) {
             out_path = argv[++i];
             saw_out = true;
         } else if (std::strcmp(argv[i], "--ticks") == 0 && !saw_ticks && i + 1 < argc &&
@@ -326,8 +335,10 @@ int main(int argc, char** argv) {
         return CLI_SUCCESS;
     }
     if (argc >= 2 && std::strcmp(argv[1], "record") == 0) return command_record(argc, argv);
-    if (argc == 3 && std::strcmp(argv[1], "inspect") == 0) return command_inspect(argv[2]);
-    if (argc == 3 && std::strcmp(argv[1], "verify") == 0) return command_verify(argv[2]);
+    if (argc == 3 && std::strcmp(argv[1], "inspect") == 0 && parse_path_argument(argv[2]))
+        return command_inspect(argv[2]);
+    if (argc == 3 && std::strcmp(argv[1], "verify") == 0 && parse_path_argument(argv[2]))
+        return command_verify(argv[2]);
     print_usage();
     return CLI_USAGE_OR_IO;
 }

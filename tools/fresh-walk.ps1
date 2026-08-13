@@ -14,7 +14,7 @@
 # parser (the repo's .bat lesson, same family).
 
 param(
-    [string]$CloneDir = (Join-Path $env:TEMP "moba-fresh-walk"),
+    [string]$CloneDir = (Join-Path $env:TEMP "moba-fresh-walk-$PID-$([Guid]::NewGuid().ToString('N'))"),
     [switch]$Keep
 )
 
@@ -24,6 +24,19 @@ function Fail([string]$msg) {
     Write-Output "FRESH-WALK FAIL: $msg"
     exit 1
 }
+
+$repoRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'fresh-walk-guard.ps1')
+
+# A fresh walk owns only a unique, initially nonexistent direct temp child. The
+# lease records its stable file identity and an invocation marker after clone.
+try {
+    $cloneLease = New-FreshWalkLease $CloneDir $repoRoot
+} catch {
+    Fail $_.Exception.Message
+}
+
+$CloneDir = $cloneLease.ClonePath
 
 # 0. Locate the VS install + vcvars, like .github/workflows/ci.yml does (Node-free).
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
@@ -42,10 +55,13 @@ function In-VsEnv([string]$dir, [string]$cmd) {
 }
 
 # 1. Clone fresh (no local state, byte-clean like the FIXES.md sweep).
-if (Test-Path $CloneDir) { Remove-Item -Recurse -Force $CloneDir }
-$repoRoot = Split-Path $PSScriptRoot -Parent
 git clone --quiet "file://$repoRoot" $CloneDir
 if ($LASTEXITCODE -ne 0) { Fail "git clone of $repoRoot" }
+try {
+    Initialize-FreshWalkLease $cloneLease
+} catch {
+    Fail "could not initialize cleanup lease: $($_.Exception.Message)"
+}
 
 # 2. Configure with the dev preset (the README path).
 In-VsEnv $CloneDir "cmake --preset dev"
@@ -85,7 +101,13 @@ if ($classifierCode -ne 0) {
 }
 
 # 6. Hygiene: leave the temp clone only if asked.
-if (-not $Keep) { Remove-Item -Recurse -Force $CloneDir }
+if (-not $Keep) {
+    try {
+        Remove-FreshWalkLease $cloneLease
+    } catch {
+        Fail "refused cleanup: $($_.Exception.Message)"
+    }
+}
 
 Write-Output "FRESH-WALK OK - the stranger's path works end to end."
 exit 0

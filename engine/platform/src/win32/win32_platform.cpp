@@ -281,17 +281,6 @@ void     platform_sleep_ms(uint32_t ms) { Sleep(ms); }
 // TUs (win32_mem.cpp, win32_file.cpp, win32_log.cpp — G14) so the headless test
 // group never pulls this window TU.
 
-// ---- Vulkan loader (ADR-0004): hand-load vulkan-1.dll, hand back vkGetInstanceProcAddr ----
-PlatformVkProc platform_vk_get_loader(void) {
-    static HMODULE vklib = nullptr;
-    if (!vklib) vklib = LoadLibraryW(L"vulkan-1.dll");
-    if (!vklib) {
-        platform_log("platform: LoadLibrary(vulkan-1.dll) failed (%lu)\n", (unsigned long)GetLastError());
-        return nullptr;
-    }
-    return (PlatformVkProc)GetProcAddress(vklib, "vkGetInstanceProcAddr");
-}
-
 #if defined(MOBA_HAVE_VULKAN)
 bool platform_vk_create_surface(PlatformWindow* window, void* instance, unsigned long long* out_surface) {
     if (!window || !instance || !out_surface) return false;

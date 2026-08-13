@@ -6,6 +6,8 @@
 #include "render_batch.h"
 #include "render_debug_draw.h"
 #include "render_handle_table.h"
+#include "render_submission_guard.h"
+#include "shader_path.h"
 #include <cstdint>
 #include <cstring>
 
@@ -24,6 +26,19 @@ static size_t make_blob(uint8_t* out, size_t extra) {
     std::memcpy(out + 16, UUID, 16);
     for (size_t i = 0; i < extra; ++i) out[PIPELINE_CACHE_HEADER_SIZE + i] = (uint8_t)i;
     return PIPELINE_CACHE_HEADER_SIZE + extra;
+}
+
+TEST(render, shader_path_rejects_truncation) {
+    char exact[16]{};
+    CHECK(render_shader_path(exact, sizeof(exact), "1234567890", "abcd"));
+    CHECK(std::strcmp(exact, "1234567890/abcd") == 0);
+
+    char truncated[16]{};
+    CHECK(!render_shader_path(truncated, sizeof(truncated), "1234567890", "abcde"));
+    CHECK(!render_shader_path(nullptr, sizeof(truncated), "dir", "name"));
+    CHECK(!render_shader_path(truncated, 0u, "dir", "name"));
+    CHECK(!render_shader_path(truncated, sizeof(truncated), nullptr, "name"));
+    CHECK(!render_shader_path(truncated, sizeof(truncated), "dir", nullptr));
 }
 
 TEST(render, cache_blob_valid_header_accepted) {
@@ -210,4 +225,63 @@ TEST(render, debug_draw_uses_one_frame_arena_block_and_resets) {
     arena_reset(&arena);
     CHECK(render_debug_begin(&list, &arena, 2048));
     CHECK(list.count == 0);
+}
+
+TEST(render, debug_draw_capacity_arithmetic_is_transactional) {
+    RenderDebugVertex vertices[32]{};
+    const mm::vec3 zero = mm::vec3_make(0.0f, 0.0f, 0.0f);
+    const mm::vec3 one = mm::vec3_make(1.0f, 1.0f, 1.0f);
+    RenderDebugList list{vertices, 0u, 2u, 7u};
+
+    CHECK(render_debug_line(&list, zero, one, 0x11223344u));
+    CHECK(list.count == 2u);
+    const uint32_t first_color = vertices[0].color_rgba8;
+    CHECK(!render_debug_line(&list, zero, one, 0xaabbccddu));
+    CHECK(list.count == 2u);
+    CHECK(list.world_count == 7u);
+    CHECK(vertices[0].color_rgba8 == first_color);
+
+    list.count = 0u;
+    list.capacity = 24u;
+    CHECK(render_debug_aabb(&list, zero, one, 0x55667788u));
+    CHECK(list.count == 24u);
+    CHECK(!render_debug_line(&list, zero, one, 0u));
+    CHECK(list.count == 24u);
+
+    list.count = 0u;
+    list.capacity = 18u;
+    CHECK(render_debug_sphere(&list, zero, 1.0f, 0x99aabbccu, 3u));
+    CHECK(list.count == 18u);
+    const uint32_t overflow_canary = vertices[0].color_rgba8;
+
+    list.count = 3u;
+    list.capacity = 2u;
+    CHECK(!render_debug_line(&list, zero, one, 0u));
+    CHECK(list.count == 3u);
+
+    list.count = UINT32_MAX - 1u;
+    list.capacity = UINT32_MAX;
+    CHECK(!render_debug_line(&list, zero, one, 0u));
+    CHECK(list.count == UINT32_MAX - 1u);
+
+    list.count = UINT32_MAX - 23u;
+    CHECK(!render_debug_aabb(&list, zero, one, 0u));
+    CHECK(list.count == UINT32_MAX - 23u);
+
+    list.count = 0u;
+    CHECK(!render_debug_sphere(&list, zero, 1.0f, 0u, UINT32_MAX / 6u + 1u));
+    CHECK(list.count == 0u);
+    CHECK(vertices[0].color_rgba8 == overflow_canary);
+}
+
+TEST(render, submission_preflight_rejects_corrupt_state_before_item_access) {
+    const void* unreadable = reinterpret_cast<const void*>(static_cast<uintptr_t>(1u));
+
+    CHECK(render_submission_preflight(nullptr, 0u, 0u, 4u));
+    CHECK(!render_submission_preflight(nullptr, 1u, 0u, 4u));
+    CHECK(render_submission_preflight(unreadable, 1u, 3u, 4u));
+    CHECK(!render_submission_preflight(unreadable, 1u, 4u, 4u));
+    CHECK(!render_submission_preflight(unreadable, 1u, 5u, 4u));
+    CHECK(!render_submission_preflight(unreadable, UINT32_MAX, 0u, 4u));
+    CHECK(!render_submission_preflight(unreadable, 1u, UINT32_MAX, 4u));
 }

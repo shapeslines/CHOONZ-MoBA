@@ -15,7 +15,9 @@ sanctioned API (not a third-party helper), but hand-loading is the most literal
 
 **Hand-load `vulkan-1.dll` and own a two-tier dispatch table.**
 
-1. The platform layer `LoadLibrary`s `vulkan-1.dll` and exposes
+1. The platform layer loads `vulkan-1.dll` from System32 first, then from an explicit canonical,
+   existing, drive-absolute `VULKAN_SDK\Bin` fallback with restricted dependency search. It never
+   uses the ambient DLL search order. The platform exposes
    `platform_vk_get_loader()` → `vkGetInstanceProcAddr` (resolved via
    `GetProcAddress`).
 2. The renderer builds a dispatch table in tiers:
@@ -41,3 +43,5 @@ sanctioned API (not a third-party helper), but hand-loading is the most literal
 - The loader is ~the content of `volk` (more than a one-liner) — honest scope.
 - A mis-resolved pointer fails at table-build with a clear fatal, not an opaque
   crash mid-frame.
+- Loader replacement through the current working directory or `PATH` is rejected by construction;
+  the explicit SDK fallback remains usable for development installs.

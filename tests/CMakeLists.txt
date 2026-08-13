@@ -42,13 +42,16 @@ add_executable(engine_tests
 target_include_directories(engine_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src
-    ${CMAKE_SOURCE_DIR}/engine/render/src)                  # Vulkan-free render internals under test
+    ${CMAKE_SOURCE_DIR}/engine/render/src
+    ${CMAKE_SOURCE_DIR}/engine/platform/src/win32)         # Vulkan-free/internal boundaries under test
 # The aggregate suite links only the Vulkan-free renderer core; the null seam has its
 # own executable below, and neither test binary initializes Vulkan.
 target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common eng::game moba_warnings moba_options)
 
 add_executable(render_null_tests test_main.cpp render/render_null_tests.cpp)
-target_include_directories(render_null_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(render_null_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/engine/render/src)
 target_link_libraries(render_null_tests PRIVATE eng::render_null moba_warnings moba_options)
 
 # --- determinism: the SAME source built twice under different float models. The
@@ -72,6 +75,9 @@ target_link_libraries(sim_determinism_tests PRIVATE eng::sim moba_warnings moba_
 add_executable(sim_oracle_probe sim/sim_oracle_probe.cpp)
 target_link_libraries(sim_oracle_probe PRIVATE eng::sim moba_warnings moba_options)
 
+add_executable(core_invariant_tripwire core/core_invariant_tripwire.cpp)
+target_link_libraries(core_invariant_tripwire PRIVATE eng::core moba_warnings moba_options)
+
 if(MOBA_UBSAN)
     add_executable(sim_ubsan_tripwire sim/sim_ubsan_tripwire.cpp)
     target_link_libraries(sim_ubsan_tripwire PRIVATE moba_warnings moba_options)
@@ -85,6 +91,10 @@ moba_stage_asan_runtime()
 add_test(NAME mem         COMMAND engine_tests --suite mem)
 add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
+add_test(NAME core_invariant_tripwire
+    COMMAND ${CMAKE_COMMAND}
+            -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/core/check_core_invariant_tripwire.cmake")
 add_test(NAME platform    COMMAND engine_tests --suite platform)  # file I/O (M2.1)
 add_test(NAME serialize   COMMAND engine_tests --suite serialize)
 add_test(NAME sim_component_pool COMMAND engine_tests --suite sim_component_pool)
@@ -157,7 +167,19 @@ add_test(NAME sandbox_smoke_classifier
             -Classifier "${CMAKE_SOURCE_DIR}/tools/classify-sandbox-smoke.ps1"
             -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(sandbox_smoke_classifier PROPERTIES
-    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 14 adversarial cases passed")
+    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 15 adversarial cases passed")
+
+add_test(NAME sandbox_cli_errors
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/sandbox_cli_errors.ps1"
+            -Exe $<TARGET_FILE:sandbox_null>
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
+
+add_test(NAME test_harness_cli_errors
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/harness_cli_errors.ps1"
+            -Exe $<TARGET_FILE:engine_tests>
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 
 # --- replay CLI: one fixture records a real file; consumers independently inspect,
 #     verify, and exercise exact public exit classes before cleanup runs.
@@ -192,3 +214,21 @@ set_tests_properties(replay_cli_errors PROPERTIES FIXTURES_REQUIRED replay_file)
 add_test(NAME replay_cleanup
     COMMAND ${CMAKE_COMMAND} -E rm -f "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_cleanup PROPERTIES FIXTURES_CLEANUP replay_file)
+
+add_test(NAME fresh_walk_path_guard
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/fresh_walk_path_guard.ps1"
+            -Script "${CMAKE_SOURCE_DIR}/tools/fresh-walk.ps1"
+            -GuardScript "${CMAKE_SOURCE_DIR}/tools/fresh-walk-guard.ps1"
+            -OutsideDir "${CMAKE_SOURCE_DIR}")
+
+add_test(NAME ci_workflow_contract
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/ci_workflow_contract.ps1"
+            -Workflow "${CMAKE_SOURCE_DIR}/.github/workflows/ci.yml")
+
+add_test(NAME shader_source_contract
+    COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/shader/check_shader_source_contract.cmake")

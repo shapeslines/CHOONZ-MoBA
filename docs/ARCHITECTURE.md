@@ -453,7 +453,7 @@ bool platform_file_size (const char* vpath, size_t* out_size);    // cheap stat 
 bool platform_file_read (const char* vpath, struct Allocator alloc, PlatformFile* out);
 bool platform_file_map  (const char* vpath, PlatformFile* out);   // mmap, read-only, immutable assets
 void platform_file_unmap(PlatformFile*);
-bool platform_file_write(const char* vpath, const void* data, size_t n); // atomic temp+rename
+bool platform_file_write(const char* vpath, const void* data, size_t n); // create-only temp + atomic rename
 void platform_set_asset_root(const char* abs_dir);               // resolves "assets://"
 
 // ---- Dynamic libraries (used to hand-load vulkan-1.dll, §5.3) ----
@@ -546,7 +546,7 @@ typedef struct {
 
 ### 4.5 Virtual paths & file modes
 
-Named-root virtual paths resolved in the backend (`assets://`, `user://`, `shaders://`); the engine never builds OS paths or sees separators, and `..` traversal is rejected. Three read modes: `platform_file_read` (default; caller's arena owns the bytes), `platform_file_map` (mmap, restricted to immutable shipped assets), and atomic `platform_file_write` (temp+rename). Async/overlapped I/O is **deferred** — synchronous reads on a worker behind a loading screen suffice; the signatures are additive-friendly for a later async path.
+Named-root virtual paths resolved in the backend (`assets://`, `user://`, `shaders://`); the engine never builds OS paths or sees separators, and `..` traversal is rejected. Three read modes: `platform_file_read` (default; caller's arena owns the bytes), `platform_file_map` (mmap, restricted to immutable shipped assets), and atomic `platform_file_write` (create a predictable `.tmp`, flush, then rename). The temporary is opened create-only and exclusively, then retained through handle-based rename or failure disposition; if it already exists, the write fails without changing either the destination or the temporary. Async/overlapped I/O is **deferred** — synchronous reads on a worker behind a loading screen suffice; the signatures are additive-friendly for a later async path.
 
 ### 4.6 Porting (designed-for, deferred)
 
@@ -590,7 +590,11 @@ PFN_vkGetInstanceProcAddr platform_vk_get_loader(void);  // the one entry point 
 
 > **Resolved — own the loader, but with the correct two-tier dispatch and no understatement.** Earlier text claimed "~40 lines, effectively what volk does." That understates it: doing it correctly is the actual content of volk.
 
-The platform `platform_lib_open("vulkan-1")` loads `vulkan-1.dll`; `platform_vk_get_loader()` returns `vkGetInstanceProcAddr` resolved via `GetProcAddress`. The renderer then builds a **dispatch table**, in two tiers:
+The Vulkan bootstrap does not use the ambient DLL search order. It first loads `vulkan-1.dll` from
+System32; if unavailable, it accepts only an explicit `VULKAN_SDK` root that canonicalizes to an
+existing drive-absolute directory and loads `Bin\vulkan-1.dll` with restricted dependency search.
+`platform_vk_get_loader()` returns `vkGetInstanceProcAddr` resolved via `GetProcAddress`. The
+renderer then builds a **dispatch table**, in two tiers:
 
 1. **Global functions** (`vkCreateInstance`, `vkEnumerateInstance*`) are resolved via `vkGetInstanceProcAddr(NULL, name)` — the NULL-instance rule, which is mandatory and easy to miss.
 2. **Instance functions** are resolved via `vkGetInstanceProcAddr(instance, name)` after instance creation.
@@ -630,8 +634,8 @@ A tagged function-pointer struct, not a C++ abstract base — same indirection c
 | **Pool** (freelist) | per-slot O(1) | none (fixed) | handle-backed object tables |
 | **Heap** (TLSF-ish) | per-block O(1) | bounded | the awkward residual minority |
 
-- **Arena** bumps a pointer over a reserved page block that commits on growth; `arena_reset` zeroes the offset in O(1); an always-on `high_water` counter (even in release) catches under-budgeting early. Per-frame scratch is double-buffered (swap each frame; reset the now-oldest); nested temporaries use a `TempMemory { arena, saved_offset }` save/restore marker rather than a sub-arena.
-- **Pool** carves a block into fixed slots threaded by an intrusive freelist (the next-free index lives *inside* freed memory — zero overhead). It is the backing store for handle tables: `HandlePool` pairs a `Pool` with a parallel `generations[]` array (§2.3 ABI) and hands out only `Handle`s, never `T*` long-term.
+- **Arena** bumps a pointer over a reserved page block that commits on growth; initialization and every address/alignment/end/commit-rounding calculation are checked before state mutation. `arena_reset` zeroes the offset in O(1); an always-on `high_water` counter (even in release) catches under-budgeting early. Per-frame scratch is double-buffered (swap each frame; reset the now-oldest); nested temporaries use a `TempMemory { arena, saved_offset }` save/restore marker rather than a sub-arena.
+- **Pool** carves a block into fixed slots threaded by an intrusive freelist (the next-free index lives *inside* freed memory — zero overhead). Allocation validates count, head, next-link, storage, and generation state before mutation; corrupt state returns the pool's invalid sentinel. It is the backing store for handle tables: `HandlePool` pairs a `Pool` with a parallel `generations[]` array (§2.3 ABI) and hands out only `Handle`s, never `T*` long-term.
 - **Heap:** exactly one process heap for variable-size, individually-freed, unpredictable-lifetime allocations. A TLSF-style allocator is the target; a simpler segregated free list is an acceptable first cut because the heap is exercised so little — **finalize after profiling real heap traffic** (deferred).
 
 ### 6.3 Alignment & GPU upload
@@ -644,8 +648,9 @@ Every alloc takes an alignment (power-of-two assert). Defaults: 16 (any scalar/S
 
 All allocator-aware, POD-friendly, no exceptions, no hidden global allocation; built strictly on demand (this set covers ~95% of needs).
 
-- **`Array<T>`** — dynamic, geometric growth, public `data/len/cap` (DOD, no getters).
-- **`HashMap<K,V>`** — open addressing, Robin Hood, power-of-two, backward-shift delete (no tombstones). **Iteration order is not guaranteed → never iterate a HashMap from the sim;** use an `Array` for ordered sim data.
+- **`Array<T>`** — dynamic, geometric growth, public `data/len/cap` (DOD, no getters); length,
+  capacity growth, and allocation-byte multiplication are checked before allocation or mutation.
+- **`HashMap<K,V>`** — open addressing, Robin Hood, power-of-two, backward-shift delete (no tombstones); capacity growth and allocation-byte multiplication are checked before rehash. **Iteration order is not guaranteed → never iterate a HashMap from the sim;** use an `Array` for ordered sim data.
 - **`Str`/`StrView`** — length-prefixed, non-null-terminated (null only at OS/Vulkan boundaries); views default non-owning.
 - **`InlineArray<T,N>`** (no heap) and an intrusive **`FreeList`**.
 
@@ -1016,6 +1021,11 @@ CRT selection match the standalone Windows UBSan runtime ABI; normal MSVC builds
 Together, the direct test probe and Vulkan/null sandbox self-checks pin the mature Phase 3 sim
 artifact before Phase 4 adds asset-facing application code. This structural gate changes no command,
 schedule, replay, or canonical-state semantics, so replay v1 and `SIM_LOGIC_HASH` remain unchanged.
+The interphase security consolidation keeps that island byte-for-byte stable while hardening its
+callers and support code: strict canonical CLI numbers, bounded classifier input, validated shader
+paths/declarations, create-only platform temporaries, checked core/container arithmetic, and
+overflow-safe renderer capacity checks. Its regression suite continues to require the same oracle
+and exact tick-4321 field diagnostic.
 **Later deferrals:** archetypes, multithreaded systems/job system
 (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
 first), rollback machinery, generic query DSL, reflection/serialization codegen, and
@@ -1090,7 +1100,7 @@ add_test(NAME sim_boundary COMMAND cmake -P tests/sim/check_sim_boundary.cmake)
 
 ### 10.4 Dev workflow (solo, multi-year)
 
-Trunk-based-for-one: `main` always green; short `feat/`/`fix/`/`spike/` branches merge within days; milestone tags (`v0.1-triangle`, `v0.2-deterministic-sim`). Conventional-commit prefixes; commit messages end with the `Co-Authored-By` trailer. A committed **pre-push hook** runs `ctest` (the solo dev's only CI gate). **Living docs** in `docs/`, updated in the same commit that changes behavior: `ARCHITECTURE.md` (this file), `ROADMAP.md` (now/next/later milestones), `CONVENTIONS.md` (§2.4–2.5 verbatim), `DECISIONS/` (tiny dated ADRs — fixed-point format, handle ABI, Vulkan loader, render seam, etc.). **Deferred:** GitHub Actions CI, coverage, in-game console/cvars, GUI tooling.
+Trunk-based-for-one: `main` always green; short `feat/`/`fix/`/`spike/` branches merge within days; milestone tags (`v0.1-triangle`, `v0.2-deterministic-sim`). Conventional-commit prefixes; commit messages end with the `Co-Authored-By` trailer. A committed **pre-push hook** runs the local `/WX` build and CTest gate. GitHub Actions repeats Debug/RelWithDebInfo/Release, clang-cl/UBSan, fresh-walk/Vulkan, and CodeQL checks; it has push, pull-request, and manual recovery entrypoints, an explicit read-only token scope, and immutable checkout-action pins. **Living docs** in `docs/`, updated in the same commit that changes behavior: `ARCHITECTURE.md` (this file), `ROADMAP.md` (now/next/later milestones), `CONVENTIONS.md` (§2.4–2.5 verbatim), `DECISIONS/` (tiny dated ADRs — fixed-point format, handle ABI, Vulkan loader, render seam, etc.). **Deferred:** coverage, in-game console/cvars, GUI tooling.
 
 ---
 

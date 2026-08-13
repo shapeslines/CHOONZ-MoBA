@@ -54,9 +54,22 @@ inline int run_all(int argc, char** argv) {
     const char* filter = nullptr;   // --filter <substr>: substring of "suite.name"
     bool list = false;              // --list:           print cases, run nothing
     for (int i = 1; i < argc; ++i) {
-        if      (arg_eq(argv[i], "--suite")  && i + 1 < argc) suite  = argv[++i];
-        else if (arg_eq(argv[i], "--filter") && i + 1 < argc) filter = argv[++i];
-        else if (arg_eq(argv[i], "--list")) list = true;
+        if (arg_eq(argv[i], "--suite") || arg_eq(argv[i], "--filter")) {
+            const char* option = argv[i];
+            if (i + 1 >= argc || !argv[i + 1] || argv[i + 1][0] == '\0' ||
+                argv[i + 1][0] == '-') {
+                std::fprintf(stderr, "ERROR: %s requires a selector value\n", option);
+                return 2;
+            }
+            if (arg_eq(option, "--suite")) suite = argv[++i];
+            else filter = argv[++i];
+        } else if (arg_eq(argv[i], "--list")) {
+            list = true;
+        } else {
+            std::fprintf(stderr, "ERROR: unknown test harness option '%s'\n",
+                         argv[i] ? argv[i] : "(null)");
+            return 2;
+        }
     }
 
     int n_run = 0, n_failed = 0;
