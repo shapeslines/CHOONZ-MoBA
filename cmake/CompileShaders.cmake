@@ -27,8 +27,27 @@ function(add_shader_library TARGET)
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/shaders/${CMAKE_BUILD_TYPE}")
     endif()
     set(spv_files "")
-    foreach(src ${ARG_SOURCES})
-        get_filename_component(name "${src}" NAME)
+    set(shader_names "")
+    file(REAL_PATH "${CMAKE_SOURCE_DIR}" source_root)
+    foreach(src IN LISTS ARG_SOURCES)
+        get_filename_component(shader_source "${src}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+        if(NOT EXISTS "${shader_source}" OR IS_DIRECTORY "${shader_source}")
+            message(FATAL_ERROR
+                "add_shader_library(${TARGET}): shader source is missing or a directory: ${src}")
+        endif()
+        file(REAL_PATH "${shader_source}" shader_source_real)
+        file(RELATIVE_PATH shader_relative "${source_root}" "${shader_source_real}")
+        if(shader_relative MATCHES "^\\.\\.(/|\\\\|$)" OR IS_ABSOLUTE "${shader_relative}")
+            message(FATAL_ERROR
+                "add_shader_library(${TARGET}): source must be under CMAKE_SOURCE_DIR: ${src}")
+        endif()
+        get_filename_component(name "${shader_source_real}" NAME)
+        list(FIND shader_names "${name}" duplicate_index)
+        if(NOT duplicate_index EQUAL -1)
+            message(FATAL_ERROR
+                "add_shader_library(${TARGET}): duplicate shader basename '${name}' from '${src}'")
+        endif()
+        list(APPEND shader_names "${name}")
         set(spv "${out_dir}/${name}.spv")
         # One $<IF:> so the flag is always exactly ONE argument — split genexes leave
         # an EMPTY "" arg in the non-matching config, which glslc reads as an extra
@@ -37,8 +56,8 @@ function(add_shader_library TARGET)
             COMMAND ${Vulkan_GLSLC_EXECUTABLE}
                     "$<IF:$<CONFIG:Debug>,-g,-O>"
                     --target-env=vulkan1.3 -MD -MF "${spv}.d"
-                    "${CMAKE_SOURCE_DIR}/${src}" -o "${spv}"
-            DEPENDS "${CMAKE_SOURCE_DIR}/${src}"
+                    "${shader_source_real}" -o "${spv}"
+            DEPENDS "${shader_source_real}"
             DEPFILE "${spv}.d"
             VERBATIM)
         list(APPEND spv_files "${spv}")
