@@ -33,17 +33,27 @@ void arena_init_fixed(Arena* a, void* buffer, size_t size) {
 }
 
 void* arena_push(Arena* a, size_t size, size_t align) {
+    ENSURE_MSG(a != nullptr && a->base != nullptr, "arena is not initialized");
     ASSERT_ALWAYS(align != 0 && (align & (align - 1)) == 0);   // power of two
+    ENSURE_MSG(a->offset <= a->reserved, "arena offset exceeds reserved budget");
+    ENSURE_MSG(a->committed <= a->reserved, "arena committed exceeds reserved budget");
+    ENSURE_MSG(a->offset <= a->committed, "arena offset exceeds committed budget");
     // Align the ABSOLUTE address so the result is aligned regardless of base.
     uintptr_t base_addr = (uintptr_t)a->base;
-    uintptr_t aligned   = (base_addr + a->offset + (align - 1)) & ~(uintptr_t)(align - 1);
+    ENSURE_MSG(a->offset <= UINTPTR_MAX - base_addr, "arena address arithmetic overflow");
+    uintptr_t current = base_addr + a->offset;
+    ENSURE_MSG(align - 1 <= UINTPTR_MAX - current, "arena alignment arithmetic overflow");
+    uintptr_t aligned = (current + (align - 1)) & ~(uintptr_t)(align - 1);
+    ENSURE_MSG(aligned >= base_addr, "arena alignment wrapped");
     size_t    start     = (size_t)(aligned - base_addr);
+    ENSURE_MSG(start <= a->reserved, "arena alignment exceeds reserved budget");
+    ENSURE_MSG(size <= a->reserved - start, "arena push exceeds reserved budget");
     size_t    end       = start + size;
 
-    ENSURE_MSG(end <= a->reserved, "arena overrun (reserved budget exceeded)");
     if (end > a->committed) {
         ENSURE_MSG(a->commit != nullptr, "arena overrun (fixed buffer, no commit fn)");
         size_t gran = a->commit_granularity ? a->commit_granularity : 1;
+        ENSURE_MSG(gran - 1 <= SIZE_MAX - end, "arena commit rounding overflow");
         size_t want = ((end + gran - 1) / gran) * gran;
         if (want > a->reserved) want = a->reserved;
         size_t old_committed = a->committed;
