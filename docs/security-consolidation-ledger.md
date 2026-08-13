@@ -297,11 +297,29 @@ none is carried solely by source-branch history.
   reconciled tree passes Debug 39/39 and `git diff --check`.
 - Focused full-auditor rereviews: PASS on descendant object binding, read-only handle disposition,
   the exact post-classification swap fixture, and reparse-safe fixture teardown.
-- S7 local disposition: PASS at `6ae70c9`. Candidate `7a0d130` remains superseded; fresh full
-  security/acceptance and exact-head GitHub checks remain before ready state.
+- Final full-security correction on `78055bc`: the head stayed draft after review found three further
+  object-binding intervals. Cleanup handles denied delete sharing but still allowed write sharing, so
+  an empty validated descendant could be converted in place to a reparse point before path
+  enumeration. Clearing `READONLY` through `FileBasicInfo` could mutate the shared attribute of an
+  outside hard link. Atomic writes closed their exclusive create-only temporary before path-based
+  rename or cleanup.
+- Final binding repair: root and descendant cleanup handles now allow `ShareRead` only; the exact
+  post-parent-validation hook attempts a real write-open plus `FSCTL_SET_REPARSE_POINT` and requires
+  `ERROR_SHARING_VIOLATION`. Deletion uses `FileDispositionInfoEx` with
+  `FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE`, and a real same-volume outside hard-link sentinel
+  proves both bytes and `READONLY` survive. Platform file writes retain `GENERIC_WRITE | DELETE` on
+  the create-only temporary through flush and handle-based `FileRenameInfo` or failure disposition;
+  a post-flush hook proves rename-away and attacker replacement are rejected.
+- Repair evidence before checkpoint: `/WX` Debug builds; focused platform/fresh-walk tests pass 2/2;
+  the complete Debug suite passes 39/39; and focused read-only security rereview returns PASS. The
+  remaining full matrix and exact-head gates must repeat on the committed repair before ready state.
+- S7 local disposition: reopened after `78055bc`; focused repair is green. Candidates `7a0d130` and
+  `78055bc` remain superseded and draft; full final-head security/acceptance and exact-head GitHub
+  checks remain before ready state.
 
 ## NEXT
 
-Publish the final evidence record, obtain both fresh full independent verdicts, require exact-head CI/CodeQL,
+Commit the final binding repair, repeat the complete matrix and fresh walk, then obtain both fresh
+full independent verdicts and exact-head CI/CodeQL,
 and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
 unfinished S22 separately; stop before owner merge.

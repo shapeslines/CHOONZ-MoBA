@@ -7,18 +7,21 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 public static class MobaFreshWalkNative {
     private const uint DeleteAccess = 0x00010000;
     private const uint FileReadAttributes = 0x00000080;
-    private const uint FileWriteAttributes = 0x00000100;
+    private const uint GenericWrite = 0x40000000;
     private const uint ShareRead = 0x1;
     private const uint ShareWrite = 0x2;
     private const uint ShareDelete = 0x4;
     private const uint OpenExisting = 3;
     private const uint BackupSemantics = 0x02000000;
     private const uint OpenReparsePoint = 0x00200000;
+    private const uint FsctlSetReparsePoint = 0x000900A4;
+    private const uint IoReparseTagMountPoint = 0xA0000003;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct FileTime {
@@ -51,31 +54,23 @@ public static class MobaFreshWalkNative {
         SafeFileHandle file, out ByHandleFileInformation information);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct FileDispositionInformation {
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool DeleteFile;
+    private struct FileDispositionInformationEx {
+        public uint Flags;
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct FileBasicInformation {
-        public long CreationTime;
-        public long LastAccessTime;
-        public long LastWriteTime;
-        public long ChangeTime;
-        public uint FileAttributes;
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetFileInformationByHandle(
-        SafeFileHandle file, int informationClass,
-        ref FileDispositionInformation information, uint bufferSize);
 
     [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetFileBasicInformationByHandle(
+    private static extern bool SetFileDispositionInformationExByHandle(
         SafeFileHandle file, int informationClass,
-        ref FileBasicInformation information, uint bufferSize);
+        ref FileDispositionInformationEx information, uint bufferSize);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeviceIoControl(
+        SafeFileHandle device, uint controlCode,
+        byte[] input, uint inputSize,
+        IntPtr output, uint outputSize,
+        out uint bytesReturned, IntPtr overlapped);
 
     private static SafeFileHandle OpenDirectory(string path, uint desiredAccess, uint shareMode) {
         SafeFileHandle handle = CreateFileW(
@@ -90,12 +85,11 @@ public static class MobaFreshWalkNative {
     }
 
     public static SafeFileHandle OpenCleanupDirectory(string path) {
-        // Omitting ShareDelete prevents the leased object from being renamed or
-        // replaced until this handle is closed. DELETE is used for the final
-        // handle-bound disposition after its children are gone.
+        // Omitting ShareWrite and ShareDelete prevents in-place reparse mutation,
+        // rename, or replacement until this handle is closed. DELETE is used for
+        // final handle-bound disposition after the children are gone.
         return OpenDirectory(
-            path, DeleteAccess | FileReadAttributes | FileWriteAttributes,
-            ShareRead | ShareWrite);
+            path, DeleteAccess | FileReadAttributes, ShareRead);
     }
 
     public static string DirectoryIdentity(SafeFileHandle handle) {
@@ -118,23 +112,75 @@ public static class MobaFreshWalkNative {
     }
 
     public static void MarkObjectForDelete(SafeFileHandle handle) {
-        const uint ReadOnlyAttribute = 0x1;
-        const uint NormalAttribute = 0x80;
-        ByHandleFileInformation current = Information(handle);
-        if ((current.FileAttributes & ReadOnlyAttribute) != 0) {
-            FileBasicInformation basic = new FileBasicInformation();
-            basic.FileAttributes = current.FileAttributes & ~ReadOnlyAttribute;
-            if (basic.FileAttributes == 0) basic.FileAttributes = NormalAttribute;
-            if (!SetFileBasicInformationByHandle(
-                    handle, 0, ref basic, (uint)Marshal.SizeOf(basic)))
-                throw new Win32Exception(Marshal.GetLastWin32Error());
+        const int FileDispositionInfoEx = 21;
+        const uint FileDispositionDelete = 0x1;
+        const uint FileDispositionIgnoreReadOnly = 0x10;
+        FileDispositionInformationEx information = new FileDispositionInformationEx();
+        information.Flags = FileDispositionDelete | FileDispositionIgnoreReadOnly;
+        if (!SetFileDispositionInformationExByHandle(
+                handle, FileDispositionInfoEx, ref information,
+                (uint)Marshal.SizeOf(information)))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    private static void PutUInt16(byte[] buffer, int offset, ushort value) {
+        buffer[offset] = (byte)value;
+        buffer[offset + 1] = (byte)(value >> 8);
+    }
+
+    private static void PutUInt32(byte[] buffer, int offset, uint value) {
+        buffer[offset] = (byte)value;
+        buffer[offset + 1] = (byte)(value >> 8);
+        buffer[offset + 2] = (byte)(value >> 16);
+        buffer[offset + 3] = (byte)(value >> 24);
+    }
+
+    // Adversarial-test helper. It performs the real write-open and
+    // FSCTL_SET_REPARSE_POINT operation that a cleanup race would need.
+    public static bool TrySetMountPointForTest(
+        string path, string target, out int error) {
+        error = 0;
+        SafeFileHandle handle = CreateFileW(
+            path, GenericWrite, ShareRead | ShareWrite | ShareDelete,
+            IntPtr.Zero, OpenExisting, BackupSemantics | OpenReparsePoint,
+            IntPtr.Zero);
+        if (handle.IsInvalid) {
+            error = Marshal.GetLastWin32Error();
+            handle.Dispose();
+            return false;
         }
 
-        FileDispositionInformation information = new FileDispositionInformation();
-        information.DeleteFile = true;
-        if (!SetFileInformationByHandle(handle, 4, ref information,
-                                        (uint)Marshal.SizeOf(information)))
-            throw new Win32Exception(Marshal.GetLastWin32Error());
+        using (handle) {
+            string printName = Path.GetFullPath(target).TrimEnd('\\');
+            string substituteName = "\\??\\" + printName;
+            byte[] substitute = Encoding.Unicode.GetBytes(substituteName);
+            byte[] print = Encoding.Unicode.GetBytes(printName);
+            int pathBytes = substitute.Length + 2 + print.Length + 2;
+            int dataBytes = 8 + pathBytes;
+            if (substitute.Length > UInt16.MaxValue ||
+                print.Length > UInt16.MaxValue ||
+                dataBytes > UInt16.MaxValue) {
+                error = 206; // ERROR_FILENAME_EXCED_RANGE
+                return false;
+            }
+
+            byte[] buffer = new byte[8 + dataBytes];
+            PutUInt32(buffer, 0, IoReparseTagMountPoint);
+            PutUInt16(buffer, 4, (ushort)dataBytes);
+            PutUInt16(buffer, 8, 0);
+            PutUInt16(buffer, 10, (ushort)substitute.Length);
+            PutUInt16(buffer, 12, (ushort)(substitute.Length + 2));
+            PutUInt16(buffer, 14, (ushort)print.Length);
+            Buffer.BlockCopy(substitute, 0, buffer, 16, substitute.Length);
+            Buffer.BlockCopy(print, 0, buffer, 18 + substitute.Length, print.Length);
+
+            uint returned;
+            bool changed = DeviceIoControl(
+                handle, FsctlSetReparsePoint, buffer, (uint)buffer.Length,
+                IntPtr.Zero, 0, out returned, IntPtr.Zero);
+            if (!changed) error = Marshal.GetLastWin32Error();
+            return changed;
+        }
     }
 
     private static ByHandleFileInformation Information(SafeFileHandle handle) {
@@ -146,13 +192,17 @@ public static class MobaFreshWalkNative {
 
     private static void DeleteChildrenBound(
         SafeFileHandle directoryHandle, string directoryPath,
-        Action<string> afterChildValidation) {
+        Action<string> afterChildValidation,
+        Action<string> afterParentValidation) {
         ByHandleFileInformation parent = Information(directoryHandle);
         const uint DirectoryAttribute = 0x10;
         const uint ReparsePointAttribute = 0x400;
         if ((parent.FileAttributes & DirectoryAttribute) == 0 ||
             (parent.FileAttributes & ReparsePointAttribute) != 0)
             throw new IOException("Cleanup parent is not a normal directory: " + directoryPath);
+
+        if (afterParentValidation != null)
+            afterParentValidation(directoryPath);
 
         // Take only a name snapshot. Every returned name is opened with
         // OPEN_REPARSE_POINT and without FILE_SHARE_DELETE before its type is
@@ -161,8 +211,7 @@ public static class MobaFreshWalkNative {
         foreach (string childPath in children) {
             try {
                 using (SafeFileHandle child = OpenDirectory(
-                    childPath, DeleteAccess | FileReadAttributes | FileWriteAttributes,
-                    ShareRead | ShareWrite)) {
+                    childPath, DeleteAccess | FileReadAttributes, ShareRead)) {
                     ByHandleFileInformation information = Information(child);
                     bool isDirectory = (information.FileAttributes & DirectoryAttribute) != 0;
                     bool isReparsePoint =
@@ -175,7 +224,9 @@ public static class MobaFreshWalkNative {
                     // traversed. Normal directories keep their no-delete-share
                     // handle live for the complete recursive walk.
                     if (isDirectory && !isReparsePoint)
-                        DeleteChildrenBound(child, childPath, afterChildValidation);
+                        DeleteChildrenBound(
+                            child, childPath, afterChildValidation,
+                            afterParentValidation);
                     MarkObjectForDelete(child);
                 }
             } catch (Exception exception) {
@@ -188,10 +239,12 @@ public static class MobaFreshWalkNative {
 
     public static void DeleteTreeContentsBound(
         SafeFileHandle rootHandle, string rootPath,
-        Action<string> afterChildValidation) {
+        Action<string> afterChildValidation,
+        Action<string> afterParentValidation) {
         if (rootHandle == null || rootHandle.IsInvalid || rootHandle.IsClosed)
             throw new ArgumentException("A live root handle is required.", "rootHandle");
-        DeleteChildrenBound(rootHandle, rootPath, afterChildValidation);
+        DeleteChildrenBound(
+            rootHandle, rootPath, afterChildValidation, afterParentValidation);
     }
 }
 '@
@@ -311,7 +364,8 @@ function Assert-FreshWalkLease($Lease, $DirectoryHandle = $null) {
 function Remove-FreshWalkLease(
     $Lease,
     [scriptblock]$AfterValidation = $null,
-    [System.Action[string]]$AfterChildValidation = $null) {
+    [System.Action[string]]$AfterChildValidation = $null,
+    [System.Action[string]]$AfterParentValidation = $null) {
     # Keep a non-delete-sharing handle on the exact leased directory from the
     # validation through final disposition. This closes the path-swap interval:
     # the root cannot be renamed or replaced while its children are removed, and
@@ -324,7 +378,8 @@ function Remove-FreshWalkLease(
         }
 
         [MobaFreshWalkNative]::DeleteTreeContentsBound(
-            $handle, $Lease.ClonePath, $AfterChildValidation)
+            $handle, $Lease.ClonePath, $AfterChildValidation,
+            $AfterParentValidation)
 
         if ([MobaFreshWalkNative]::DirectoryIdentity($handle) -ne $Lease.Identity) {
             throw "CloneDir identity changed during cleanup: $($Lease.ClonePath)"

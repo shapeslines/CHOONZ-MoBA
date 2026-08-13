@@ -180,6 +180,18 @@ and 178,690 checks each; the committed-head fresh walk builds 92 targets, passes
 frames, and completes handle-bound cleanup. Two full passing reviews and exact-head GitHub checks
 remain.
 
+Fresh full security review of `78055bc` found three deeper object-binding gaps, so the PR stayed
+draft despite its eight green GitHub checks and conditional acceptance. Cleanup handles still
+allowed write sharing, permitting an in-place reparse conversion after validation; clearing
+`READONLY` could mutate an outside hard link; and atomic writes closed their create-only temporary
+before path-based commit. Root and child cleanup handles now allow `ShareRead` only, deletion uses
+`FileDispositionInfoEx` with `IGNORE_READONLY`, and permanent fixtures issue a real
+`FSCTL_SET_REPARSE_POINT` at the exact post-parent-validation interval and preserve an outside
+read-only hard link. Platform writes retain the exclusive temporary handle through handle-based
+rename or disposition and test both post-flush rename-away and replacement. `/WX` Debug, focused
+tests 2/2, the complete Debug suite 39/39, and focused security rereview pass. The remaining full
+matrix and fresh exact-head reviews/checks must repeat before ready state.
+
 Debug-ASan initially exposed that the visualizer negative fixture could not
 start because its executable directory lacked the repository's app-local MSVC ASan runtime; the
 shared staging helper is now applied there and the complete Debug-ASan suite passes 39/39. The
@@ -212,7 +224,8 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Publish the final local-acceptance record, obtain fresh full security and acceptance verdicts,
+Commit the final object-binding repair, repeat the full matrix and fresh walk, then obtain fresh full
+security and acceptance verdicts,
 require exact-head CI/CodeQL, and mark PR #51
 ready only after all are green. Stop before the separate owner merge gate;
 keep simulation/replay encoding, asset APIs, #47-#50, and unfinished S22 outside the branch.

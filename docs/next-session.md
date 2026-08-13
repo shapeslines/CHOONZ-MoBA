@@ -12,8 +12,15 @@ exact child-swap/outside-sentinel fixture now pass.
 The first committed-head fresh walk passed through its 90-frame render but cleanup failed closed on
 Git read-only pack files. The walker now clears only `READONLY` through each verified handle before
 disposition; it removed the preserved residue, and the fixture covers both that case and a real
-descendant junction. Committed implementation `6ae70c9` now passes the full configuration/sanitizer/determinism matrix
-and a complete fresh walk whose handle-bound cleanup reports `FRESH-WALK OK`.
+descendant junction. Committed implementation `6ae70c9` passed the full configuration/sanitizer/determinism matrix
+and a complete fresh walk whose handle-bound cleanup reported `FRESH-WALK OK`.
+Fresh full review of `78055bc` then found cleanup still allowed in-place reparse writes, read-only
+attribute clearing could affect an outside hard link, and atomic file writes lost the create-only
+temporary handle before commit. The final repair denies write/delete sharing throughout cleanup,
+uses ignore-read-only disposition, and retains the atomic-write temporary through handle-based
+rename/disposition. Real reparse, hard-link, and post-flush replacement fixtures pass with the
+complete `/WX` Debug 39-test suite and a focused security rereview. The remaining configuration,
+sanitizer, determinism, fresh-walk, full-review, and exact-head GitHub gates must still repeat.
 Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## Consolidation delivered
@@ -27,7 +34,8 @@ Merge is still a separate owner decision. Do not begin M4.0 from this branch.
   winget community-source selection. Fresh-walk deletion is constrained to a non-root direct temp
   child and rejects files, roots, outside/nested paths, source-self targets, and reparse points.
 - Core Array/arena/HashMap arithmetic and Pool/HandlePool free-list state are guarded before mutation.
-  Platform atomic writes refuse pre-existing `.tmp` files; Vulkan and shader paths are restricted and
+  Platform atomic writes refuse pre-existing `.tmp` files and keep that exclusive object bound through
+  handle-based commit/cleanup; Vulkan and shader paths are restricted and
   validated.
 - Sandbox/replay/test/visualizer parsing is canonical and side-effect-free on failure. Classifier logs
   are bounded at 4 MiB; renderer capacity arithmetic rejects overflow/corrupt state before reads or
@@ -49,7 +57,8 @@ Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## First action
 
-1. Publish the final local-acceptance evidence record.
+1. Commit and publish the final object-binding repairs, then repeat the full local acceptance matrix
+   and a committed-head fresh walk.
 2. Obtain fresh full security and acceptance verdicts and require that exact head's MSVC matrix,
    clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
    then mark PR #51 ready.

@@ -27,6 +27,9 @@ $childRaceMoved = Join-Path $tempRoot "$nonce-child-race-moved"
 $childRaceOutside = Join-Path $tempRoot "$nonce-child-race-outside"
 $childRaceLink = Join-Path $childRacePath 'outside-link'
 $childRaceSwapLink = Join-Path $childRacePath 'payload'
+$childRaceInPlace = Join-Path $childRacePath 'empty-reparse-race'
+$hardLinkOutside = Join-Path $childRaceOutside 'hardlink-sentinel.txt'
+$hardLinkInside = Join-Path $childRaceSwapLink 'outside-hardlink.txt'
 
 function Invoke-Rejected([string]$name, [string]$path, [string]$pattern) {
     $output = @(
@@ -144,6 +147,11 @@ try {
     [System.IO.File]::WriteAllText($readOnlyChild, 'owned')
     [System.IO.File]::SetAttributes(
         $readOnlyChild, [System.IO.FileAttributes]::ReadOnly)
+    [System.IO.File]::WriteAllText($hardLinkOutside, 'outside hardlink sentinel')
+    New-Item -ItemType HardLink -Path $hardLinkInside -Target $hardLinkOutside | Out-Null
+    [System.IO.File]::SetAttributes(
+        $hardLinkOutside, [System.IO.FileAttributes]::ReadOnly)
+    New-Item -ItemType Directory -Path $childRaceInPlace | Out-Null
     $childRaceState = [pscustomobject]@{ MoveBlocked = $false; SwapSucceeded = $false }
     $childHook = [System.Action[string]]{
         param([string]$openedPath)
@@ -161,9 +169,34 @@ try {
         $childRaceState.SwapSucceeded = $true
         throw 'post-validation child replacement unexpectedly succeeded'
     }
-    Remove-FreshWalkLease -Lease $childRaceLease -AfterChildValidation $childHook
+    $reparseRaceState = [pscustomobject]@{
+        Attempted = $false
+        Succeeded = $false
+        Error = 0
+    }
+    $reparseHook = [System.Action[string]]{
+        param([string]$validatedPath)
+        if (-not $validatedPath.Equals(
+                $childRaceInPlace, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+        $reparseRaceState.Attempted = $true
+        $nativeError = 0
+        $reparseRaceState.Succeeded = [MobaFreshWalkNative]::TrySetMountPointForTest(
+            $validatedPath, $childRaceOutside, [ref]$nativeError)
+        $reparseRaceState.Error = $nativeError
+        if ($reparseRaceState.Succeeded) {
+            throw 'in-place FSCTL_SET_REPARSE_POINT unexpectedly succeeded'
+        }
+    }
+    Remove-FreshWalkLease -Lease $childRaceLease `
+        -AfterChildValidation $childHook -AfterParentValidation $reparseHook
     if (-not $childRaceState.MoveBlocked -or $childRaceState.SwapSucceeded) {
         throw 'post-validation child path swap was not blocked by the child handle'
+    }
+    if (-not $reparseRaceState.Attempted -or $reparseRaceState.Succeeded -or
+        $reparseRaceState.Error -ne 32) {
+        throw "in-place reparse write was not sharing-blocked (error=$($reparseRaceState.Error))"
     }
     if ((Test-Path -LiteralPath $childRacePath) -or
         (Test-Path -LiteralPath $childRaceMoved)) {
@@ -171,6 +204,11 @@ try {
     }
     if ([System.IO.File]::ReadAllText($childRaceSentinel) -ne 'child race sentinel') {
         throw 'post-validation child swap changed the outside sentinel'
+    }
+    if ([System.IO.File]::ReadAllText($hardLinkOutside) -ne 'outside hardlink sentinel' -or
+        ([System.IO.File]::GetAttributes($hardLinkOutside) -band
+            [System.IO.FileAttributes]::ReadOnly) -eq 0) {
+        throw 'handle cleanup mutated the outside hard-link sentinel or its read-only attribute'
     }
 
     if ([System.IO.File]::ReadAllText($nestedSentinel) -ne 'nested sentinel') {
@@ -198,13 +236,17 @@ try {
     Write-Output 'fresh-walk path guard PASS: unsafe locations, existing targets, and cleanup swaps rejected without deletion'
     exit 0
 } finally {
-    foreach ($link in @($junctionPath, $swapPath, $childRaceLink, $childRaceSwapLink)) {
+    foreach ($link in @($junctionPath, $swapPath, $childRaceLink, $childRaceSwapLink,
+                         $childRaceInPlace)) {
         if (Test-Path -LiteralPath $link) {
             $linkItem = Get-Item -Force -LiteralPath $link
             if (($linkItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
                 [System.IO.Directory]::Delete($link)
             }
         }
+    }
+    if (Test-Path -LiteralPath $hardLinkOutside -PathType Leaf) {
+        [System.IO.File]::SetAttributes($hardLinkOutside, [System.IO.FileAttributes]::Normal)
     }
     foreach ($path in @($fixtureRoot, $existingDir, $filePath, $junctionTarget,
                          $swapTarget, $replacementPath, $intervalPath, $intervalMoved,

@@ -24,7 +24,15 @@ The first committed-head fresh walk then passed configure/build/tests/Vulkan but
 cleanup on Git's read-only pack files. The same bound handle now clears only `READONLY` before
 disposition; it successfully removed the preserved partial clone, and the permanent fixture covers a
 read-only file plus a descendant junction with an unchanged outside sentinel.
-The final implementation passes all 39 tests in Debug, RelWithDebInfo, Release, and Debug-ASan;
+That candidate's fresh full security audit subsequently found three deeper binding issues: cleanup
+handles still shared writes during name enumeration, read-only deletion could alter an outside hard
+link's shared attributes, and the create-only file-write temporary was closed before path-based
+commit. Cleanup now excludes write/delete sharing, uses `FileDispositionInfoEx` with
+`IGNORE_READONLY`, and attacks the exact interval with a real `FSCTL_SET_REPARSE_POINT` plus an
+outside read-only hard link. Atomic writes retain the exclusive temporary through handle-based
+rename/disposition and an exact post-flush replacement attack. Focused `/WX` Debug, all 39 Debug
+tests, and focused security rereview pass; the complete final-head matrix is being repeated.
+The earlier implementation checkpoint passes all 39 tests in Debug, RelWithDebInfo, Release, and Debug-ASan;
 clang-cl/UBSan 6/6; direct Debug/Release determinism; and a committed-head
 92-target/39-test/90-frame fresh walk whose secure cleanup reports `FRESH-WALK OK`.
 Merge remains a separate owner action.
@@ -38,7 +46,8 @@ Merge remains a separate owner action.
 - Array, arena, HashMap, Pool, and HandlePool guards cover allocation multiplication, capacity/address/
   alignment/end arithmetic, transactional initialization, and corrupt intrusive free lists while
   preserving their public signatures and normal allocation order.
-- Platform atomic writes create their predictable `.tmp` without overwrite; Vulkan loads only from
+- Platform atomic writes create their predictable `.tmp` without overwrite, retain that exclusive
+  object through handle-based rename or failure disposition, and never clean it up by path; Vulkan loads only from
   System32 or a validated explicit SDK path; offline declarations and runtime shader paths fail
   closed on missing, outside, duplicate, or truncated inputs.
 - Sandbox, replay, test-harness, visualizer, and classifier inputs have explicit canonical/bounded
@@ -54,6 +63,9 @@ Merge remains a separate owner action.
   `OPEN_REPARSE_POINT`, classified from that handle, retained through recursion, and deleted through
   the same handle. Reparse points are leaf links; an exact child-replacement attempt cannot reach its
   outside sentinel.
+- Cleanup handles also deny write sharing so a validated empty directory cannot become a junction in
+  place before enumeration. Read-only entries are removed using disposition's ignore-read-only flag,
+  leaving attributes on outside hard links unchanged.
 - Sandbox and replay command grammars now reject missing, duplicate, option-shaped, unknown, and
   extra arguments before DPI/window/Vulkan or replay file effects.
 

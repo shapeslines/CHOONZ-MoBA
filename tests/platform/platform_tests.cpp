@@ -6,7 +6,9 @@
 #include "core/sim_config.h"
 #include "platform/platform.h"
 #include "platform/platform_fixed_step.h"
+#include "win32_file_internal.h"
 #include "win32_vulkan_loader.h"
+#include <windows.h>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -163,6 +165,82 @@ TEST(platform, file_write_refuses_preexisting_tmp_without_mutation) {
 
     std::remove(tmp_path);
     std::remove(path);
+}
+
+struct PostFlushReplacementAttack {
+    wchar_t attacker_path[MAX_PATH];
+    wchar_t moved_path[MAX_PATH];
+    bool called;
+    bool temp_move_succeeded;
+    bool attacker_move_succeeded;
+    DWORD temp_move_error;
+    DWORD attacker_move_error;
+};
+
+static void attempt_post_flush_temp_replacement(const wchar_t* temporary_path, void* user) {
+    PostFlushReplacementAttack* attack = static_cast<PostFlushReplacementAttack*>(user);
+    attack->called = true;
+    SetLastError(ERROR_SUCCESS);
+    attack->temp_move_succeeded = MoveFileExW(
+        temporary_path, attack->moved_path, MOVEFILE_REPLACE_EXISTING) != 0;
+    attack->temp_move_error = GetLastError();
+    SetLastError(ERROR_SUCCESS);
+    attack->attacker_move_succeeded = MoveFileExW(
+        attack->attacker_path, temporary_path, MOVEFILE_REPLACE_EXISTING) != 0;
+    attack->attacker_move_error = GetLastError();
+}
+
+TEST(platform, file_write_keeps_create_only_temp_bound_through_commit) {
+    const char* path = "moba_io_bound_commit.bin";
+    const wchar_t* attacker_name = L"moba_io_bound_commit.attacker";
+    const wchar_t* moved_name = L"moba_io_bound_commit.moved";
+    const char* payload = "trusted-post-flush-payload";
+    const char* sentinel = "attacker-sentinel";
+    std::remove(path);
+    _wremove(L"moba_io_bound_commit.bin.tmp");
+    _wremove(attacker_name);
+    _wremove(moved_name);
+
+    FILE* attacker = nullptr;
+    CHECK(_wfopen_s(&attacker, attacker_name, L"wb") == 0 && attacker != nullptr);
+    if (attacker) {
+        CHECK(std::fwrite(sentinel, 1, std::strlen(sentinel), attacker) ==
+              std::strlen(sentinel));
+        std::fclose(attacker);
+    }
+
+    PostFlushReplacementAttack attack{};
+    CHECK(GetFullPathNameW(
+              attacker_name, MAX_PATH, attack.attacker_path, nullptr) > 0);
+    CHECK(GetFullPathNameW(moved_name, MAX_PATH, attack.moved_path, nullptr) > 0);
+    CHECK(win32_platform_file_write_with_hook(
+        path, payload, std::strlen(payload), attempt_post_flush_temp_replacement,
+        &attack));
+    CHECK(attack.called);
+    CHECK(!attack.temp_move_succeeded);
+    CHECK(!attack.attacker_move_succeeded);
+    CHECK(attack.temp_move_error == ERROR_SHARING_VIOLATION);
+    CHECK(attack.attacker_move_error == ERROR_SHARING_VIOLATION ||
+          attack.attacker_move_error == ERROR_ACCESS_DENIED);
+
+    alignas(16) uint8_t mem[512];
+    Arena arena;
+    Allocator alloc = test_arena_alloc(&arena, mem, sizeof(mem));
+    PlatformFile destination{};
+    PlatformFile attacker_file{};
+    CHECK(platform_file_read(path, alloc, &destination));
+    CHECK(platform_file_read("moba_io_bound_commit.attacker", alloc, &attacker_file));
+    CHECK(destination.size == std::strlen(payload) &&
+          std::memcmp(destination.data, payload, destination.size) == 0);
+    CHECK(attacker_file.size == std::strlen(sentinel) &&
+          std::memcmp(attacker_file.data, sentinel, attacker_file.size) == 0);
+    CHECK(GetFileAttributesW(L"moba_io_bound_commit.bin.tmp") == INVALID_FILE_ATTRIBUTES);
+    CHECK(GetFileAttributesW(moved_name) == INVALID_FILE_ATTRIBUTES);
+
+    std::remove(path);
+    _wremove(attacker_name);
+    _wremove(moved_name);
+    _wremove(L"moba_io_bound_commit.bin.tmp");
 }
 
 TEST(platform, vulkan_sdk_loader_path_is_explicit_and_transactional) {

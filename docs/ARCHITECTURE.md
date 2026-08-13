@@ -546,7 +546,7 @@ typedef struct {
 
 ### 4.5 Virtual paths & file modes
 
-Named-root virtual paths resolved in the backend (`assets://`, `user://`, `shaders://`); the engine never builds OS paths or sees separators, and `..` traversal is rejected. Three read modes: `platform_file_read` (default; caller's arena owns the bytes), `platform_file_map` (mmap, restricted to immutable shipped assets), and atomic `platform_file_write` (create a predictable `.tmp`, flush, then rename). The temporary is opened create-only: if it already exists, the write fails without changing either the destination or the temporary. Async/overlapped I/O is **deferred** — synchronous reads on a worker behind a loading screen suffice; the signatures are additive-friendly for a later async path.
+Named-root virtual paths resolved in the backend (`assets://`, `user://`, `shaders://`); the engine never builds OS paths or sees separators, and `..` traversal is rejected. Three read modes: `platform_file_read` (default; caller's arena owns the bytes), `platform_file_map` (mmap, restricted to immutable shipped assets), and atomic `platform_file_write` (create a predictable `.tmp`, flush, then rename). The temporary is opened create-only and exclusively, then retained through handle-based rename or failure disposition; if it already exists, the write fails without changing either the destination or the temporary. Async/overlapped I/O is **deferred** — synchronous reads on a worker behind a loading screen suffice; the signatures are additive-friendly for a later async path.
 
 ### 4.6 Porting (designed-for, deferred)
 
