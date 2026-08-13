@@ -14,6 +14,11 @@ on:
     branches: [main]
   pull_request:
 
+# The workflow only reads the checkout; keep the default token scope explicit and
+# prevent repository settings from silently broadening it later.
+permissions:
+  contents: read
+
 # Newer pushes to a PR supersede in-flight runs for the same ref. NEVER cancel a
 # main-branch run, though — each commit on main should get a completed CI result
 # (a cancelled run is neither green nor a usable baseline).
@@ -30,7 +35,7 @@ jobs:
       matrix:
         config: [Debug, RelWithDebInfo, Release]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
       # Vulkan SDK (G15): pinned 1.4.357.0 per README/CMakeLists. The build below
       # hard-requires it (-DMOBA_VULKAN_REQUIRED=ON) so the real backend, the
@@ -132,7 +137,7 @@ jobs:
     name: fresh-walk (stranger's path)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Install LunarG Vulkan SDK (pinned 1.4.357.0)
         shell: pwsh
         run: |
