@@ -249,6 +249,19 @@ static bool pick_families(Vk* vk, VkPhysicalDevice pd, VkSurfaceKHR surface, uin
 // naive scheme's time is up (the block allocator is a later, deliberate phase).
 #define VK_ALLOC_MAX 3500u
 
+// G25: warn well before the hard cap so the Phase 8 block-allocator trigger fires as
+// a plan, not a crash. First warning at 90% of the cap, then every 100 allocations.
+static void vk_alloc_pressure_check(Renderer* r) {
+    if (r->alloc_count == VK_ALLOC_MAX * 9u / 10u) {
+        platform_log("renderer: WARNING - %u dedicated allocations (90%% of the %u cap). "
+                     "The Phase 8 block allocator trigger is near; plan it before real "
+                     "assets land (G25).\n", r->alloc_count, VK_ALLOC_MAX);
+    } else if (r->alloc_count > VK_ALLOC_MAX * 9u / 10u && (r->alloc_count % 100u) == 0u) {
+        platform_log("renderer: WARNING - %u dedicated allocations; hard cap %u.\n",
+                     r->alloc_count, VK_ALLOC_MAX);
+    }
+}
+
 static uint32_t find_memory_type(Renderer* r, uint32_t type_bits, VkMemoryPropertyFlags want) {
     VkPhysicalDeviceMemoryProperties mp{};
     r->vk.GetPhysicalDeviceMemoryProperties(r->phys, &mp);
@@ -284,6 +297,7 @@ static bool alloc_buffer(Renderer* r, VkDeviceSize size, VkBufferUsageFlags usag
         return false;
     }
     ++r->alloc_count;
+    vk_alloc_pressure_check(r);
     return true;
 }
 
@@ -326,6 +340,7 @@ static bool alloc_image_2d(Renderer* r, uint32_t w, uint32_t h, VkFormat format,
         return false;
     }
     ++r->alloc_count;
+    vk_alloc_pressure_check(r);
     return true;
 }
 

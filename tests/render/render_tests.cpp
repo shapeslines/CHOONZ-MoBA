@@ -77,6 +77,31 @@ TEST(render, cache_blob_unaligned_source_ok) {
     CHECK(pipeline_cache_blob_ok(blob, n, VENDOR, DEVICE, UUID));
 }
 
+// G29: content-level defense — every one of the 32 header bytes is load-bearing, so
+// flipping any single one must reject the blob. Payload bytes are deliberately NOT
+// validated (the GPU validates payload data; the header is the trust boundary).
+TEST(render, cache_blob_every_header_byte_is_load_bearing) {
+    for (int byte = 0; byte < (int)PIPELINE_CACHE_HEADER_SIZE; ++byte) {
+        uint8_t blob[256];
+        size_t n = make_blob(blob, 64);
+        blob[byte] ^= 0x01;
+        CHECK(!pipeline_cache_blob_ok(blob, n, VENDOR, DEVICE, UUID));
+    }
+
+    uint8_t blob[256];
+    size_t n = make_blob(blob, 64);
+    put_u32le(blob + 0, PIPELINE_CACHE_HEADER_SIZE + 8u);   // headerSize overclaims
+    CHECK(!pipeline_cache_blob_ok(blob, n, VENDOR, DEVICE, UUID));
+
+    uint8_t partial[20];                                    // truncated mid-header
+    std::memcpy(partial, blob, sizeof(partial));
+    CHECK(!pipeline_cache_blob_ok(partial, 19, VENDOR, DEVICE, UUID));
+
+    uint8_t garbage[PIPELINE_CACHE_HEADER_SIZE];            // fully random header
+    for (size_t i = 0; i < sizeof(garbage); ++i) garbage[i] = (uint8_t)(i * 31u);
+    CHECK(!pipeline_cache_blob_ok(garbage, sizeof(garbage), VENDOR, DEVICE, UUID));
+}
+
 static bool resolve_test_draw(void*, const DrawItem* item, uint32_t* out_pipeline_key) {
     if (!item || !out_pipeline_key || handle_is_null(item->mesh.h) || handle_is_null(item->material.h))
         return false;
