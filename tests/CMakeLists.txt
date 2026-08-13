@@ -14,7 +14,7 @@
 # headless testing holds.
 add_library(engine_core_group INTERFACE)
 target_link_libraries(engine_core_group INTERFACE
-    eng::core eng::math eng::serialize eng::sim eng::platform)
+    eng::core eng::math eng::serialize eng::assets eng::sim eng::platform)
 
 # --- engine_tests: the headless aggregate suite (mem + math + containers) ---
 add_executable(engine_tests
@@ -22,6 +22,8 @@ add_executable(engine_tests
     mem/mem_tests.cpp
     math/math_tests.cpp
     containers/container_tests.cpp
+    assets/asset_id_tests.cpp
+    assets/asset_registry_tests.cpp
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
     sim/component_pool_tests.cpp
@@ -91,6 +93,8 @@ moba_stage_asan_runtime()
 add_test(NAME mem         COMMAND engine_tests --suite mem)
 add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
+add_test(NAME asset_id    COMMAND engine_tests --suite asset_id)
+add_test(NAME assets      COMMAND engine_tests --suite assets)
 add_test(NAME core_invariant_tripwire
     COMMAND ${CMAKE_COMMAND}
             -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>
