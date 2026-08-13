@@ -2,6 +2,7 @@
 
 #include "assets/assets.h"
 #include "platform/platform.h"
+#include "win32_test_directory.h"
 
 #include <cstdio>
 #include <cstring>
@@ -45,7 +46,8 @@ struct RegistryFixture {
     FakeTextures fake;
 };
 
-static bool init_fixture(RegistryFixture* fixture, uint32_t capacity) {
+static bool init_fixture(RegistryFixture* fixture, uint32_t capacity,
+                         const char* asset_root = ".") {
     std::memset(fixture, 0, sizeof(*fixture));
     arena_init_fixed(&fixture->persistent, fixture->persistent_storage,
                      sizeof(fixture->persistent_storage));
@@ -57,7 +59,7 @@ static bool init_fixture(RegistryFixture* fixture, uint32_t capacity) {
                      sizeof(fixture->io_storage));
     fixture->fake.next = handle_make(100u, 1u);
     AssetRendererApi renderer{&fixture->fake, fake_create_texture, fake_destroy_texture};
-    AssetRegistryConfig config = asset_registry_config_default(".");
+    AssetRegistryConfig config = asset_registry_config_default(asset_root);
     config.capacity = capacity;
     return asset_registry_init(&fixture->registry, &fixture->persistent, &fixture->level,
                                &fixture->global, &fixture->io, renderer, config);
@@ -318,19 +320,35 @@ static void test_put_u32(uint8_t* out, uint32_t value) {
 }
 
 TEST(assets, loose_tga_and_wav_files_load_transactionally) {
-    const char* tga_path = "moba_asset_load_test.tga";
-    const char* wav_path = "moba_asset_load_test.wav";
-    std::remove(tga_path);
-    std::remove("moba_asset_load_test.tga.tmp");
-    std::remove(wav_path);
-    std::remove("moba_asset_load_test.wav.tmp");
+    OwnedTestDirectory owned{};
+    owned.custody = INVALID_HANDLE_VALUE;
+    const bool directory_owned = test_create_owned_directory("assets", &owned);
+    CHECK(directory_owned);
+    if (!directory_owned) return;
+
+    const char* tga_asset_path = "fixture.tga";
+    const char* wav_asset_path = "fixture.wav";
+    char tga_file_path[256];
+    char wav_file_path[256];
+    const int tga_chars = std::snprintf(
+        tga_file_path, sizeof(tga_file_path), "%s/%s", owned.path, tga_asset_path);
+    const int wav_chars = std::snprintf(
+        wav_file_path, sizeof(wav_file_path), "%s/%s", owned.path, wav_asset_path);
+    const bool paths_ready = tga_chars > 0 && (size_t)tga_chars < sizeof(tga_file_path) &&
+        wav_chars > 0 && (size_t)wav_chars < sizeof(wav_file_path);
+    CHECK(paths_ready);
+    if (!paths_ready) {
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
 
     uint8_t tga[22] = {};
     tga[2] = 2u;
     tga[12] = 1u; tga[14] = 1u;
     tga[16] = 32u; tga[17] = 0x28u;
     tga[18] = 0x11u; tga[19] = 0x22u; tga[20] = 0x33u; tga[21] = 0x44u;
-    CHECK(platform_file_write(tga_path, tga, sizeof(tga)));
+    const bool tga_written = platform_file_write(tga_file_path, tga, sizeof(tga));
+    CHECK(tga_written);
 
     const uint8_t pcm[] = {1u,0u, 2u,0u};
     uint8_t wav[48] = {};
@@ -347,13 +365,27 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
     std::memcpy(wav + 36u, "data", 4u);
     test_put_u32(wav + 40u, sizeof(pcm));
     std::memcpy(wav + 44u, pcm, sizeof(pcm));
-    CHECK(platform_file_write(wav_path, wav, sizeof(wav)));
+    const bool wav_written = platform_file_write(wav_file_path, wav, sizeof(wav));
+    CHECK(wav_written);
+    if (!tga_written || !wav_written) {
+        if (tga_written) CHECK(std::remove(tga_file_path) == 0);
+        if (wav_written) CHECK(std::remove(wav_file_path) == 0);
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
 
     RegistryFixture fixture;
-    CHECK(init_fixture(&fixture, 4u));
-    AssetHandle texture = asset_load_texture_tga(&fixture.registry, tga_path,
+    const bool initialized = init_fixture(&fixture, 4u, owned.path);
+    CHECK(initialized);
+    if (!initialized) {
+        CHECK(std::remove(tga_file_path) == 0);
+        CHECK(std::remove(wav_file_path) == 0);
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+    AssetHandle texture = asset_load_texture_tga(&fixture.registry, tga_asset_path,
                                                   ASSET_LIFETIME_LEVEL);
-    AssetHandle sound = asset_load_sound_wav(&fixture.registry, wav_path,
+    AssetHandle sound = asset_load_sound_wav(&fixture.registry, wav_asset_path,
                                               ASSET_LIFETIME_LEVEL);
     CHECK(!handle_is_null(texture.h) && !handle_is_null(sound.h));
     AssetTextureView texture_view{};
@@ -378,6 +410,7 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
           fixture.io.offset == fixture.registry.io_base_offset);
 
     asset_registry_shutdown(&fixture.registry, 0u);
-    std::remove(tga_path);
-    std::remove(wav_path);
+    CHECK(std::remove(tga_file_path) == 0);
+    CHECK(std::remove(wav_file_path) == 0);
+    CHECK(test_release_owned_directory(&owned));
 }
