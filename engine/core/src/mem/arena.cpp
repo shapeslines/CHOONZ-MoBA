@@ -20,7 +20,12 @@ void arena_init(Arena* a, void* base, size_t reserved, size_t committed,
     a->high_water         = 0;
     a->commit             = commit;
     a->commit_granularity = commit_granularity;
-    ARENA_POISON(a->base, a->committed);   // everything is dead until pushed
+    // Poison only VIRTUAL arenas (the engine's heap-backed frame/world memory).
+    // Fixed caller-owned buffers (often stack, e.g. test fixtures) must not be
+    // poisoned: ASan leaves user-poison in place across stack-frame reuse, so any
+    // later whole-struct write (e.g. `Fixture f{}`) would false-positive. The
+    // caller's own zero-init defines freshness for fixed buffers.
+    if (a->commit) ARENA_POISON(a->base, a->committed);   // dead until pushed
 }
 
 void arena_init_fixed(Arena* a, void* buffer, size_t size) {
@@ -60,7 +65,7 @@ void* arena_push_zero(Arena* a, size_t size, size_t align) {
 }
 
 void arena_reset(Arena* a) {
-    ARENA_POISON(a->base, a->committed);
+    if (a->commit) ARENA_POISON(a->base, a->committed);   // virtual arenas only
     a->offset = 0;                         // committed + high_water retained
 }
 
@@ -91,7 +96,8 @@ TempMemory temp_begin(Arena* a) {
 }
 
 void temp_end(TempMemory t) {
-    ARENA_POISON(t.arena->base + t.saved_offset, t.arena->offset - t.saved_offset);
+    if (t.arena->commit) ARENA_POISON(t.arena->base + t.saved_offset,
+                                      t.arena->offset - t.saved_offset);
     t.arena->offset = t.saved_offset;
 }
 

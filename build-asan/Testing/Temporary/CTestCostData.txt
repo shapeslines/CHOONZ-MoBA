@@ -1,0 +1,26 @@
+mem 1 0.0779944
+math 2 0.0279837
+containers 2 0.0296667
+platform 1 0.0799692
+serialize 2 0.0286959
+sim_component_pool 1 0.0598312
+sim_components 1 0.0590312
+sim_destroy 1 0.0566933
+sim_entity 1 0.0569352
+sim_events 1 0.0582216
+sim 1 0.0729722
+sim_schedule 1 0.0543456
+sim_systems 1 0.0587973
+render 1 0.0573015
+render_null 2 0.0364598
+tga 1 0.0567918
+det_precise 2 0.0310869
+det_fast 2 0.0299779
+sim_determinism 2 0.957603
+sim_boundary 3 0.0120083
+replay_record 2 0.280767
+replay_inspect 2 0.02608
+replay_verify 2 0.260683
+replay_cli_errors 2 0.769107
+replay_cleanup 3 0.00414927
+---

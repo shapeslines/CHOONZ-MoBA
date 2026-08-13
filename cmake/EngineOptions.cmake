@@ -26,5 +26,23 @@ target_link_options(moba_options INTERFACE
 set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG"
     CACHE STRING "" FORCE)
 
-# ASan lives in a dedicated DebugASan config, added with the arena allocator (M1.0)
-# once arenas have poison hooks — see ARCHITECTURE §3.3. Not wired in the M0.2 spine.
+# Control-flow guard (G35): /guard:cf on the optimized configs — CFG is meaningful
+# where code is actually optimized. Compile AND link flags must match.
+target_compile_options(moba_options INTERFACE
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:RelWithDebInfo>>:/guard:cf>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/guard:cf>)
+target_link_options(moba_options INTERFACE
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:RelWithDebInfo>>:/guard:cf>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/guard:cf>)
+
+# Debug-ASan (G10, the M1.0 promise): /fsanitize=address activates the arena
+# poison/unpoison hooks in arena.cpp (they key off __SANITIZE_ADDRESS__, which MSVC
+# defines when this flag is on). INTERFACE propagation reaches every target's link
+# line, so the test executables get the runtime too. Configure with the
+# `debug-asan` preset (build-asan dir); the README records the workflow.
+if(MOBA_ASAN)
+    target_compile_options(moba_options INTERFACE
+        $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=address>)
+    target_link_options(moba_options INTERFACE
+        $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=address>)
+endif()
