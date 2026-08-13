@@ -39,7 +39,8 @@ is the execution ledger.
 | 2a | `moba/gap-close-w2a` | #19 | `e85ea82` | merged 2026-08-13 |
 | 2b | `moba/gap-close-w2b` | #20 / #25 | â€” | #20 closed; recovery #25 superseded â€” Wave 2b content lands through #21 |
 | 3 | `moba/gap-close-w3` | #21 | `8defa10` | merged 2026-08-13; includes Wave 2b except the CMake hard-require gate restored in #22 |
-| 4 | `moba/gap-close-w4` | #22 | pending | renderer robustness plus explicit recovery of the Wave 2b `MOBA_VULKAN_REQUIRED` CMake gate; local `/WX` Debug/RelWithDebInfo/Release 25/25 and RTX 4070 Ti 90-frame validation-on screenshot green |
+| 4 | `moba/gap-close-w4` | #22 | `4d250b2` | merged 2026-08-13; renderer robustness plus recovery of the Wave 2b `MOBA_VULKAN_REQUIRED` CMake gate |
+| 5 | `moba/gap-close-w5` | #23 | pending | ADR-0014 plus M3.3/M4.0/M5.2 ownership amendments; documentation only, runtime tree identical to `main`, local Debug 25/25 and 10,000-tick oracle green |
 
 ## Gap status
 
@@ -107,10 +108,10 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G30 | Stale-target policy undefined | open (decision before M3.3) |
-| G31 | Event backpressure policy unspecified | open (decision before M3.3) |
+| G30 | Stale-target policy undefined | **closed** (ADR-0014: atomic whole-buffer rejection today; per-command reasons at M6.0) |
+| G31 | Event backpressure policy unspecified | **closed** (ADR-0014: preflight and reject at source; never drop/overwrite) |
 | G32 | No capacity-pressure test (16,384 entities) | **closed** (Wave 3: twin-run + churn test) |
-| G33 | No command rejection-reason field | open (design note for M6.0) |
+| G33 | No command rejection-reason field | deferred to M6.0 (ADR-0014 + ROADMAP own the behavior change and logic-hash bump) |
 
 ### Lens 8 â€” Robustness & security
 
@@ -124,7 +125,7 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G37 | Present glue has no home (`moba_game` absent) | open (M3.3 amendment) |
-| G38 | Raw Input upgrade lost its owner | open (M5.2 amendment) |
-| G39 | `tga_direct` contamination path interim policy | open (M4.0 amendment) |
+| G37 | Present glue has no home (`moba_game` absent) | **closed** (M3.3 amendment: `eng_game` owns snapshots/interpolation; platform owns cadence) |
+| G38 | Raw Input upgrade lost its owner | **closed** (M5.2 ROADMAP amendment) |
+| G39 | `tga_direct` contamination path interim policy | **closed** (M4.0 ROADMAP amendment) |
 | G40 | No `.editorconfig` / templates | open |

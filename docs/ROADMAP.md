@@ -526,14 +526,7 @@ scale. **Exercises:** ECS, Determinism.
 
 ---
 
-### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M  ✅ COMPLETE 2026-08-12
-**Status:** complete (gap-close Wave 6). The game/present glue (`eng_game`,
-`game/present.h`) owns the fixed-tick accumulator (clamped by `SIM_MAX_CATCHUP_S`),
-double-buffered fixed-only `RenderSnapshot`s, and the single fixed→float conversion;
-`snapshot_extract` is const and hash-neutral; the renderer still never sees `SimWorld`.
-Headless tests prove render-rate independence (60/30/mixed fps → identical tick count
-and hash) and the sandbox runs the deterministic orbit demo validation-clean
-(64 units, one batch). M3.4 remains the separate flag-pinning/isolation slate.
+### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M
 **Goal:** the accumulator loop and the single, one-directional fixed→float interpolation seam.
 **Deliverables:**
 - The accumulator lives in the **platform's outer loop** (it owns the OS pump + clock); the ECS
@@ -806,7 +799,9 @@ the sim is bit-stable — which it is.
 replay + net); replay-version policy = **version-locked debugging artifacts** (record in ADR). In the
 server-authoritative model the network source is "**client → server commands**" on the client side and
 "**merged per-tick command set**" on the server side; both reduce to the same source interface feeding
-`sim_tick`.
+`sim_tick`. Per ADR-0014, M6.0 also replaces today's atomic whole-buffer rejection with
+per-command rejection reason codes; that deliberate behavior/encoding change requires a reviewed
+`SIM_LOGIC_HASH` bump.
 **DoD:** a recorded match replays bit-identically (the M3.0 self-check, now over real gameplay
 commands); swapping the command source (local / replay / network) requires no sim change.
 **Risks:** codec drift between replay and net — single shared codec prevents it. **Exercises:** Netcode,

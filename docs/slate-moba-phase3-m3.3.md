@@ -2,13 +2,13 @@
 type: record
 title: "SLATE - Phase 3 M3.3 fixed tick and presentation boundary"
 kind: slate
-status: queued
+status: active
 project: moba
 axis: "simulation presentation boundary"
 queued: 2026-08-12
-updated: 2026-08-12
-worktree: "repo root"
-branch: "moba/slate-phase3-presentation"
+updated: 2026-08-13
+worktree: "gap worktree"
+branch: "moba/gap-close-w6"
 tags: [slate, simulation, platform, presentation, determinism]
 related:
   - "docs/ROADMAP.md M3.3"
@@ -18,9 +18,9 @@ related:
 
 # Slate - Phase 3 M3.3 fixed tick and presentation boundary
 
-**Status:** complete 2026-08-12 (gap-close Wave 6). All slices S0-S6 landed; the oracle
-`0x637628abff59c823` and all prior goldens are untouched. See JOURNAL Session 10 for
-the observed record. M3.4 is the next slate.
+**Status:** active acceptance repair. PRs #21 and #22 are merged; PR #23 records the
+input/backpressure decision and ownership amendments only. Runtime M3.3 implementation
+remains in PR #24 and is not complete until its acceptance slate closes.
 
 ## Goal
 
@@ -42,7 +42,7 @@ presentation state or timing to feed back into `eng_sim`.
 | fixed-only `RenderSnapshot` extraction | gameplay abilities, AI, fog, pathfinding, or networking |
 | double-buffered previous/current snapshots | renderer reading `SimWorld` or simulation reading presentation |
 | game-owned interpolation and DrawItem construction | assets, audio, UI, packaging, or event-timing changes |
-| **new `game/` target (G37 amendment, 2026-08-12): `moba_game` owns the present glue** — accumulator consumption, interpolation, fixed→float, DrawItem building. Sandbox stays a tool; it links `eng_game` or is superseded by `moba_game` in this milestone | engine modules gaining presentation deps |
+| **new `game/` target (G37 amendment, 2026-08-12): `eng_game` owns snapshot extraction, interpolation, fixed→float, and DrawItem building; platform owns fixed-step cadence** | engine modules gaining presentation deps |
 
 ## Invariants
 

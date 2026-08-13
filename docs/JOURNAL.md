@@ -8,53 +8,6 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
-## Session 10 — 2026-08-12 — M3.3: fixed-tick loop and the SIM/PRESENTATION boundary
-
-**Scope:** execute the M3.3 slate (gap-close Wave 6): the platform-owned 30 Hz
-accumulator, fixed-only snapshot extraction, double-buffered prev/curr, and the game
-present glue that owns interpolation and the single fixed→float conversion.
-**Outcome:** M3.3 complete. `eng_game` (game/present.h) is the boundary owner; the
-sandbox now runs a deterministic 64-unit orbit demo through the full sim→snapshot→
-interpolate→DrawItem path, validation-clean.
-
-### What landed
-
-- **`engine/game/`** — `RenderSnapshot` (slot-indexed fixed-only units + stable
-  EntityIds), `snapshot_extract` (const, hash-neutral), `present_advance` (accumulator
-  clamped by `SIM_MAX_CATCHUP_S`, whole-tick `sim_tick` calls, prev/curr double
-  buffer), and `present_build_draw_items` (the one fixed→float + interpolation point;
-  sim-y maps to world-z, facing rotates cubes). The renderer seam is untouched — it
-  still receives only `DrawItem[]` + `FrameView`.
-- **Sandbox rework** — the programmatic 500-cube field is gone; 64 sim units orbit
-  deterministically (per-tick `SET_VELOCITY` from `fix_sin`/`fix_cos` tables, no RNG,
-  no floats). Sim ticks even when rendering is skipped (minimized/null) — the M0.3
-  "sim keeps ticking" policy, now real.
-- **Present suite** (5 tests, CTest `present`): extraction is fixed/non-mutating/
-  slot-ordered; render-rate independence is proven headlessly (60/30/mixed-fps frame
-  splits over one sim-second → identical 30 ticks and identical hashes); the 0.25 s
-  catch-up clamp runs exactly 7 ticks; prev/curr double-buffer semantics; interpolation
-  math at alpha=0.5 (x=50, sim-y→world-z) and dead-slot skipping.
-
-### Verification
-
-- MSVC `ci` preset (`/WX`): Debug + Release clean; **26/26 CTest entries green** in
-  both configs (25 existing + `present`).
-- Oracle untouched: `sim_determinism` still ends at `0x637628abff59c823`; mutation
-  still `tick=4321 field=position_x entity=7`; the full-capacity test (G32) and the
-  hash-coverage guard (G24) ride along.
-- Sandbox (RTX 4070 Ti, validation on): `objects=64 batches=1 scene_draws=1
-  total_draws=3 allocs=12`; 600-frame run with screenshot; zero validation messages;
-  clean exit. Deterministic per-run: same seed, same orbit, same stats.
-- Boundary intact: `eng_game → sim + render_common + core + math`; render still has no
-  sim include; `engine_tests` remains user32-free (window TU never linked).
-
-### Next
-
-M3.4 (sim flag pinning + isolation gate) is the separate slate; Phase 4 (assets) and
-Phase 5 (gameplay) may begin once M3.4 holds.
-
----
-
 ## Session 09 — 2026-08-12 — M3.2: deterministic systems and ordered schedule
 
 **Scope:** move the M3.1 ECS through explicit ordered systems and typed events without beginning the

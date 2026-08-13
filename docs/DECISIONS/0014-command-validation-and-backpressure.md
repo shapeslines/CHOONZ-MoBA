@@ -36,8 +36,8 @@ turns this boundary into the wire contract, so the policy must be decided before
 - **Drop-oldest / overwrite is forbidden**: losing a damage event deterministically would
   fork combat resolution. The only sanctioned pressure response is rejecting the
   publishing command.
-- The rejected-command count is surfaced on the F1 overlay in the sandbox (presentation
-  read only — never hashed, never fed back).
+- A rejected-command counter or diagnostic may be added later on the presentation side,
+  but it is not part of authoritative state and is not implemented by this decision.
 
 ## Consequences
 
