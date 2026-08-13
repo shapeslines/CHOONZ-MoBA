@@ -63,7 +63,7 @@ presentation state or timing to feed back into `eng_sim`.
 | S0 | Land and rebaseline | branch starts at merged PR #17 and the untouched M3.2 oracle is recorded | queued |
 | S1 | Snapshot storage | arena-backed fixed-only prev/curr snapshots size and initialize transactionally | queued |
 | S2 | Snapshot extraction | ascending entity extraction produces stable IDs and exact fixed fields without mutating world | queued |
-| S3 | Platform accumulator | variable frame deltas call exactly the expected whole 30 Hz ticks under the catch-up clamp | queued |
+| S3 | Platform accumulator | variable frame deltas call exactly the expected whole 30 Hz ticks under the catch-up clamp | in progress — window-free helper and focused tests green at `f46d344`; sandbox migration remains |
 | S4 | Present glue | interpolation and the single fixed→float conversion build renderer inputs without a sim dependency in render | queued |
 | S5 | Runtime integration | normal, high, low, and minimized render rates preserve one sim hash stream and smooth snapshots | queued |
 | S6 | Close M3.3 | full matrix, tests, boundary gates, owner interaction check if needed, docs, acceptance, and GitHub gates are green | queued |
