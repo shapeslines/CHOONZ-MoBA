@@ -75,7 +75,13 @@ Goal: reconcile PRs #41/#42/#43/#46 and add no-mutation coverage.
 
 Done means: normal order is unchanged and every overflow/corruption follows its specified failure path.
 
-Status: pending.
+Status: complete locally. The accepted PR #41/#42/#43/#46 guards are retained and extended so Array
+and HashMap allocation-byte multiplication, arena initialization and all pointer/end/rounding
+arithmetic, and intrusive free-list state fail before mutation. Existing container APIs and normal
+fresh/LIFO allocation order are unchanged. Persistent tests cover 13 fatal invariant diagnostics plus
+mutation-free Pool/HandlePool null storage, full/overfull counts, invalid heads/links, missing
+generation storage, and invalid generation state. Dev and `/WX` Debug/Release focused gates pass 3/3;
+the complete dev Debug suite passes 35/35.
 
 ### S4 — Platform and shader boundaries
 
@@ -133,5 +139,5 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Reconcile PR #41/#42/#43/#46 into the core-memory slice, add persistent no-mutation and invariant
-tripwires, and do not import the preserved unfinished S22 or PRs #47-#50.
+Reconcile PR #31/#32/#37/#39 into the platform/shader boundary slice; keep asset APIs, PRs #47-#50,
+and unfinished S22 outside the branch.

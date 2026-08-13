@@ -88,6 +88,17 @@ In progress. This section must account for every source diff before ready state.
 - PR #30: retained and repaired. Least privilege and verified v5.0.1 SHA apply to all three current
   checkout uses; `workflow_dispatch` supplies the missing recovery path; both Vulkan SDK installs use
   `--source winget` to avoid the historical ambient `msstore` failure.
+- PR #41: retained and repaired. The length-saturation guard remains before `len + 1`; capacity and
+  allocation-byte multiplication now use always-on checked arithmetic, with persistent diagnostic
+  tripwires instead of the source branch's structural-only proof.
+- PR #42: retained and repaired. Offset/commit/reserved, address, alignment, end, and rounding guards
+  remain before mutation; arena initialization is now transactional and rejects invalid committed or
+  address-range state before replacing the destination.
+- PR #43: retained and repaired. Capacity saturation is rejected before doubling, and both new and
+  released slot-byte calculations use the same checked multiplication boundary.
+- PR #46: retained and repaired. Pool and HandlePool allocation reject missing storage, invalid
+  count/head/next state, and invalid generation state without changing slots, counts, generations, or
+  free heads. Existing ascending fresh allocation and LIFO reuse remain unchanged.
 
 ### S2 — CI recovery and fresh-walk
 
@@ -105,6 +116,22 @@ In progress. This section must account for every source diff before ready state.
   commit, push, PR, or external action in flight.
 - S2 disposition: PASS.
 
+### S3 — Core memory and containers
+
+- Persistent fatal gate: 13/13 subprocess modes emitted their exact always-on invariant diagnostic in
+  both Debug and Release, covering Array length/capacity/bytes, HashMap capacity/bytes, and arena
+  initialization/state/address/alignment/end/commit-rounding failures.
+- Direct mutation gate: Pool and HandlePool corruption matrices reject null storage, full and
+  overfull counts, sentinel/out-of-range heads, out-of-range next links, missing generation storage,
+  and invalid generation values without changing authoritative state.
+- Normal behavior: `containers` passes 16 tests and 2,810 checks; existing ascending fresh allocation,
+  LIFO reuse, stale-handle rejection, Array growth, and HashMap growth order remain green.
+- Focused dev Debug/Release: 3/3 (`mem`, `containers`, `core_invariant_tripwire`) in each configuration.
+- Focused `/WX` Debug/Release: affected targets build cleanly and the same 3/3 tests pass in each.
+- Affected full dev Debug gate: all targets build and CTest passes 35/35, including the unchanged
+  10,000-tick determinism and binary-parity gates.
+- S3 disposition: PASS pending checkpoint publication.
+
 ## NEXT
 
-Reconcile PRs #41/#42/#43/#46 only; preserve PRs #47-#50 and unfinished S22 separately.
+Reconcile PRs #31/#32/#37/#39 only; preserve asset work, PRs #47-#50, and unfinished S22 separately.

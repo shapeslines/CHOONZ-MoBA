@@ -12,6 +12,10 @@
 
 struct Obj { uint32_t a, b; };   // >= 4 bytes for the intrusive free list
 
+static void set_free_link(Obj* slot, uint32_t next) {
+    memcpy(slot, &next, sizeof(next));
+}
+
 // Per-test backing arena: reserve 64 MB of address space (pages commit lazily), give
 // out an Allocator, release on scope exit. No exceptions are thrown, so the dtor is
 // safe under /EHs-c-.
@@ -313,6 +317,86 @@ TEST(containers, handlepool_forged_and_reuse) {
         CHECK(handle_gen(h2[i]) == 2u);                          // each slot reused once
     }
     handlepool_free_all(&hp);
+}
+
+TEST(containers, corrupt_pool_allocation_is_mutation_free) {
+    CHECK(pool_alloc<Obj>(nullptr) == POOL_INVALID);
+
+    Obj slots[2]{{11u, 12u}, {21u, 22u}};
+    Obj before[2]{};
+    Pool<Obj> p{};
+    p.slots = slots; p.cap = 2u; p.count = 0u; p.free_head = 2u;
+    memcpy(before, slots, sizeof(slots));
+    CHECK(pool_alloc(&p) == POOL_INVALID);
+    CHECK(p.count == 0u && p.free_head == 2u && memcmp(before, slots, sizeof(slots)) == 0);
+
+    p.free_head = 0u; p.count = 2u;
+    memcpy(before, slots, sizeof(slots));
+    CHECK(pool_alloc(&p) == POOL_INVALID);
+    CHECK(p.count == 2u && p.free_head == 0u && memcmp(before, slots, sizeof(slots)) == 0);
+
+    p.count = 3u;
+    CHECK(pool_alloc(&p) == POOL_INVALID);
+    CHECK(p.count == 3u && p.free_head == 0u);
+
+    p.count = 0u; p.free_head = POOL_INVALID;
+    CHECK(pool_alloc(&p) == POOL_INVALID);
+    CHECK(p.count == 0u && p.free_head == POOL_INVALID);
+
+    p.free_head = 0u; set_free_link(&slots[0], 2u);
+    memcpy(before, slots, sizeof(slots));
+    CHECK(pool_alloc(&p) == POOL_INVALID);
+    CHECK(p.count == 0u && p.free_head == 0u && memcmp(before, slots, sizeof(slots)) == 0);
+
+    p.slots = nullptr; p.count = 0u; p.free_head = 0u;
+    CHECK(pool_alloc(&p) == POOL_INVALID);
+    CHECK(p.count == 0u && p.free_head == 0u);
+}
+
+TEST(containers, corrupt_handlepool_allocation_is_mutation_free) {
+    Obj value{99u, 100u};
+    CHECK(handle_is_null(handlepool_alloc<Obj>(nullptr, value)));
+
+    Obj slots[2]{{11u, 12u}, {21u, 22u}};
+    Obj before[2]{};
+    uint32_t generations[2]{0u, 0u};
+    uint32_t generations_before[2]{};
+    HandlePool<Obj> hp{};
+    hp.slots = slots; hp.gen = generations; hp.cap = 2u; hp.count = 0u; hp.free_head = 2u;
+    memcpy(before, slots, sizeof(slots));
+    memcpy(generations_before, generations, sizeof(generations));
+    CHECK(handle_is_null(handlepool_alloc(&hp, value)));
+    CHECK(hp.count == 0u && hp.free_head == 2u && memcmp(before, slots, sizeof(slots)) == 0);
+    CHECK(memcmp(generations_before, generations, sizeof(generations)) == 0);
+
+    hp.free_head = 0u; hp.count = 2u;
+    memcpy(before, slots, sizeof(slots));
+    CHECK(handle_is_null(handlepool_alloc(&hp, value)));
+    CHECK(hp.count == 2u && hp.free_head == 0u && memcmp(before, slots, sizeof(slots)) == 0);
+
+    hp.count = 3u;
+    CHECK(handle_is_null(handlepool_alloc(&hp, value)));
+    CHECK(hp.count == 3u && hp.free_head == 0u);
+
+    hp.count = 0u; hp.free_head = POOL_INVALID;
+    CHECK(handle_is_null(handlepool_alloc(&hp, value)));
+    CHECK(hp.count == 0u && hp.free_head == POOL_INVALID);
+
+    hp.free_head = 0u; set_free_link(&slots[0], 2u);
+    memcpy(before, slots, sizeof(slots));
+    CHECK(handle_is_null(handlepool_alloc(&hp, value)));
+    CHECK(hp.count == 0u && hp.free_head == 0u && memcmp(before, slots, sizeof(slots)) == 0);
+
+    set_free_link(&slots[0], POOL_INVALID); generations[0] = HANDLE_GEN_MASK + 1u;
+    memcpy(before, slots, sizeof(slots));
+    memcpy(generations_before, generations, sizeof(generations));
+    CHECK(handle_is_null(handlepool_alloc(&hp, value)));
+    CHECK(hp.count == 0u && hp.free_head == 0u && memcmp(before, slots, sizeof(slots)) == 0);
+    CHECK(memcmp(generations_before, generations, sizeof(generations)) == 0);
+
+    hp.gen = nullptr;
+    CHECK(handle_is_null(handlepool_alloc(&hp, value)));
+    CHECK(hp.count == 0u && hp.free_head == 0u);
 }
 
 TEST(containers, array_str_edge_cases) {

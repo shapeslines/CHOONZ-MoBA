@@ -72,6 +72,9 @@ target_link_libraries(sim_determinism_tests PRIVATE eng::sim moba_warnings moba_
 add_executable(sim_oracle_probe sim/sim_oracle_probe.cpp)
 target_link_libraries(sim_oracle_probe PRIVATE eng::sim moba_warnings moba_options)
 
+add_executable(core_invariant_tripwire core/core_invariant_tripwire.cpp)
+target_link_libraries(core_invariant_tripwire PRIVATE eng::core moba_warnings moba_options)
+
 if(MOBA_UBSAN)
     add_executable(sim_ubsan_tripwire sim/sim_ubsan_tripwire.cpp)
     target_link_libraries(sim_ubsan_tripwire PRIVATE moba_warnings moba_options)
@@ -85,6 +88,10 @@ moba_stage_asan_runtime()
 add_test(NAME mem         COMMAND engine_tests --suite mem)
 add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
+add_test(NAME core_invariant_tripwire
+    COMMAND ${CMAKE_COMMAND}
+            -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/core/check_core_invariant_tripwire.cmake")
 add_test(NAME platform    COMMAND engine_tests --suite platform)  # file I/O (M2.1)
 add_test(NAME serialize   COMMAND engine_tests --suite serialize)
 add_test(NAME sim_component_pool COMMAND engine_tests --suite sim_component_pool)
