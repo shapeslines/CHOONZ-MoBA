@@ -2,12 +2,13 @@
 
 > Reference map back to the canonical System-Architecture library. This repo stays the
 > authoritative home of its own implementation docs; the deep-dive linked below is the
-> system-level synthesis. Generated 2026-06-17; refreshed 2026-08-13 (M3.3 accepted, ADR
+> system-level synthesis. Generated 2026-06-17; refreshed 2026-08-13 (M3.4 landed, security
+> consolidation acceptance in progress, ADR
 > index current). Refresh from the library when it changes.
 
 **Layer:** Game · standalone C++/Vulkan engine — **off-spine**, a separate universe from the Shapes//Lines data spine
 **Role:** Custom from-scratch MOBA/RTS-hybrid game engine (C++17, raw Vulkan 1.3, own ECS, netcode, and math); no shared auth, no database, no GromDB relation — isolation is by design.
-**Status:** Phase 3 M3.0–M3.3 complete. The platform-free 30 Hz Q16.16 simulation owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal schedule, canonical state hash/diff, replay-v1 codec and CLI, and an exact 10,000-tick determinism proof. Platform now owns fixed-step cadence and interpolation alpha; `eng_game` owns arena-backed snapshots, interpolation, fixed→float conversion, and `DrawItem` construction. M3.4 structural determinism is queued separately in `docs/slate-moba-phase3-m3.4.md`.
+**Status:** Phase 3 M3.0–M3.4 is complete on `main`. The platform-free 30 Hz Q16.16 simulation owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal schedule, canonical state hash/diff, replay-v1 codec and CLI, and an exact 10,000-tick determinism proof. Platform owns fixed-step cadence and interpolation alpha; `eng_game` owns arena-backed snapshots, interpolation, fixed→float conversion, and `DrawItem` construction. M3.4 now structurally enforces the compiler, dependency, and test/game-binary parity contracts. PR #51 consolidates the interphase security boundary before Phase 4; its implementation does not alter authoritative simulation or replay bytes.
 
 **Canonical deep-dive:** https://github.com/shapeslines/System-Architecture/blob/main/projects/moba.md
 &nbsp;&nbsp;(local sibling: `../System-Architecture/projects/moba.md`)

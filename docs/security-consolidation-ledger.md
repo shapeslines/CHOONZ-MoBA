@@ -1,8 +1,8 @@
 # Security consolidation provenance ledger
 
 This is the tracked execution/provenance record for `codex/security-consolidation`. Source pull
-requests remain immutable audit inputs. Each final source hunk will be marked `retained`, `repaired`,
-or `intentionally superseded` before the consolidated PR becomes ready.
+requests remain immutable audit inputs. Every final source hunk is marked `retained`, `repaired`, or
+`intentionally superseded` before the consolidated PR becomes ready.
 
 Inventory captured from GitHub on 2026-08-13 against `main` at
 `63f0b1dedad1c3f509843f68f32c24f6f52aa55e`.
@@ -80,7 +80,10 @@ authority. Initial disposition: intentionally superseded after final provenance 
 
 ## Final hunk map
 
-In progress. This section must account for every source diff before ready state.
+Complete. A fresh commit-by-commit comparison on 2026-08-13 verified every path changed by the 17
+approved heads is changed by the consolidation, then compared each source guard with the current
+implementation and its permanent fixture. The entries below are the semantic hunk dispositions;
+none is carried solely by source-branch history.
 
 - PR #27: retained and repaired. Direct-child temp, file, and reparse protections remain; persistent
   tests now cover root, temp root, source/outside root, nested, file, and junction. A newly found case
@@ -231,11 +234,22 @@ In progress. This section must account for every source diff before ready state.
 - Direct determinism: 10,000 ticks retain final `0x637628abff59c823`, stream
   `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`; the controlled mutation first diverges at
   tick 4321 on `position_x`, entity 7 (178,690 checks).
-- S7 disposition: in progress pending fresh-walk, Vulkan, full hunk provenance, independent reviews,
-  and exact-head GitHub checks.
+- Fresh walk: a guarded direct-temp clone of checkpoint `79721a8` configured cleanly, built 92 Debug
+  targets, passed 39/39, classified a real 90-frame screenshot, and removed the clone successfully.
+- Vulkan: local NVIDIA RTX 4070 Ti / Vulkan 1.3 / validation-on execution completed 90 frames and a
+  clean exit; the retained 1280x720, 2,764,854-byte screenshot was visually inspected.
+- Provenance: live GitHub heads still match every recorded SHA. PRs #27/#29 retain one historical red
+  fresh-walk each from the pre-code winget source failure; their other six checks are green. Every
+  approved source path is present in the consolidated diff. PR #26 has no required unique code or
+  current authority; excluded #47/#48/#49/#50 change `str.h`, `render_handle_table.cpp`,
+  `tga_direct.cpp`, and `render_batch.cpp`, none of which is changed here.
+- Scope diff: no `engine/sim`, replay codec/container, asset API, or logic-hash file changed. The
+  replay CLI parser is the only replay-facing implementation change and retains all on-disk bytes.
+- S7 local disposition: PASS. Independent security/acceptance verdicts and final exact-head GitHub
+  checks remain before ready state.
 
 ## NEXT
 
-Run final source-hunk provenance and the complete acceptance battery; preserve simulation/replay
-encoding, asset work, PRs #47-#50, and
-unfinished S22 separately.
+Publish the local-acceptance record, obtain both independent verdicts, require exact-head CI/CodeQL,
+and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
+unfinished S22 separately; stop before owner merge.

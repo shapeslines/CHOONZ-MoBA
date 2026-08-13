@@ -140,12 +140,16 @@ Goal: account for every source hunk and prove the full permanent regression batt
 Done means: retained/repaired/superseded map is complete, all local gates pass, two fresh reviews pass,
 and exact-head CI/CodeQL are green before ready state.
 
-Status: in progress. The `/WX` Debug/RelWithDebInfo/Release builds and all 39 CTest entries in each
+Status: local acceptance complete. The `/WX` Debug/RelWithDebInfo/Release builds and all 39 CTest entries in each
 configuration are green. Debug-ASan initially exposed that the visualizer negative fixture could not
 start because its executable directory lacked the repository's app-local MSVC ASan runtime; the
 shared staging helper is now applied there and the complete Debug-ASan suite passes 39/39. The
 clang-cl/UBSan gate passes 6/6, and the unchanged direct oracle plus controlled-divergence proof pass.
-Fresh-walk, final Vulkan evidence, provenance reconciliation, reviews, and exact-head checks remain.
+A guarded fresh clone builds 92 targets, passes 39/39, and completes a classified 90-frame Vulkan
+run. A separate validation-on RTX 4070 Ti run produced a visually inspected 2,764,854-byte 1280x720
+screenshot. All 17 approved source heads/paths were freshly reconciled; PR #26 has no required unique
+content, excluded #47-#50 are absent, and no sim/replay-codec/asset/logic-hash file changed.
+Independent reviews and final exact-head CI/CodeQL remain before ready state.
 
 ### S8 — Owner-gated landing and retirement
 
@@ -167,5 +171,6 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Run the full provenance and acceptance slice; keep simulation/replay encoding, asset APIs,
-PRs #47-#50, and unfinished S22 outside the branch.
+Commit the local-acceptance record, obtain fresh security and acceptance verdicts, require exact-head
+CI/CodeQL, and mark PR #51 ready only after all are green. Stop before the separate owner merge gate;
+keep simulation/replay encoding, asset APIs, #47-#50, and unfinished S22 outside the branch.

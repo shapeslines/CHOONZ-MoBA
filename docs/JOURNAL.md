@@ -8,6 +8,59 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 12 — 2026-08-13 — Interphase security consolidation
+
+**Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and
+prove the hardened boundary without changing simulation behavior, replay encoding, asset APIs, or
+starting Phase 4.
+**Outcome:** implementation and local acceptance are complete on PR #51. The exact-head independent
+security/acceptance reviews and GitHub checks remain the readiness gate; merge remains a separate
+owner action.
+
+### What changed
+
+- CI now supports manual recovery, has an explicit `contents: read` scope, pins all three checkout
+  uses to the verified v5.0.1 commit, and selects the winget community source explicitly. Fresh-walk
+  cleanup accepts only a non-root direct temp child and rejects roots, outside/nested paths, files,
+  source-self targets, and reparse points before deletion.
+- Array, arena, HashMap, Pool, and HandlePool guards cover allocation multiplication, capacity/address/
+  alignment/end arithmetic, transactional initialization, and corrupt intrusive free lists while
+  preserving their public signatures and normal allocation order.
+- Platform atomic writes create their predictable `.tmp` without overwrite; Vulkan loads only from
+  System32 or a validated explicit SDK path; offline declarations and runtime shader paths fail
+  closed on missing, outside, duplicate, or truncated inputs.
+- Sandbox, replay, test-harness, visualizer, and classifier inputs have explicit canonical/bounded
+  contracts and permanent no-side-effect fixtures. The classifier reads at most 4 MiB plus one probe
+  byte and reports the corrected 15-case adversarial matrix.
+- Debug draw and null-renderer submission capacity checks use ordered subtraction and guarded
+  multiplication. Corrupt or over-capacity state is rejected before caller-item reads or count/vertex
+  mutation.
+
+### Verification and loop findings
+
+- `/WX` Debug, RelWithDebInfo, and Release builds pass; all 39 CTest entries pass in each
+  configuration. Debug-ASan passes 39/39 and clang-cl 19.1.5 plus UBSan passes 6/6.
+- The first ASan pass exposed a missing app-local runtime beside `visualize.exe` (`0xc0000135`). The
+  target now uses the repository's existing staging helper, after which the complete suite passed.
+- A guarded fresh clone of checkpoint `79721a8` configured, built 92 targets, passed 39/39, and
+  completed `SANDBOX_SMOKE=PASS`. A retained RTX 4070 Ti run completed 90 validation-clean frames;
+  its visually inspected 1280×720 screenshot is 2,764,854 bytes.
+- The direct 10,000-tick proof still reports 923 commands, final `0x637628abff59c823`, stream
+  `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`. Controlled mutation still first diverges at
+  `tick=4321 field=position_x entity=7` across 178,690 checks.
+- Every source path from #27/#29–#46 is present and semantically retained or strengthened. PR #26's
+  only absent unique artifact is a stale gap-analysis snapshot; #47–#50 touch four explicitly
+  excluded paths absent from the consolidation.
+
+### Next
+
+Obtain fresh-context security and acceptance verdicts on the final recorded head, require exact-head
+CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
+the squash merge and supersession closure of #26/#27/#29–#46. Retain their branches/worktrees; open
+M4.0 only from the resulting synchronized green `main`.
+
+---
+
 ## Session 11 — 2026-08-13 — M3.4 structural determinism closure
 
 **Scope:** centralize the mature Phase 3 simulation compiler contract, prove the same `eng_sim`

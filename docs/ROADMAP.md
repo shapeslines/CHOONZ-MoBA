@@ -448,7 +448,8 @@ so Phase 4 consumes exactly this. **Exercises:** Renderer seam, Build (PRIVATE V
 **determinism harness built before there is content to break it.** This is the project's spine and the
 reviews' most-watched risk.
 
-> **Complete:** M3.0–M3.4. **Next:** Phase 4 (assets). **Later:** Phase 5 gameplay begins on the cooked asset seams.
+> **Complete:** M3.0–M3.4. **Gate:** land the interphase security consolidation. **Next:** Phase 4
+> (assets). **Later:** Phase 5 gameplay begins on the cooked asset seams.
 > 🔴 Determinism is global and fragile: one stray float, unordered iteration, or wall-clock read
 > desyncs. The state-hash self-check is the only humane way to catch it — **build it first.**
 
@@ -582,10 +583,28 @@ test probe and both Vulkan/null game binaries from the same archive; all emit 92
 `0xab96814425ba80a4`. Full `/WX` Debug, RelWithDebInfo, Release, and Debug-ASan suites pass 32/32;
 clang-cl 19.1.5 plus UBSan passes its runtime tripwire and instrumented oracle; local and hosted
 fresh walks complete 90 validation-clean frames. See the closed execution record in
-[`slate-moba-phase3-m3.4.md`](slate-moba-phase3-m3.4.md). Phase 4 may open after owner-approved PR
-merge and a green synchronized `main`.
+[`slate-moba-phase3-m3.4.md`](slate-moba-phase3-m3.4.md). PR #38 landed as `63f0b1de`; the
+interphase security gate below is the remaining pre-Phase-4 boundary.
 **Risks:** flag drift between binaries is a silent desync source — single toolchain include prevents it.
 **Exercises:** Build (sim isolation), Tooling, Determinism.
+
+---
+
+### Interphase security consolidation — boundary hardening  · S  🔒 LOCAL ACCEPTANCE COMPLETE 2026-08-13
+**Goal:** reconcile the accepted security drafts into one reviewable head before asset APIs expand the
+runtime boundary.
+**Observed:** PR #51 retains or strengthens every approved hunk from #27 and #29–#46. Core allocation
+arithmetic and pool corruption fail before mutation; platform atomic writes refuse pre-existing
+temporaries; Vulkan and shader paths fail closed; sandbox/replay/test/visualizer inputs are canonical
+and bounded; renderer capacity checks are overflow-safe; CI has a manual recovery entrypoint,
+read-only token scope, immutable checkout pins, and an explicit winget source. Full `/WX` Debug,
+RelWithDebInfo, and Release suites pass 39/39 in each configuration; Debug-ASan passes 39/39;
+clang-cl/UBSan passes 6/6; a clean fresh walk and an RTX 4070 Ti run complete 90 validation-clean
+frames. Replay v1, command encoding, `SIM_LOGIC_HASH = 0xab96814425ba80a4`, final oracle
+`0x637628abff59c823`, and exact tick-4321 divergence remain unchanged.
+**Gate:** fresh-context security/acceptance verdicts and exact-head CI/CodeQL must pass before PR #51
+becomes ready. Merge and stale-draft retirement remain separately owner-approved. No M4.0 asset work
+is part of this consolidation.
 
 ---
 
@@ -594,8 +613,8 @@ merge and a green synchronized `main`.
 **Goal:** the path from source files to GPU/CPU memory behind stable handles, built bottom-up: direct
 trivial loaders first, then the offline cooker and the unified baked format, then glTF and hot-reload.
 
-> **Now:** M4.0 → M4.4. **Next:** Phase 5 (gameplay needs real meshes/maps). **Later:** hot-reload
-> polish.
+> **Blocked:** owner-merge PR #51 and synchronize a green `main`. **Then:** M4.0 → M4.4. **Next:**
+> Phase 5 (gameplay needs real meshes/maps). **Later:** hot-reload polish.
 
 ---
 
