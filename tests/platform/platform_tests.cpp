@@ -146,8 +146,10 @@ static bool test_create_junction(const wchar_t* link_path, const wchar_t* target
 TEST(platform, rooted_file_read_binds_components_and_rejects_junction_escape) {
     OwnedTestDirectory root{};
     OwnedTestDirectory outside{};
-    root.custody = INVALID_HANDLE_VALUE;
-    outside.custody = INVALID_HANDLE_VALUE;
+    root.scope_custody = INVALID_HANDLE_VALUE;
+    root.directory_custody = INVALID_HANDLE_VALUE;
+    outside.scope_custody = INVALID_HANDLE_VALUE;
+    outside.directory_custody = INVALID_HANDLE_VALUE;
     const bool root_owned = test_create_owned_directory("root", &root);
     CHECK(root_owned);
     if (!root_owned) return;
@@ -241,6 +243,32 @@ TEST(platform, rooted_file_read_binds_components_and_rejects_junction_escape) {
     CHECK(DeleteFileA(outside_path) != 0);
     CHECK(test_release_owned_directory(&root));
     CHECK(test_release_owned_directory(&outside));
+}
+
+TEST(platform, owned_test_directory_scope_cannot_be_replaced_while_bound) {
+    OwnedTestDirectory owned{};
+    owned.scope_custody = INVALID_HANDLE_VALUE;
+    owned.directory_custody = INVALID_HANDLE_VALUE;
+    const bool created = test_create_owned_directory("custody", &owned);
+    CHECK(created);
+    if (!created) return;
+
+    wchar_t moved[160];
+    wchar_t moved_child[192];
+    const int moved_chars = swprintf_s(moved, L"%s_moved", owned.wide_scope_path);
+    const int moved_child_chars = swprintf_s(
+        moved_child, L"%s\\work_moved", owned.wide_scope_path);
+    CHECK(moved_chars > 0 && moved_child_chars > 0);
+    if (moved_chars > 0 && moved_child_chars > 0) {
+        CHECK(MoveFileExW(owned.wide_scope_path, moved, 0u) == 0);
+        CHECK(MoveFileExW(owned.wide_path, moved_child, 0u) == 0);
+        CHECK(GetFileAttributesW(owned.wide_scope_path) != INVALID_FILE_ATTRIBUTES);
+        CHECK(GetFileAttributesW(owned.wide_path) != INVALID_FILE_ATTRIBUTES);
+        CHECK(GetFileAttributesW(moved) == INVALID_FILE_ATTRIBUTES);
+        CHECK(GetFileAttributesW(moved_child) == INVALID_FILE_ATTRIBUTES);
+    }
+    CHECK(test_release_owned_directory(&owned));
+    CHECK(GetFileAttributesW(owned.wide_scope_path) == INVALID_FILE_ATTRIBUTES);
 }
 
 TEST(platform, file_write_then_read_roundtrip) {

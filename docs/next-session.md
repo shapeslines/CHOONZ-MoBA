@@ -38,8 +38,10 @@ commit/check identity:
 - All eight GitHub CI/CodeQL checks passed on earlier head `acc60b4`. The final reviewed security
   repair head must pass the same exact-head gate before PR #52 becomes ready.
 - Exact head `82c4213` passed local acceptance but stayed draft after full security review found a
-  fixed-path pre-delete in one asset test. The create-new custody-bound shared fixture repair passes
-  focused rereview and Debug 43/43; its successor head is the only landing candidate.
+  fixed-path pre-delete in one asset test. The shared fixture now atomically creates its scope and
+  child, binds their identities through handle-based cleanup, and proves both names cannot be
+  replaced while live. Focused rereview and Debug 43/43 pass; its successor head is the only landing
+  candidate.
 
 ## First action
 

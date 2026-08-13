@@ -321,7 +321,8 @@ static void test_put_u32(uint8_t* out, uint32_t value) {
 
 TEST(assets, loose_tga_and_wav_files_load_transactionally) {
     OwnedTestDirectory owned{};
-    owned.custody = INVALID_HANDLE_VALUE;
+    owned.scope_custody = INVALID_HANDLE_VALUE;
+    owned.directory_custody = INVALID_HANDLE_VALUE;
     const bool directory_owned = test_create_owned_directory("assets", &owned);
     CHECK(directory_owned);
     if (!directory_owned) return;

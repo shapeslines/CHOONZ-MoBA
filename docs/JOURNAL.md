@@ -51,10 +51,12 @@ path is unchanged.
 - Two independent focused security reviews pass the portable identity, pairwise arena ownership,
   rooted junction/hard-link rejection, and uniquely owned fixture-cleanup contracts.
 - Fresh full review of checkpoint `82c4213` then found the loose-load regression still pre-deleted
-  fixed working-directory filenames. Tests now share one create-new, custody-bound directory helper;
-  the asset fixture writes and removes only files whose creation it recorded. Focused rereview and
-  the complete Debug suite pass with no fixture residue. A new exact head must earn the final hosted
-  and full-review gates.
+  fixed working-directory filenames. Tests now share one identity-bound helper that atomically
+  creates both its outer scope and working child through `NtCreateFile`, denies replacement for the
+  full custody window, verifies the child file ID before handle disposition, and deletes the outer
+  scope through its original creation handle. The asset fixture writes and removes only recorded
+  files. A hostile rename regression, focused rereviews, and the complete Debug suite pass with no
+  residue. A new exact head must earn the final hosted and full-review gates.
 - GitHub CI/CodeQL passed all eight checks on implementation head `dc5e208`; the final documentation
   head must repeat that exact-head result before readiness.
 

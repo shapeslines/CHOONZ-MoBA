@@ -109,10 +109,12 @@ record and commit the green checkpoint, then advance.
 - Real junction and hard-link fixtures live only in create-new uniquely owned directories with held
   custody handles and exact nonrecursive teardown. Two independent focused security rereviews pass.
 - Exact head `82c4213` passed fresh acceptance but full security review found one remaining test-only
-  fixed-path pre-delete. The asset and platform fixtures now share the create-new custody helper;
-  every failure/success path removes only successfully created owned files. Focused rereview passes,
-  Debug assets/platform pass 24 cases and 316 checks, Debug CTest passes 43/43, and no fixture path
-  remains. `82c4213` is superseded and unmergeable.
+  fixed-path pre-delete. The asset and platform fixtures now share a helper that atomically creates
+  both its scope and working child, holds their custody handles, re-verifies the child's file ID at
+  handle-based disposition, and disposes the scope through its original creation handle. A hostile
+  regression proves neither name can be replaced while bound. Focused rereviews pass; Debug
+  assets/platform pass 25 cases and 326 checks, Debug CTest passes 43/43, and no fixture path remains.
+  `82c4213` and `c31bd1b` are superseded and unmergeable.
 - Final repaired tree: `/WX` Debug, RelWithDebInfo, and Release 43/43 each; Debug-ASan 43/43;
   clang-cl/UBSan 6/6; Debug/Release oracle unchanged; RTX 4070 Ti 90-frame validation-on screenshot
   passes through the rooted loader. Exact-head hosted checks and final acceptance remain.
