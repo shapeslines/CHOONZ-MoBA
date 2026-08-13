@@ -117,7 +117,7 @@ rate, math owns `FIX_ONE`, and sim derives the value that needs both.
 
 **Fixed-point is the sim's number system. Float is banned in sim code.**
 
-> **Resolved — Q16.16 (`int32_t`), MSVC-correct multiply.** Earlier drafts disagreed (Q16.16 vs Q32.32). We lock **Q16.16**: it compiles cleanly on MSVC, halves sim-state/snapshot/wire/hash size (matters for hundreds of units at 30 Hz), and the map fits its ±32768 range with huge margin (256 cells × 0.5 u = 128 units). The type is defined once in `math/fix.h`; sim/net/gameplay/tooling all reference that typedef and `FIX_ONE`, and wire size + hash layout follow from `sizeof(fix)`. Recorded as `DECISIONS/0007-fixed-point-sim-math.md`. If a future range problem appears, the single-typedef seam allows migrating to a wider format — but that is deferred, not pre-built.
+> **Resolved — Q16.16 (`int32_t`), MSVC-correct multiply.** Earlier drafts disagreed (Q16.16 vs Q32.32). We lock **Q16.16**: it compiles cleanly on MSVC, halves sim-state/snapshot/wire/hash size (matters for hundreds of units at 30 Hz), and the map fits its ±32768 range with huge margin (256 cells × 0.5 u = 128 units). The type is defined once in `math/fix.h`; sim/net/gameplay/tooling all reference that typedef and `FIX_ONE`, and wire size + hash layout follow from `sizeof(fix)`. Recorded as `DECISIONS/0002-fixed-point-sim-math.md`. If a future range problem appears, the single-typedef seam allows migrating to a wider format — but that is deferred, not pre-built.
 
 The IEEE-float determinism tar pit (x87 vs SSE, `/fp:fast` vs `/fp:precise`, FMA contraction, divergent `sinf`/`sqrtf`) is sidestepped entirely: **all sim scalars are `fix`; all sim transcendentals are table-driven**.
 

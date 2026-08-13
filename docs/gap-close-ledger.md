@@ -51,11 +51,11 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G5 | `docs/ARCHITECTURE.md:120` misnumbers fixed-point ADR as 0007 (is 0002) | open |
-| G6 | Root ARCHITECTURE.md map stale (ADR-index note; status) | open |
-| G7 | ROADMAP Phase 8 table still lists CI as untriggered | open |
-| G8 | `docs/sessions/` lacks retrospectives for sessions 03–09 | open |
-| G9 | ROADMAP M2.0/M2.1 lack `Status:` convention | open |
+| G5 | `docs/ARCHITECTURE.md:120` misnumbers fixed-point ADR as 0007 (is 0002) | **closed** (Wave 1) |
+| G6 | Root ARCHITECTURE.md map stale (ADR-index note; status) | **closed** (Wave 1) |
+| G7 | ROADMAP Phase 8 table still lists CI as untriggered | **closed** (Wave 1) |
+| G8 | `docs/sessions/` lacks retrospectives for sessions 03–09 | **closed** (Wave 1: 03, 06–09 backfilled; 04–05 already existed) |
+| G9 | ROADMAP M2.0/M2.1 lack `Status:` convention | **closed** (Wave 1) |
 
 ### Lens 3 — Build & toolchain
 
@@ -76,6 +76,7 @@ is the execution ledger.
 | G17 | CodeQL claimed-but-absent workflow | open (checks ran via GitHub default setup; workflow not committed) |
 | G18 | No perf/benchmark regression gate | open |
 | G19 | No enforced merge policy | **closed** (`main-gate` ruleset, Wave 0) |
+| G40 | No `.editorconfig` / templates | **closed** (Wave 1: .editorconfig + issue/PR templates) |
 
 ### Lens 5 — Determinism contract
 

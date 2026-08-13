@@ -3,7 +3,8 @@
 A multiplayer online battle arena built **from scratch in C++**, on a custom
 RTS-class game engine.
 
-> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0–M3.2 complete.** Build spine, ADRs,
+> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0–M3.2 complete** (tagged
+> `v0.3.0-m3.2`; `main` is gated by required CI checks via the `main-gate` ruleset). Build spine, ADRs,
 > Win32 window, memory arenas, float/fixed-point
 > math, containers, and a self-registering test harness on CTest + a pre-push gate
 > (determinism golden across `/fp:precise` + `/fp:fast`), plus GitHub Actions CI

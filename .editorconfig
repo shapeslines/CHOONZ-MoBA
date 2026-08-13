@@ -1,0 +1,32 @@
+# EditorConfig — mirror .gitattributes / repo conventions (see AGENTS.md + FIXES.md).
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Windows-native scripts keep CRLF (matches .gitattributes).
+[*.bat]
+end_of_line = crlf
+
+[*.cmd]
+end_of_line = crlf
+
+[*.ps1]
+end_of_line = crlf
+
+# Engine/tool sources: 4-space indent, no tabs.
+[*.{c,cc,cpp,h,hpp,inl,vert,frag,comp,geom,tesc,tese,rgen,rchit,rmiss,glsl,hlsl}]
+indent_style = space
+indent_size = 4
+
+[*.{md,txt,cmake}]
+indent_style = space
+indent_size = 2
+
+[CMakeLists.txt]
+indent_style = space
+indent_size = 2
