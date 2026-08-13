@@ -69,6 +69,9 @@ add_executable(sim_determinism_tests test_main.cpp sim/sim_determinism_tests.cpp
 target_include_directories(sim_determinism_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sim_determinism_tests PRIVATE eng::sim moba_warnings moba_options)
 
+# App-local MSVC ASan runtime for every test executable in this output directory.
+moba_stage_asan_runtime()
+
 # --- CTest registration: one entry per suite so a red test names the right module.
 # enable_testing() lives at the top level (required for add_test to register).
 add_test(NAME mem         COMMAND engine_tests --suite mem)

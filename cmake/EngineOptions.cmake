@@ -46,3 +46,36 @@ if(MOBA_ASAN)
     target_link_options(moba_options INTERFACE
         $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=address>)
 endif()
+
+# CTest can normalize a Windows environment that contains both `Path` and `PATH`,
+# dropping the compiler bin directory that owns MSVC's ASan runtime. Stage the DLL
+# app-locally in each executable directory that calls this helper; Windows then finds
+# it without relying on a developer-shell search path.
+function(moba_stage_asan_runtime)
+    if(NOT (MOBA_ASAN AND MSVC))
+        return()
+    endif()
+    get_filename_component(_moba_compiler_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(_moba_asan_name "clang_rt.asan_dynamic-x86_64.dll")
+    else()
+        set(_moba_asan_name "clang_rt.asan_dynamic-i386.dll")
+    endif()
+    set(_moba_asan_dll "${_moba_compiler_dir}/${_moba_asan_name}")
+    if(NOT EXISTS "${_moba_asan_dll}")
+        message(FATAL_ERROR "MOBA_ASAN runtime not found: ${_moba_asan_dll}")
+    endif()
+
+    if(CMAKE_CONFIGURATION_TYPES)
+        foreach(_moba_config IN LISTS CMAKE_CONFIGURATION_TYPES)
+            file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_moba_config}")
+            file(COPY_FILE "${_moba_asan_dll}"
+                 "${CMAKE_CURRENT_BINARY_DIR}/${_moba_config}/${_moba_asan_name}"
+                 ONLY_IF_DIFFERENT)
+        endforeach()
+    else()
+        file(COPY_FILE "${_moba_asan_dll}"
+             "${CMAKE_CURRENT_BINARY_DIR}/${_moba_asan_name}"
+             ONLY_IF_DIFFERENT)
+    endif()
+endfunction()
