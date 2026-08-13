@@ -16,6 +16,7 @@
 #include <cstdarg>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 #include "platform/platform.h"
 #include "platform/platform_vulkan.h"
 
@@ -282,11 +283,29 @@ void     platform_sleep_ms(uint32_t ms) { Sleep(ms); }
 // group never pulls this window TU.
 
 // ---- Vulkan loader (ADR-0004): hand-load vulkan-1.dll, hand back vkGetInstanceProcAddr ----
+static HMODULE load_vulkan_library(void) {
+    // A bare LoadLibrary call uses the process' ambient DLL search order. Prefer the
+    // system-installed loader and keep the explicit SDK fallback out of that search path.
+    HMODULE vklib = LoadLibraryExW(L"vulkan-1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (vklib) return vklib;
+
+    wchar_t sdk_root[1024] = {};
+    DWORD sdk_chars = GetEnvironmentVariableW(L"VULKAN_SDK", sdk_root, ARRAYSIZE(sdk_root));
+    if (sdk_chars == 0 || sdk_chars >= ARRAYSIZE(sdk_root)) return nullptr;
+
+    wchar_t sdk_loader[1024] = {};
+    if (swprintf_s(sdk_loader, ARRAYSIZE(sdk_loader), L"%ls\\Bin\\vulkan-1.dll", sdk_root) < 0)
+        return nullptr;
+    return LoadLibraryExW(sdk_loader, nullptr,
+                          LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
+}
+
 PlatformVkProc platform_vk_get_loader(void) {
     static HMODULE vklib = nullptr;
-    if (!vklib) vklib = LoadLibraryW(L"vulkan-1.dll");
+    if (!vklib) vklib = load_vulkan_library();
     if (!vklib) {
-        platform_log("platform: LoadLibrary(vulkan-1.dll) failed (%lu)\n", (unsigned long)GetLastError());
+        platform_log("platform: restricted Vulkan loader lookup failed (%lu)\n",
+                     (unsigned long)GetLastError());
         return nullptr;
     }
     return (PlatformVkProc)GetProcAddress(vklib, "vkGetInstanceProcAddr");
