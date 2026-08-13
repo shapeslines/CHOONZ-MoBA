@@ -3,7 +3,7 @@
 - **Status:** active
 - **Branch:** `codex/m4.1-cooker`
 - **Base:** `ac4d2b416c36992a988f80981a2419eb8e0ad2fd` (`main`)
-- **Pull request:** pending (PR #53 was consumed by the intervening security merge)
+- **Pull request:** draft PR #54 (PR #53 was consumed by the intervening security merge)
 - **Scope:** TGA + PCM WAV cooker, `.mba` v1, generated catalog, baked-only runtime
 - **Excluded:** PNG, glTF, packs, compression, incremental cooking, hot reload, gameplay, networking, simulation changes
 
@@ -49,6 +49,7 @@ and Release. Open a draft PR after the green checkpoint.
 - Known-byte texture/sound goldens, encode/inspect round trips, writer/output atomic
   failure, truncation/trailing input, and outer/typed-field corruption matrices pass.
 - `/WX` Debug and Release builds pass; each configuration passes 45/45 CTest entries.
+- Green checkpoint `d5cf3cf` was pushed and draft PR #54 opened.
 - The direct M4.0 registry loaders intentionally remain until S4 replaces them with
   the catalog-driven baked-only runtime in one vertical change.
 
