@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 static const uint64_t DETERMINISM_SEED = 1;
 static const uint32_t DETERMINISM_PLAYERS = 2;
@@ -97,8 +98,25 @@ TEST(sim_determinism, recorded_hash_stream_matches_independent_replay_for_10000_
     CHECK(replayed_final_hash == recorded_final_hash);
 }
 
-TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_entity_7) {
-    size_t size = record_determinism_replay(nullptr);
+// G18 perf smoke: the 10,000-tick record+hash path must stay inside a generous
+// CPU-time ceiling. This catches O(n^2)-style regressions (per-tick full-array
+// rescans, unordered view rebuilds), not micro-jitter — the ceiling is ~100x the
+// local Debug cost so loaded CI cannot trip it. CRT clock() is used, not the
+// platform timer, so this test file keeps linking eng_sim only.
+TEST(sim_determinism, ten_k_tick_record_stays_inside_cpu_time_ceiling) {
+    const double CEILING_SECONDS = 10.0;
+    std::clock_t t0 = std::clock();
+    uint64_t final_hash = 0;
+    size_t size = record_determinism_replay(&final_hash);
+    std::clock_t t1 = std::clock();
+    double cpu_seconds = static_cast<double>(t1 - t0) / static_cast<double>(CLOCKS_PER_SEC);
+    std::printf("  10k-tick record+hash: %.3f s CPU\n", cpu_seconds);
+    CHECK(size > 0);
+    CHECK(final_hash == 0x637628abff59c823ULL);   // oracle re-pinned in the smoke path
+    CHECK(cpu_seconds < CEILING_SECONDS);
+}
+
+TEST(sim_determinism, controlled_mutation_reports_tick_4321_position_x_entity_7) {    size_t size = record_determinism_replay(nullptr);
     CHECK(size > 0);
     if (size == 0) return;
 

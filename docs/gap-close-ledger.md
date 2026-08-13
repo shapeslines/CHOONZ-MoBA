@@ -61,9 +61,9 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G10 | No Debug-ASan preset; arena poison hooks stubbed | open |
+| G10 | No Debug-ASan preset; arena poison hooks stubbed | **closed** (Wave 2-A: `debug-asan` preset; 25/25 under `/fsanitize=address`; poison gated to virtual arenas) |
 | G11 | clang-cl/UBSan determinism run never done | open (deferred: optional stretch; re-trigger at M3.4) |
-| G12 | Vulkan SDK version unpinned | open |
+| G12 | Vulkan SDK version unpinned | **closed** (Wave 2-A: pinned 1.4.357.0 in README + CMake version warning) |
 | G13 | `/fp` pinning for eng_sim (M3.4) | open (owned by M3.4 slate) |
 | G14 | `plat_mem_*` still in Win32 window TU | open |
 
@@ -71,10 +71,10 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G15 | CI builds null renderer only; no Vulkan/validation in CI | open |
-| G16 | RelWithDebInfo absent from CI matrix | open |
-| G17 | CodeQL claimed-but-absent workflow | open (checks ran via GitHub default setup; workflow not committed) |
-| G18 | No perf/benchmark regression gate | open |
+| G15 | CI builds null renderer only; no Vulkan/validation in CI | **closed** (Wave 2-B: SDK 1.4.357.0 installed on runner, `MOBA_VULKAN_REQUIRED=ON`, sandbox validation run w/ device-gate skip) |
+| G16 | RelWithDebInfo absent from CI matrix | **closed** (Wave 2-B: matrix = Debug, RelWithDebInfo, Release) |
+| G17 | CodeQL claimed-but-absent workflow | **closed** (verified 2026-08-12: CodeQL runs via GitHub **default setup**, state=configured — no committed workflow needed; documented) |
+| G18 | No perf/benchmark regression gate | **closed** (Wave 2-B: 10k-tick CPU ceiling test, ~100x headroom, also re-pins oracle) |
 | G19 | No enforced merge policy | **closed** (`main-gate` ruleset, Wave 0) |
 | G40 | No `.editorconfig` / templates | **closed** (Wave 1: .editorconfig + issue/PR templates) |
 
@@ -83,7 +83,7 @@ is the execution ledger.
 | # | Gap | Status |
 |---|---|---|
 | G20 | Cross-binary parity unproven | open (owned by M6.7) |
-| G21 | Hash cost at capacity never profiled | open (perf-smoke ceiling, Wave 2-B) |
+| G21 | Hash cost at capacity never profiled | **closed** (Wave 2-B perf ceiling + Wave 3 capacity test) |
 | G22 | RNG draw policy undocumented | open |
 | G23 | Replay 64-slot cap migration undocumented | open |
 | G24 | Pool-hash inclusion guard missing | open |
@@ -112,8 +112,8 @@ is the execution ledger.
 | # | Gap | Status |
 |---|---|---|
 | G34 | No fuzz infrastructure | open (deferred: M4.2 inflate / M6.1 transport) |
-| G35 | No hardening-flag audit (`/guard:cf`) | open |
-| G36 | Fresh-clone sweep is manual prose | open |
+| G35 | No hardening-flag audit (`/guard:cf`) | **closed** (Wave 2-A: `/guard:cf` on RelWithDebInfo+Release, dumpbin-verified) |
+| G36 | Fresh-clone sweep is manual prose | **closed** (Wave 2-B: `tools/fresh-walk.ps1` + CI job; run live 2026-08-12: clone→build→25/25→validation-clean screenshot) |
 
 ### Lens 9 — Ownership & architecture
 

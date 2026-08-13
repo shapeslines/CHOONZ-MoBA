@@ -1,10 +1,14 @@
 name: ci
 
-# Mirror the local pre-push gate in the cloud: a /WX build + ctest on Windows/MSVC.
-# Runs across Debug AND Release so the determinism golden is exercised over the full
-# {/fp:precise, /fp:fast} x {Debug, Release} matrix the determinism contract requires
-# (ADR-0002): the det_precise/det_fast suites build the same source under both float
-# models, and this matrix adds the config axis on top.
+# Mirror the local pre-push gate in the cloud: a /WX build + ctest on Windows/MSVC,
+# now over the real Vulkan backend (G15: the SDK is installed on the runner and
+# MOBA_VULKAN_REQUIRED=ON) across Debug, RelWithDebInfo (the "build you play"), and
+# Release — so the determinism golden is exercised over the full
+# {/fp:precise, /fp:fast} x {Debug, Release} matrix (ADR-0002) plus the play config
+# (G16). The null backend stays always-built for the headless suites; the sandbox
+# validation run additionally exercises the real renderer when the runner has a
+# Vulkan 1.3 device (and skips cleanly when it does not — device gating is the
+# renderer's own ADR-0012 check).
 on:
   push:
     branches: [main]
@@ -22,11 +26,23 @@ jobs:
     name: windows-msvc (${{ matrix.config }})
     runs-on: windows-latest
     strategy:
-      fail-fast: false          # want both Debug and Release signals, not just the first failure
+      fail-fast: false          # want every config's signal, not just the first failure
       matrix:
-        config: [Debug, Release]
+        config: [Debug, RelWithDebInfo, Release]
     steps:
       - uses: actions/checkout@v5
+
+      # Vulkan SDK (G15): pinned 1.4.357.0 per README/CMakeLists. The build below
+      # hard-requires it (-DMOBA_VULKAN_REQUIRED=ON) so the real backend, the
+      # offline shader builds, and the validation-layer run are always gated.
+      - name: Install LunarG Vulkan SDK (pinned 1.4.357.0)
+        shell: pwsh
+        run: |
+          winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --silent --accept-package-agreements --accept-source-agreements
+          $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0"
+          if (-not (Test-Path $sdk)) { Write-Error "SDK not at $sdk after winget install"; exit 1 }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          "PATH=$sdk\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
 
       # MSVC is set up WITHOUT a third-party Node action: ilammy/msvc-dev-cmd has no
       # Node 24 release and GitHub is retiring Node 20 actions, so instead we discover
@@ -43,9 +59,35 @@ jobs:
           call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
           cmake --version || exit /b 1
           ninja --version || exit /b 1
-          cmake --preset ci || exit /b 1
+          cmake --preset ci -DMOBA_VULKAN_REQUIRED=ON || exit /b 1
           cmake --build build-ci --config ${{ matrix.config }} || exit /b 1
           ctest --test-dir build-ci -C ${{ matrix.config }} --output-on-failure --no-tests=error --output-junit "%CD%\ctest-${{ matrix.config }}.xml"
+
+      # The runnable DoD, in the cloud: 90 frames with validation on, screenshot
+      # written. If the runner has no Vulkan 1.3 device, the renderer's own gate
+      # rejects it — we skip cleanly (compile path was already proven). Any other
+      # nonzero exit is a real failure. A validation-layer ERROR aborts the sandbox,
+      # so "validation-clean" is enforced by the exit code, not observed by hand.
+      - name: Sandbox validation run (${{ matrix.config }})
+        shell: pwsh
+        run: |
+          $log = "sandbox-${{ matrix.config }}.log"
+          & "build-ci\tools\sandbox\${{ matrix.config }}\sandbox.exe" --frames 90 --screenshot "out-${{ matrix.config }}.bmp" *> $log
+          $code = $LASTEXITCODE
+          $output = Get-Content $log -Raw
+          if ($code -ne 0 -and $output -match 'no device meets the minimum spec') {
+            "SKIP: no Vulkan 1.3 device on this runner — real renderer compiled but not executed." | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          if ($code -ne 0) {
+            "sandbox FAILED (exit $code):`n$output" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            exit $code
+          }
+          if (-not (Test-Path "out-${{ matrix.config }}.bmp")) {
+            "sandbox exited 0 but produced no screenshot" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          "sandbox: 90 validation-clean frames; screenshot written." | Out-File -Append $env:GITHUB_STEP_SUMMARY
 
       # Render the per-test results into the GitHub run summary (native — no third-party
       # action, consistent with the Node-free setup). Reads the JUnit XML ctest wrote;
@@ -74,3 +116,22 @@ jobs:
             $lines += "| $($c.GetAttribute('name')) | $icon | $($c.GetAttribute('time')) |"
           }
           ($lines -join "`n") | Out-File -Append $sum
+
+  # G36: the FIXES.md "stranger's walk", scripted — a fresh clone taken through the
+  # documented README path. This is the repeatable replacement for the manual sweep.
+  fresh-walk:
+    name: fresh-walk (stranger's path)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install LunarG Vulkan SDK (pinned 1.4.357.0)
+        shell: pwsh
+        run: |
+          winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --silent --accept-package-agreements --accept-source-agreements
+          $sdk = Join-Path ${env:ProgramFiles} "VulkanSDK\1.4.357.0"
+          if (-not (Test-Path $sdk)) { Write-Error "SDK not at $sdk after winget install"; exit 1 }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          "PATH=$sdk\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+      - name: Run the fresh-checkout walk
+        shell: pwsh
+        run: ./tools/fresh-walk.ps1
