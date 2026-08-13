@@ -9,3 +9,8 @@ target_compile_definitions(sandbox PRIVATE "MOBA_ASSET_DIR=\"${CMAKE_SOURCE_DIR}
 add_executable(sandbox_null src/main.cpp src/tga_direct.cpp)
 target_link_libraries(sandbox_null PRIVATE eng::platform eng::render_null eng::game moba_warnings moba_options)
 target_compile_definitions(sandbox_null PRIVATE "MOBA_ASSET_DIR=\"${CMAKE_SOURCE_DIR}/assets\"")
+
+# Both runnable variants participate in the M3.4 binary-parity test under the
+# Debug-ASan preset, so stage the dynamic sanitizer runtime beside their shared
+# output directory just as the test and replay executables do.
+moba_stage_asan_runtime()

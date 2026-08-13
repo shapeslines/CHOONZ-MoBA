@@ -164,6 +164,20 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
   `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`. The UBSan oracle/tripwire plus four structural
   policy/isolation tests passed 6/6.
 
+## S5 closure evidence (in progress)
+
+- Exact head `0a29f12807d27c3d11b620146e2ba08ec69756bb` completed full `/WX` Debug,
+  RelWithDebInfo, and Release builds; each configuration passed all 32 CTest entries.
+- The first Debug-ASan pass exposed missing app-local runtime staging for the two sandbox binaries:
+  the game parity leg exited `0xc0000135` while the test probe succeeded. Adding the same
+  `moba_stage_asan_runtime()` contract already used by tests and replay made the complete ASan suite
+  pass 32/32, including binary parity and replay fixtures.
+- The local Vulkan sandbox ran exactly 90 frames with validation enabled on an NVIDIA GeForce RTX
+  4070 Ti, exited cleanly, and produced a 2,764,854-byte `1280x720` BMP accepted by the strict smoke
+  classifier. No validation warning or error was logged.
+- Fresh-walk, documentation closure, independent acceptance, and exact-head hosted checks remain
+  open; S5 and M3.4 are not yet complete.
+
 ## Exit gate
 
 M3.4 closes only when deterministic flags have one owner, game/test paths prove the same M3.3 oracle
