@@ -66,18 +66,17 @@ $log = Join-Path $CloneDir "sandbox.log"
 cmd /c "cd /d `"$CloneDir`" && `"$sandbox`" --frames 90 --screenshot out.bmp > `"$log`" 2>&1"
 $code = $LASTEXITCODE
 $output = Get-Content $log -Raw
-if ($code -ne 0) {
-    if ($output -match 'no device meets the minimum spec' -or $output -match 'vkCreateInstance failed') {
-        Write-Output "SKIP: no Vulkan driver/1.3 device - render path compiled but not executed"
-    } else {
-        Fail "sandbox exited $code. Log: $output"
-    }
-} elseif ($output -match 'vkCreateInstance failed') {
-    Write-Output "SKIP: no Vulkan driver on this machine - render path compiled but not executed"
-} elseif (-not (Test-Path (Join-Path $CloneDir "out.bmp"))) {
+$screenshot = Join-Path $CloneDir "out.bmp"
+$noDevice = $output -match 'renderer: no Vulkan physical device(?:s| or compatible driver)' -or
+            $output -match 'renderer: no device meets the minimum spec'
+if ($noDevice -and -not (Test-Path $screenshot)) {
+    Write-Output "SKIP: no Vulkan driver/1.3 device - render path compiled but not executed"
+} elseif ($code -ne 0) {
+    Fail "sandbox exited $code. Log: $output"
+} elseif (-not (Test-Path $screenshot)) {
     Fail "sandbox exited 0 but produced no out.bmp"
 } else {
-    $len = (Get-Item (Join-Path $CloneDir "out.bmp")).Length
+    $len = (Get-Item $screenshot).Length
     Write-Output "sandbox: 90 validation-clean frames, screenshot $len bytes"
 }
 
