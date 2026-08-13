@@ -38,7 +38,8 @@ is the execution ledger.
 | 1 | `moba/gap-close-w1` | #18 | `bf81e64` | merged 2026-08-13 |
 | 2a | `moba/gap-close-w2a` | #19 | `e85ea82` | merged 2026-08-13 |
 | 2b | `moba/gap-close-w2b` | #20 / #25 | â€” | #20 closed; recovery #25 superseded â€” Wave 2b content lands through #21 |
-| 3 | `moba/gap-close-w3` | #21 | pending | includes Wave 2b, determinism guards, and the narrow Vulkan device-gate classifier |
+| 3 | `moba/gap-close-w3` | #21 | `8defa10` | merged 2026-08-13; includes Wave 2b except the CMake hard-require gate restored in #22 |
+| 4 | `moba/gap-close-w4` | #22 | pending | renderer robustness plus explicit recovery of the Wave 2b `MOBA_VULKAN_REQUIRED` CMake gate; local `/WX` Debug/RelWithDebInfo/Release 25/25 and RTX 4070 Ti 90-frame validation-on screenshot green |
 
 ## Gap status
 
@@ -96,11 +97,11 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G25 | Dedicated-allocator cap is abort-first; pressure warning missing | open |
-| G26 | Hardware coverage NVIDIA-only; no IGP/AMD protocol | open |
-| G27 | Culling has no owning milestone | open |
-| G28 | No DPI awareness | open |
-| G29 | Pipeline-cache defense is size-bound only | open |
+| G25 | Dedicated-allocator cap is abort-first; pressure warning missing | **closed** (Wave 4: warning at 90% of cap + every 100; Phase 8 trigger text refined) |
+| G26 | Hardware coverage NVIDIA-only; no IGP/AMD protocol | **closed** (Wave 4: `docs/testing-hardware.md` protocol + results table) |
+| G27 | Culling has no owning milestone | **closed** (Wave 4: frustum culling owned by M4.3) |
+| G28 | No DPI awareness | **closed** (Wave 4: SYSTEM_AWARE in sandbox; PER_MONITOR_V2 noted as follow-up) |
+| G29 | Pipeline-cache defense is size-bound only | **closed** (Wave 4: every header byte load-bearing + truncation/garbage cases) |
 
 ### Lens 7 â€” Simulation / ECS
 

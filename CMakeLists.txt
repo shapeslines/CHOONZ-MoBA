@@ -18,9 +18,15 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Options ---
+<<<<<<< HEAD
 option(MOBA_WERROR "Treat warnings as errors (/WX) ΓÇö on in CI/test, off locally" OFF)
 option(MOBA_ASAN "Build with AddressSanitizer (/fsanitize=address) ΓÇö activates arena poison hooks (G10)" OFF)
 option(MOBA_VULKAN_REQUIRED "Hard-require the Vulkan SDK (find_package REQUIRED) ΓÇö on in CI (G15)" OFF)
+=======
+option(MOBA_WERROR "Treat warnings as errors (/WX) — on in CI/test, off locally" OFF)
+option(MOBA_ASAN "Build with AddressSanitizer (/fsanitize=address) — activates arena poison hooks (G10)" OFF)
+option(MOBA_VULKAN_REQUIRED "Hard-require the Vulkan SDK (find_package REQUIRED) — on in CI (G15)" OFF)
+>>>>>>> origin/main
 
 # --- Project-wide flag/posture targets (must precede module add_subdirectory) ---
 include(cmake/CompilerWarnings.cmake)   # moba_warnings
@@ -28,7 +34,11 @@ include(cmake/EngineOptions.cmake)      # moba_options
 include(cmake/CompileShaders.cmake)     # add_shader_library()
 
 # --- Vulkan (ADR-0004: link HEADERS only; the loader is hand-loaded) ---
+<<<<<<< HEAD
 # Soft by default (null backend when the SDK is absent ΓÇö dev convenience); CI turns
+=======
+# Soft by default (null backend when the SDK is absent — dev convenience); CI turns
+>>>>>>> origin/main
 # MOBA_VULKAN_REQUIRED on so the real backend + shaders + validation are always gated
 # (G15). PIN (G12): project-pinned SDK is 1.4.357.0 (winget KhronosGroup.VulkanSDK);
 # the code gate is API 1.3 per ADR-0012 (dynamicRendering + synchronization2).
@@ -48,7 +58,11 @@ else()
 endif()
 if(Vulkan_FOUND AND Vulkan_VERSION VERSION_LESS "1.3.0")
     message(WARNING
+<<<<<<< HEAD
         "Vulkan headers report API ${Vulkan_VERSION} ΓÇö older than the ADR-0012 "
+=======
+        "Vulkan headers report API ${Vulkan_VERSION} — older than the ADR-0012 "
+>>>>>>> origin/main
         "hard minimum (1.3). Expect device-selection or feature failures.")
 endif()
 
