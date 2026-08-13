@@ -852,8 +852,13 @@ Renderer* renderer_create(PlatformWindow* window) {
     ci.ppEnabledExtensionNames = exts;
     if (validation) { ci.enabledLayerCount = 1; ci.ppEnabledLayerNames = layers; }
 
-    if (r->vk.CreateInstance(&ci, nullptr, &r->instance) != VK_SUCCESS) {
-        platform_log("renderer: vkCreateInstance failed\n");
+    const VkResult instance_result = r->vk.CreateInstance(&ci, nullptr, &r->instance);
+    if (instance_result != VK_SUCCESS) {
+        if (instance_result == VK_ERROR_INCOMPATIBLE_DRIVER) {
+            platform_log("renderer: no Vulkan physical device or compatible driver\n");
+        } else {
+            platform_log("renderer: vkCreateInstance failed (%d)\n", (int)instance_result);
+        }
         platform_arena_release(&r->arena);
         free(r);
         return nullptr;
