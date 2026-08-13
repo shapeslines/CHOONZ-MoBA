@@ -73,7 +73,7 @@ history is retained; #28 repairs the contracts forward. Remote `moba/gap-close-w
 
 | # | Gap | Status |
 |---|---|---|
-| G10 | No Debug-ASan preset; arena poison hooks stubbed | **closed** (Wave 6/#28: preset, poison hooks, app-local runtime, full 27-test gate) |
+| G10 | No Debug-ASan preset; arena poison hooks stubbed | **closed** (Wave 6/#28: preset, poison hooks, app-local runtime, full 28-test gate) |
 | G11 | clang-cl/UBSan determinism run never done | open (deferred: optional stretch; re-trigger at M3.4) |
 | G12 | Vulkan SDK version unpinned | **closed** (Wave 2b/3: 1.4.357.0 pinned in docs and CI) |
 | G13 | `/fp` pinning for eng_sim (M3.4) | open (owned by M3.4 slate) |
