@@ -102,6 +102,19 @@ function Assert-SameBytes($Expected, $Actual, [string]$Label) {
     }
 }
 
+function Assert-NoPublishedOutputs($Roots, [string]$Label) {
+    if ((Snapshot-Files $Roots).Count -ne 0) {
+        Fail "$Label published output"
+    }
+}
+
+function New-TestJunction([string]$Path, [string]$Target) {
+    $junction = New-Item -ItemType Junction -Path $Path -Target $Target
+    if (($junction.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+        Fail "junction fixture is not a reparse point: $Path"
+    }
+}
+
 $fixture = Join-Path ([IO.Path]::GetTempPath()) (
     "moba-cooker-cli-" + [Guid]::NewGuid().ToString('N'))
 $lease = New-FreshWalkLease $fixture $WorkDir -CreateOwnedDirectory
@@ -166,23 +179,87 @@ try {
     $invalidArgs = @('--source-root', $invalid.Source, '--manifest', $invalid.Manifest,
                      '--out-root', $invalid.Out, '--generated-root', $invalid.Generated)
     Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
-    if ((Snapshot-Files $invalid).Count -ne 0) { Fail 'unsorted manifest published output' }
+    Assert-NoPublishedOutputs $invalid 'unsorted manifest'
+
+    Write-Utf8 $invalid.Manifest "tone.wav`ntone.wav`n"
+    Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
+    Assert-NoPublishedOutputs $invalid 'duplicate manifest path'
+
+    Write-Utf8 $invalid.Manifest "../escape.tga`n"
+    Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
+    Assert-NoPublishedOutputs $invalid 'traversal manifest path'
+
+    Write-Utf8 $invalid.Manifest "UV_TEST.TGA`n"
+    Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
+    Assert-NoPublishedOutputs $invalid 'noncanonical manifest path'
 
     Write-Utf8 $invalid.Manifest "a-b.tga`na_b.tga`n"
     Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
-    if ((Snapshot-Files $invalid).Count -ne 0) { Fail 'symbol collision published output' }
+    Assert-NoPublishedOutputs $invalid 'symbol collision'
 
     Write-Utf8 $invalid.Manifest "unsupported.png`n"
     Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
-    if ((Snapshot-Files $invalid).Count -ne 0) { Fail 'unsupported type published output' }
+    Assert-NoPublishedOutputs $invalid 'unsupported type'
 
     Write-Utf8 $invalid.Manifest (("a" * 600) + ".tga`n")
     Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
-    if ((Snapshot-Files $invalid).Count -ne 0) { Fail 'overlong manifest line published output' }
+    Assert-NoPublishedOutputs $invalid 'overlong manifest line'
 
     [IO.File]::WriteAllBytes($invalid.Manifest, [byte[]]::new((4 * 1024 * 1024) + 1))
     Invoke-Cooker $Cooker $invalidArgs 2 | Out-Null
-    if ((Snapshot-Files $invalid).Count -ne 0) { Fail 'oversized manifest published output' }
+    Assert-NoPublishedOutputs $invalid 'oversized manifest'
+
+    $badTga = New-Roots $fixture 'bad-tga'
+    [IO.File]::WriteAllBytes((Join-Path $badTga.Source 'broken.tga'),
+                             [byte[]]@(0x00,0x01,0x02,0x03))
+    Write-Utf8 $badTga.Manifest "broken.tga`n"
+    $badTgaArgs = @('--source-root', $badTga.Source, '--manifest', $badTga.Manifest,
+                    '--out-root', $badTga.Out, '--generated-root', $badTga.Generated)
+    Invoke-Cooker $Cooker $badTgaArgs 2 | Out-Null
+    Assert-NoPublishedOutputs $badTga 'malformed TGA'
+
+    $badWav = New-Roots $fixture 'bad-wav'
+    [IO.File]::WriteAllBytes((Join-Path $badWav.Source 'broken.wav'),
+                             [Text.Encoding]::ASCII.GetBytes('not a RIFF file'))
+    Write-Utf8 $badWav.Manifest "broken.wav`n"
+    $badWavArgs = @('--source-root', $badWav.Source, '--manifest', $badWav.Manifest,
+                    '--out-root', $badWav.Out, '--generated-root', $badWav.Generated)
+    Invoke-Cooker $Cooker $badWavArgs 2 | Out-Null
+    Assert-NoPublishedOutputs $badWav 'malformed WAV'
+
+    $sourceEscape = New-Roots $fixture 'source-reparse'
+    $sourceEscapeTarget = Join-Path $fixture 'source-reparse-outside'
+    [IO.Directory]::CreateDirectory($sourceEscapeTarget) | Out-Null
+    [IO.File]::Copy($SourceTga, (Join-Path $sourceEscapeTarget 'escape.tga'), $true)
+    New-TestJunction (Join-Path $sourceEscape.Source 'link') $sourceEscapeTarget
+    [IO.Directory]::CreateDirectory((Join-Path $sourceEscape.Out 'link')) | Out-Null
+    Write-Utf8 $sourceEscape.Manifest "link/escape.tga`n"
+    $sourceEscapeArgs = @('--source-root', $sourceEscape.Source,
+                          '--manifest', $sourceEscape.Manifest,
+                          '--out-root', $sourceEscape.Out,
+                          '--generated-root', $sourceEscape.Generated)
+    Invoke-Cooker $Cooker $sourceEscapeArgs 1 | Out-Null
+    Assert-NoPublishedOutputs $sourceEscape 'source reparse escape'
+
+    $outputEscape = New-Roots $fixture 'output-reparse'
+    $outputSourceParent = Join-Path $outputEscape.Source 'link'
+    $outputEscapeTarget = Join-Path $fixture 'output-reparse-outside'
+    [IO.Directory]::CreateDirectory($outputSourceParent) | Out-Null
+    [IO.Directory]::CreateDirectory($outputEscapeTarget) | Out-Null
+    [IO.File]::Copy($SourceTga, (Join-Path $outputSourceParent 'escape.tga'), $true)
+    New-TestJunction (Join-Path $outputEscape.Out 'link') $outputEscapeTarget
+    Write-Utf8 $outputEscape.Manifest "link/escape.tga`n"
+    $outputEscapeArgs = @('--source-root', $outputEscape.Source,
+                          '--manifest', $outputEscape.Manifest,
+                          '--out-root', $outputEscape.Out,
+                          '--generated-root', $outputEscape.Generated)
+    Invoke-Cooker $Cooker $outputEscapeArgs 1 | Out-Null
+    if (Test-Path -LiteralPath (Join-Path $outputEscapeTarget 'escape.tga.mba')) {
+        Fail 'output reparse escape published outside the baked root'
+    }
+    if (Test-Path -LiteralPath (Join-Path $outputEscape.Generated 'assets\asset_ids.gen.h')) {
+        Fail 'output reparse escape published the catalog commit marker'
+    }
 
     $partial = New-Roots $fixture 'partial'
     Populate-Sources $partial
@@ -206,10 +283,42 @@ try {
         Fail 'temporary collision sentinel changed'
     }
 
+    $marker = New-Roots $fixture 'marker-collision'
+    Populate-Sources $marker
+    $blockingMarker = Join-Path $marker.Generated 'assets\asset_ids.gen.h.tmp'
+    [IO.File]::WriteAllBytes($blockingMarker, $sentinel)
+    $markerArgs = @('--source-root', $marker.Source, '--manifest', $marker.Manifest,
+                    '--out-root', $marker.Out, '--generated-root', $marker.Generated)
+    Invoke-Cooker $Cooker $markerArgs 1 | Out-Null
+    if ((Get-ChildItem -LiteralPath $marker.Out -File).Count -ne 2) {
+        Fail 'catalog collision fixture did not publish every baked asset first'
+    }
+    if (Test-Path -LiteralPath (Join-Path $marker.Generated 'assets\asset_ids.gen.h')) {
+        Fail 'catalog was published despite its temporary collision'
+    }
+    if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($blockingMarker)) -ne
+        [Convert]::ToBase64String($sentinel)) {
+        Fail 'catalog temporary collision sentinel changed'
+    }
+
     $missing = Join-Path $fixture 'missing-source'
     $missingArgs = @('--source-root', $missing, '--manifest', $first.Manifest,
                      '--out-root', $invalid.Out, '--generated-root', $invalid.Generated)
     Invoke-Cooker $Cooker $missingArgs 1 | Out-Null
+    $missingManifestArgs = @('--source-root', $first.Source,
+                             '--manifest', (Join-Path $fixture 'missing-manifest.txt'),
+                             '--out-root', $invalid.Out,
+                             '--generated-root', $invalid.Generated)
+    Invoke-Cooker $Cooker $missingManifestArgs 1 | Out-Null
+    $missingOutArgs = @('--source-root', $first.Source, '--manifest', $first.Manifest,
+                        '--out-root', (Join-Path $fixture 'missing-out'),
+                        '--generated-root', $invalid.Generated)
+    Invoke-Cooker $Cooker $missingOutArgs 1 | Out-Null
+    $missingGeneratedArgs = @('--source-root', $first.Source,
+                              '--manifest', $first.Manifest,
+                              '--out-root', $invalid.Out,
+                              '--generated-root', (Join-Path $fixture 'missing-generated'))
+    Invoke-Cooker $Cooker $missingGeneratedArgs 1 | Out-Null
     Invoke-Cooker $Cooker @('--source-root') 1 | Out-Null
     Invoke-Cooker $Cooker @('--unknown', 'value') 1 | Out-Null
 

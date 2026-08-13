@@ -126,9 +126,33 @@ fallback.
 - `/WX` Debug and Release builds pass; each configuration passes 47/47 CTest entries,
   including generated-output and asset-boundary checks.
 
-### S6 — Adversarial boundary hardening — next
+### S6 — Adversarial boundary hardening — complete
 
-### S7 — Full acceptance and ready PR — pending
+Done-condition: malformed cooker inputs fail before the catalog commit marker,
+runtime container corruption leaves durable state unchanged, and static gates prove
+the intended dependency/source boundaries.
+
+- Cooker fixtures now cover noncanonical, duplicate, traversal, unsorted, overlong,
+  and oversized manifests; symbol collisions; unsupported sources; malformed TGA
+  and WAV bytes; source and output junction escapes; missing roots/manifest;
+  mid-publication and catalog-temporary collisions; and partial publication. Rooted
+  escapes never write their targets, collision sentinels remain byte-exact, and a
+  failed cook never publishes `asset_ids.gen.h`.
+- Runtime fixtures corrupt every outer-header field and every texture/sound metadata
+  field, plus truncation and trailing bytes. Every attempt returns a null handle
+  without changing persistent/level/global/I/O offsets, registry membership/free
+  state, refcounts, or renderer callbacks.
+- Stale unlisted `.mba` files remain unreachable through catalog lookup. Duplicate
+  catalog IDs and invalid catalog/path/hash relationships fail transactionally.
+- Boundary CTests enforce `eng_asset_parsers -> core + serialize`,
+  `eng_assets -> core + platform + asset_parsers`, and
+  `moba_cooker -> asset_parsers + platform`; runtime code rejects STL, heap, native
+  file serialization, and source-format loading, while render/sim remain independent
+  of the asset pipeline.
+- `/WX` Debug and Release builds pass and both configurations pass 48/48 CTest
+  entries, including the destructive temp-root cooker matrix.
+
+### S7 — Full acceptance and ready PR — next
 
 ## Locked M4.1 decisions
 

@@ -17,14 +17,32 @@ foreach(path IN LISTS asset_files)
        text MATCHES "#[ \t]*include[ \t]*[<\"]sim/")
         message(FATAL_ERROR "asset boundary violation in ${path}")
     endif()
+    if(text MATCHES "#[ \t]*include[ \t]*<(vector|string|map|unordered_map|unordered_set|filesystem|memory|new)>" OR
+       text MATCHES "std::" OR
+       text MATCHES "(^|[^A-Za-z0-9_])(malloc|calloc|realloc|free)[ \t\r\n]*\\(" OR
+       text MATCHES "(^|[^A-Za-z0-9_])new[ \t\r\n]+" OR
+       text MATCHES "(^|[^A-Za-z0-9_])delete[ \t\r\n]+")
+        message(FATAL_ERROR "asset runtime STL/heap boundary violation in ${path}")
+    endif()
 endforeach()
 
 file(READ "${SOURCE_DIR}/engine/assets/src/assets.cpp" asset_runtime)
 if(NOT asset_runtime MATCHES "platform_file_read_rooted" OR
    asset_runtime MATCHES "platform_file_size[ \t\r\n]*\\(" OR
    asset_runtime MATCHES "asset_load_(texture_tga|sound_wav)" OR
-   asset_runtime MATCHES "#[ \t]*include[ \t]*[<\"]assets/(tga|wav)\\.h")
+   asset_runtime MATCHES "#[ \t]*include[ \t]*[<\"]assets/(tga|wav)\\.h" OR
+   asset_runtime MATCHES "(^|[^A-Za-z0-9_])(tga_|wav_)" OR
+   asset_runtime MATCHES "\\.(tga|wav)[\"]" OR
+   asset_runtime MATCHES "byte_(writer|reader)|serialize/" OR
+   asset_runtime MATCHES "(^|[^A-Za-z0-9_])(fopen|fread|fwrite|ifstream|ofstream)[ \t\r\n]*(\\(|<)")
     message(FATAL_ERROR "asset loads must use the single-handle rooted read seam")
+endif()
+
+file(READ "${SOURCE_DIR}/engine/assets/CMakeLists.txt" target_file)
+string(REGEX REPLACE "[ \t\r\n]+" " " target_normalized "${target_file}")
+if(NOT target_normalized MATCHES
+   "target_link_libraries\\(eng_assets PUBLIC eng::core eng::platform eng::asset_parsers PRIVATE moba_warnings moba_options\\)")
+    message(FATAL_ERROR "eng_assets must link exactly core + platform + asset_parsers")
 endif()
 
 if(EXISTS "${SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp" OR
@@ -44,4 +62,4 @@ if(NOT sandbox MATCHES "#[ \t]*include[ \t]*[\"]assets/asset_ids\\.gen\\.h" OR
     message(FATAL_ERROR "sandbox does not exclusively use generated baked assets")
 endif()
 
-message(STATUS "asset boundary: core/platform only, no Vulkan/render/sim dependency")
+message(STATUS "asset runtime boundary: core + platform + asset_parsers, baked-only and heap-free")

@@ -99,6 +99,7 @@ TEST(assets, catalog_validation_is_transactional) {
     };
     sort_catalog_entries(valid, 2u);
     AssetCatalogEntry unsorted[2] = {valid[1], valid[0]};
+    AssetCatalogEntry duplicate_id[2] = {valid[0], valid[0]};
     AssetCatalogEntry wrong_id = valid[0];
     wrong_id.id ^= 1u;
     if (wrong_id.id == ASSET_ID_NULL) wrong_id.id = 1u;
@@ -111,6 +112,7 @@ TEST(assets, catalog_validation_is_transactional) {
     const AssetCatalog invalid[] = {
         {nullptr, 1u},
         {unsorted, 2u},
+        {duplicate_id, 2u},
         {&wrong_id, 1u},
         {&wrong_type, 1u},
         {&wrong_baked, 1u},
@@ -659,5 +661,154 @@ TEST(assets, baked_runtime_failures_are_mutation_free) {
 
     asset_registry_shutdown(&fixture.registry, 0u);
     for (uint32_t i = 0u; i < 6u; ++i) CHECK(std::remove(file_paths[i]) == 0);
+    CHECK(test_release_owned_directory(&owned));
+}
+
+static bool runtime_file_rejected_without_mutation(RegistryFixture* fixture,
+                                                   const char* file_path,
+                                                   const void* bytes,
+                                                   size_t byte_count,
+                                                   AssetId id) {
+    if (!fixture || !file_path || !bytes || byte_count == 0u ||
+        !platform_file_write(file_path, bytes, byte_count)) return false;
+    const size_t persistent_offset = fixture->persistent.offset;
+    const size_t level_offset = fixture->level.offset;
+    const size_t global_offset = fixture->global.offset;
+    const size_t io_offset = fixture->io.offset;
+    const uint32_t live_count = fixture->registry.live_count;
+    const uint32_t map_count = fixture->registry.by_id.count;
+    const uint32_t next_fresh = fixture->registry.next_fresh;
+    const uint32_t free_count = fixture->registry.free_count;
+    const uint32_t creates = fixture->fake.creates;
+    const uint32_t destroys = fixture->fake.destroys;
+    const AssetHandle result = asset_load(&fixture->registry, id,
+                                          ASSET_LIFETIME_LEVEL);
+    return handle_is_null(result.h) &&
+        fixture->persistent.offset == persistent_offset &&
+        fixture->level.offset == level_offset &&
+        fixture->global.offset == global_offset &&
+        fixture->io.offset == io_offset &&
+        fixture->registry.live_count == live_count &&
+        fixture->registry.by_id.count == map_count &&
+        fixture->registry.next_fresh == next_fresh &&
+        fixture->registry.free_count == free_count &&
+        fixture->fake.creates == creates && fixture->fake.destroys == destroys;
+}
+
+TEST(assets, every_mba_header_and_payload_corruption_is_mutation_free) {
+    OwnedTestDirectory owned{};
+    owned.scope_custody = INVALID_HANDLE_VALUE;
+    owned.directory_custody = INVALID_HANDLE_VALUE;
+    const bool directory_owned = test_create_owned_directory("asset-matrix", &owned);
+    CHECK(directory_owned);
+    if (!directory_owned) return;
+
+    const AssetId texture_id = asset_id("matrix.tga");
+    const AssetId sound_id = asset_id("matrix.wav");
+    AssetCatalogEntry entries[2] = {
+        {texture_id, ASSET_TYPE_TEXTURE, "matrix.tga", "matrix.tga.mba"},
+        {sound_id, ASSET_TYPE_SOUND, "matrix.wav", "matrix.wav.mba"},
+    };
+    sort_catalog_entries(entries, 2u);
+    RegistryFixture fixture;
+    const bool initialized = init_fixture(
+        &fixture, 4u, owned.path, AssetCatalog{entries, 2u});
+    CHECK(initialized);
+    if (!initialized) {
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+
+    char texture_path[256] = {};
+    char sound_path[256] = {};
+    const int texture_chars = std::snprintf(texture_path, sizeof(texture_path),
+                                             "%s/matrix.tga.mba", owned.path);
+    const int sound_chars = std::snprintf(sound_path, sizeof(sound_path),
+                                           "%s/matrix.wav.mba", owned.path);
+    const bool paths_ready = texture_chars > 0 &&
+        (size_t)texture_chars < sizeof(texture_path) && sound_chars > 0 &&
+        (size_t)sound_chars < sizeof(sound_path);
+    CHECK(paths_ready);
+    if (!paths_ready) {
+        asset_registry_shutdown(&fixture.registry, 0u);
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+
+    static const uint8_t rgba[] = {1u, 2u, 3u, 4u};
+    static const uint8_t pcm[] = {1u, 0u, 2u, 0u};
+    uint8_t valid_texture[128] = {};
+    uint8_t valid_sound[128] = {};
+    size_t texture_bytes = 0u;
+    size_t sound_bytes = 0u;
+    const MbaTextureSource texture_source{rgba, sizeof(rgba), 1u, 1u};
+    const MbaSoundSource sound_source{pcm, sizeof(pcm), 48000u, 2u, 16u};
+    CHECK(mba_encode_texture(valid_texture, sizeof(valid_texture), texture_id,
+                             &texture_source, &texture_bytes));
+    CHECK(mba_encode_sound(valid_sound, sizeof(valid_sound), sound_id,
+                           &sound_source, &sound_bytes));
+
+    const uint32_t texture_id_low =
+        (uint32_t)(texture_id & UINT64_C(0xffffffff));
+    const uint32_t texture_id_high = (uint32_t)(texture_id >> 32u);
+    struct Mutation { size_t offset; uint32_t value; bool halfword; };
+    const Mutation outer[] = {
+        {0u, 0u, false}, {4u, 2u, false}, {8u, 99u, false},
+        {12u, 0u, false},
+        {16u, texture_id_low ^ 1u, false},
+        {20u, texture_id_high ^ 1u, false},
+        {24u, 1u, false}, {28u, 1u, false},
+    };
+    const Mutation texture_fields[] = {
+        {32u, 0u, false}, {36u, 0u, false}, {40u, 99u, false},
+        {44u, 2u, false}, {48u, 31u, false}, {52u, 47u, false},
+        {56u, 8u, false}, {60u, 1u, false}, {64u, 2u, false},
+        {68u, 2u, false}, {72u, 32u, false}, {76u, 8u, false},
+    };
+    for (const Mutation& mutation : outer) {
+        uint8_t damaged[128] = {};
+        std::memcpy(damaged, valid_texture, texture_bytes);
+        test_put_u32(damaged + mutation.offset, mutation.value);
+        CHECK(runtime_file_rejected_without_mutation(
+            &fixture, texture_path, damaged, texture_bytes, texture_id));
+    }
+    for (const Mutation& mutation : texture_fields) {
+        uint8_t damaged[128] = {};
+        std::memcpy(damaged, valid_texture, texture_bytes);
+        test_put_u32(damaged + mutation.offset, mutation.value);
+        CHECK(runtime_file_rejected_without_mutation(
+            &fixture, texture_path, damaged, texture_bytes, texture_id));
+    }
+    CHECK(runtime_file_rejected_without_mutation(
+        &fixture, texture_path, valid_texture, texture_bytes - 1u, texture_id));
+    valid_texture[texture_bytes] = 0xa5u;
+    CHECK(runtime_file_rejected_without_mutation(
+        &fixture, texture_path, valid_texture, texture_bytes + 1u, texture_id));
+
+    const Mutation sound_fields[] = {
+        {32u, 0u, false}, {36u, 0u, false}, {40u, 0u, true},
+        {40u, 3u, true}, {42u, 12u, true}, {44u, 99u, false},
+        {48u, 16u, false}, {52u, 8u, false}, {56u, 1u, false},
+        {60u, 1u, false},
+    };
+    for (const Mutation& mutation : sound_fields) {
+        uint8_t damaged[128] = {};
+        std::memcpy(damaged, valid_sound, sound_bytes);
+        if (mutation.halfword)
+            test_put_u16(damaged + mutation.offset, (uint16_t)mutation.value);
+        else
+            test_put_u32(damaged + mutation.offset, mutation.value);
+        CHECK(runtime_file_rejected_without_mutation(
+            &fixture, sound_path, damaged, sound_bytes, sound_id));
+    }
+    CHECK(runtime_file_rejected_without_mutation(
+        &fixture, sound_path, valid_sound, sound_bytes - 1u, sound_id));
+    valid_sound[sound_bytes] = 0xa5u;
+    CHECK(runtime_file_rejected_without_mutation(
+        &fixture, sound_path, valid_sound, sound_bytes + 1u, sound_id));
+
+    asset_registry_shutdown(&fixture.registry, 0u);
+    CHECK(std::remove(texture_path) == 0);
+    CHECK(std::remove(sound_path) == 0);
     CHECK(test_release_owned_directory(&owned));
 }

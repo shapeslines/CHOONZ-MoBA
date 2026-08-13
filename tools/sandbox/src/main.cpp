@@ -6,8 +6,8 @@
 //                                 readback — session-independent visual proof)
 //   sandbox --orbit               auto-rotates the camera (screenshot verification)
 //   sandbox --sim-self-check      runs the headless 10,000-tick eng_sim oracle
-// Loads assets/uv_test.tga through the promoted M4.0 parser and creates typed
-// mesh/texture/material resources for the instanced cube field.
+// Loads the generated UV-test ID through the baked-only M4.1 registry and creates
+// typed mesh/texture/material resources for the instanced cube field.
 // M2.3: an orbit camera (arrows rotate, wheel zooms) feeds view/proj into the
 // renderer's per-frame set=0 UBO through the seam.
 #include "platform/platform.h"
