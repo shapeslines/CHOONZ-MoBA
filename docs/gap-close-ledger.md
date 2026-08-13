@@ -40,7 +40,13 @@ is the execution ledger.
 | 2b | `moba/gap-close-w2b` | #20 / #25 | â€” | #20 closed; recovery #25 superseded â€” Wave 2b content lands through #21 |
 | 3 | `moba/gap-close-w3` | #21 | `8defa10` | merged 2026-08-13; includes Wave 2b except the CMake hard-require gate restored in #22 |
 | 4 | `moba/gap-close-w4` | #22 | `4d250b2` | merged 2026-08-13; renderer robustness plus recovery of the Wave 2b `MOBA_VULKAN_REQUIRED` CMake gate |
-| 5 | `moba/gap-close-w5` | #23 | pending | ADR-0014 plus M3.3/M4.0/M5.2 ownership amendments; documentation only, runtime tree identical to `main`, local Debug 25/25 and 10,000-tick oracle green |
+| 5 | `moba/gap-close-w5` | #23 | `ab774ed` | merged 2026-08-13 from exact green head `6a39c17`; ADR-0014 and roadmap ownership amendments; acceptance corrections continue in #28 |
+| 6 | `moba/gap-close-w6` | #24 | `ca5ad22` | merged 2026-08-13 from exact green head `c56ade4`, before the cadence/presentation acceptance repair was complete |
+| acceptance repair | `codex/m3.3-acceptance-repair` | #28 | pending | non-rewriting correction for #23/#24: platform cadence, transactional snapshots, exact boundary tests, and final M3.3 evidence |
+
+PRs #23/#24 were externally merged while the acceptance worktree was active. Their immutable merge
+history is retained; #28 repairs the contracts forward. Remote `moba/gap-close-w5` and
+`moba/gap-close-w6` refs were restored to their exact merged heads and are intentionally retained.
 
 ## Gap status
 
@@ -67,9 +73,9 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G10 | No Debug-ASan preset; arena poison hooks stubbed | open |
+| G10 | No Debug-ASan preset; arena poison hooks stubbed | **closed** (Wave 6/#28: preset, poison hooks, app-local runtime, full 27-test gate) |
 | G11 | clang-cl/UBSan determinism run never done | open (deferred: optional stretch; re-trigger at M3.4) |
-| G12 | Vulkan SDK version unpinned | open |
+| G12 | Vulkan SDK version unpinned | **closed** (Wave 2b/3: 1.4.357.0 pinned in docs and CI) |
 | G13 | `/fp` pinning for eng_sim (M3.4) | open (owned by M3.4 slate) |
 | G14 | `plat_mem_*` still in Win32 window TU | **closed** (Wave 3: win32_mem/file/log TUs; engine_tests proven user32-free) |
 
@@ -77,9 +83,9 @@ is the execution ledger.
 
 | # | Gap | Status |
 |---|---|---|
-| G15 | CI builds null renderer only; no Vulkan/validation in CI | open |
-| G16 | RelWithDebInfo absent from CI matrix | open |
-| G17 | CodeQL claimed-but-absent workflow | open (checks ran via GitHub default setup; workflow not committed) |
+| G15 | CI builds null renderer only; no Vulkan/validation in CI | **closed** (Wave 3/#21: required SDK build plus strict hosted-device classifier) |
+| G16 | RelWithDebInfo absent from CI matrix | **closed** (Wave 3/#21: matrix and `main-gate` required check) |
+| G17 | CodeQL claimed-but-absent workflow | **closed** (GitHub default setup supplies exact-head C/C++ and workflow analysis checks) |
 | G18 | No perf/benchmark regression gate | open |
 | G19 | No enforced merge policy | **closed** (`main-gate` ruleset, Wave 0) |
 | G40 | No `.editorconfig` / templates | **closed** (Wave 1: .editorconfig + issue/PR templates) |
@@ -118,8 +124,8 @@ is the execution ledger.
 | # | Gap | Status |
 |---|---|---|
 | G34 | No fuzz infrastructure | open (deferred: M4.2 inflate / M6.1 transport) |
-| G35 | No hardening-flag audit (`/guard:cf`) | open |
-| G36 | Fresh-clone sweep is manual prose | open |
+| G35 | No hardening-flag audit (`/guard:cf`) | **closed** (Wave 2b/3: compile and link flags on RelWithDebInfo/Release) |
+| G36 | Fresh-clone sweep is manual prose | **closed** (Wave 3/#21: `tools/fresh-walk.ps1` plus CI job) |
 
 ### Lens 9 â€” Ownership & architecture
 
@@ -128,4 +134,4 @@ is the execution ledger.
 | G37 | Present glue has no home (`moba_game` absent) | **closed** (M3.3 amendment: `eng_game` owns snapshots/interpolation; platform owns cadence) |
 | G38 | Raw Input upgrade lost its owner | **closed** (M5.2 ROADMAP amendment) |
 | G39 | `tga_direct` contamination path interim policy | **closed** (M4.0 ROADMAP amendment) |
-| G40 | No `.editorconfig` / templates | open |
+| G40 | No `.editorconfig` / templates | **closed** (Wave 1) |

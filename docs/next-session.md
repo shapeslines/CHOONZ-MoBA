@@ -1,49 +1,46 @@
 # MOBA-proto — next session
 
-## State @ implementation `133da41` · 2026-08-12 · DESKTOP-BK4F0OA/Codex
+## State @ M3.3 acceptance repair · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
-Phase 3 M3.0–M3.2 are complete. PR #14 (determinism/replay) and PR #15 (ECS) are merged.
-PR #17 (systems/schedule) is ready, mergeable, independently accepted, and green on GitHub;
-owner-approved merge is the only immediate gate. M3.3 has not started.
+Phase 3 M3.0–M3.2 is merged. PRs #21–#24 also merged in order, but #23/#24 landed
+externally before their acceptance corrections. Corrective PR #28 preserves that history and carries
+the complete platform-cadence and presentation-boundary repair. M3.4 has only a queued slate; no
+M3.4 implementation has begun.
 
-## Shipped
+## Landed stack
 
-- `9c14fdfe` M3.0 determinism harness, canonical hash/diff, replay v1, and replay CLI — PR #14 merged.
-- `7ce2b45b` M3.1 arena entity manager, sparse-set SoA pools, and deferred destruction — PR #15 merged.
-- `133da41` M3.2 ordered views, phase-buffered damage events, and explicit same-tick schedule — PR #17 ready.
+- PR #21 `04ae177` → `8defa10`: Wave 3 plus superseded Wave 2b content and strict hosted Vulkan gate.
+- PR #22 `d35adee` → `4d250b2`: renderer robustness and restored Vulkan hard-require gate.
+- PR #23 `6a39c17` → `ab774ed`: ADR-0014 and roadmap ownership amendments.
+- PR #24 `c56ade4` → `ca5ad22`: initial M3.3 wave, corrected forward by PR #28.
+- PR #28 `codex/m3.3-acceptance-repair`: platform cadence, transactional snapshots, boundary repair,
+  Windows ASan CTest runtime staging, and final evidence/docs.
 
-## Verified
+## Verified locally
 
-- M3.2 `/WX` Debug and Release builds pass; 25/25 CTest entries pass in each configuration.
-- The two independent 10,000-tick runs end at `0x637628abff59c823` in Debug and Release.
-- Controlled mutation reports exactly `tick=4321 field=position_x entity=7`.
-- Replay remains format v1 with 16-byte commands and logic hash `0xab96814425ba80a4`.
-- The 17-file sim boundary and direct `eng_sim → core + math + serialize` dependency are clean.
-- Independent acceptance and final GitHub MSVC/CodeQL checks passed on the implementation head.
+- `/WX` Debug, RelWithDebInfo, and Release builds: 27/27 CTest entries green in each.
+- Debug-ASan: 27/27 green with the ASan runtime staged app-locally.
+- Replay v1 and `SIM_LOGIC_HASH = 0xab96814425ba80a4` are unchanged.
+- Two independent 10,000-tick runs end at `0x637628abff59c823`; mutation reports exactly
+  `tick=4321 field=position_x entity=7`.
+- 60/30/mixed/minimized cadence groupings preserve ticks and hashes; two owed ticks generate two
+  distinct same-tick command buffers; failed ticks retain time debt.
+- Arena snapshot init is transactional; extraction is const and hash-neutral; actual live count and
+  64 stable slots are preserved; interpolation is previous→current and identity-aware.
+- Fresh-clone README walk and a 90-frame validation-clean RTX 4070 Ti screenshot are green.
+- `eng_sim → core + math + serialize`; `eng_game → core + math + sim + render_common`; renderer has
+  no sim dependency; platform cadence has no game/sim dependency.
 
-## Signals
+## First action
 
-- **state/flags:** damage resolves in the same tick; the two-phase event queue deliberately preserves
-  a future next-tick experiment by moving only publication. Any timing-policy change requires a new
-  reviewed logic hash. Replay container version stays 1 unless its layout changes.
-- **communicated:** PR #17 carries the complete review surface; independent acceptance passed twice
-  across whitespace/docs-only successors. The full cold-resume baton is mirrored to the vault.
-- **raised for /custodian:** none; architecture, roadmap, journal, slate, and restart state are current.
-- **FOR /brain:** distill → `brain/moba-deterministic-sim-spine.md` ←
-  `MOBA-proto@133da41`: M3.0–M3.2 oracle, semantic-hash exclusions, ordered-system rule, and event-timing seam.
-- **DEFERRED / unresolved:** owner merge of PR #17; M3.3 platform accumulator/presentation snapshots;
-  M3.4 build isolation; hosted Vulkan SDK installation before making Vulkan required in CI.
+1. If PR #28 is still open, compare its live head to the recorded accepted head, require exact-head
+   Debug/RelWithDebInfo/Release CI plus CodeQL green, and squash-merge without deleting remote
+   branches. If any head changed, repeat acceptance on that exact head.
+2. Fast-forward local `main` and require post-merge CI/CodeQL green before opening new work.
 
-## Next — FIRST action
+## Next slate
 
-1. Owner-review and merge PR #17. Confirm its head and required checks remain green; do not begin
-   M3.3 from the open M3.2 branch.
-
-## Queue
-
-- From updated `main`, create `moba/slate-phase3-presentation` and execute
-  [`M3.3 presentation slate`](slate-moba-phase3-m3.3.md).
-- Preserve the M3.2 command stream, per-tick hash oracle, and tick-4321 diagnostic unchanged.
-- Keep the platform accumulator outside `eng_sim`; fixed→float conversion belongs only to game/present glue.
-- Measure same-tick versus next-tick damage before changing policy; define stale-handle behavior first.
-- Close M3.4 separately before opening Phase 4/5 work.
+Open [`M3.4 structural determinism`](slate-moba-phase3-m3.4.md) from updated green `main`. Centralize
+sim compile flags, prove game/test binary parity, strengthen isolation linting, and run the
+clang-cl/UBSan stretch gate where supported. Keep `SIM_LOGIC_HASH` unchanged unless authoritative
+behavior changes. Phase 4 remains blocked until M3.4 closes.

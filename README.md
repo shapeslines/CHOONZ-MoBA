@@ -3,12 +3,12 @@
 A multiplayer online battle arena built **from scratch in C++**, on a custom
 RTS-class game engine.
 
-> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0–M3.2 complete** (tagged
+> 🚧 **Status:** Early development. **Phases 0–2 and Phase 3 M3.0–M3.3 complete** (M3.2 tagged
 > `v0.3.0-m3.2`; `main` is gated by required CI checks via the `main-gate` ruleset). Build spine, ADRs,
 > Win32 window, memory arenas, float/fixed-point
 > math, containers, and a self-registering test harness on CTest + a pre-push gate
 > (determinism golden across `/fp:precise` + `/fp:fast`), plus GitHub Actions CI
-> (Windows MSVC, `/WX`, Debug + Release).
+> (Windows MSVC, `/WX`, Debug + RelWithDebInfo + Release).
 > **The renderer draws a 500-cube instanced field:** a hand-loaded raw-Vulkan renderer (ADR-0004)
 > on **dynamic rendering + synchronization2** (the hard minimum spec, ADR-0012) with
 > offline-compiled SPIR-V (ADR-0008), an on-disk pipeline cache, depth, per-frame
@@ -23,7 +23,10 @@ RTS-class game engine.
 > `moba_replay` record/inspect/verify CLI. Its 10,000-tick self-check is bit-identical in Debug and
 > Release at `0x637628abff59c823`, and the mutation proof reports exactly
 > `tick=4321 field=position_x entity=7`.
-> **Next: Phase 3 M3.3 fixed-tick platform loop and SIM/PRESENTATION snapshot boundary.**
+> M3.3 adds a platform-owned fixed-step accumulator, fresh same-tick commands for every owed tick,
+> and arena-backed previous/current presentation snapshots. `eng_game` is the sole interpolation and
+> fixed→float owner; the renderer still cannot see `SimWorld`.
+> **Next: Phase 3 M3.4 structural sim isolation and cross-binary parity.**
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -77,14 +80,23 @@ ctest --test-dir build-ci -C Debug --output-on-failure
 ```
 
 CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, entity/component/event/system/
-schedule/sim suites, `render`,
+schedule/sim/presentation suites, `render`,
 `render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
-the sim-boundary scan, and replay CLI fixtures. To run the replay tool directly:
+the sim/presentation boundary scans, and replay CLI fixtures. To run the replay tool directly:
 
 ```bat
 build-ci\tools\replay\Debug\moba_replay.exe record --out match.mbr
 build-ci\tools\replay\Debug\moba_replay.exe inspect match.mbr
 build-ci\tools\replay\Debug\moba_replay.exe verify match.mbr
+```
+
+The memory-safety gate uses the dedicated preset; the ASan runtime is staged beside the test and
+replay executables so CTest does not depend on a developer-shell `PATH`:
+
+```bat
+cmake --preset debug-asan
+cmake --build build-asan --config Debug
+ctest --test-dir build-asan -C Debug --output-on-failure
 ```
 
 A **pre-push hook** runs the same `/WX` build + `ctest` and blocks the push on red.
@@ -102,6 +114,7 @@ engine/        the engine, one static lib per module (the CMake link graph = the
   math/        fix.h (Q16.16), rng.h, vec/mat/quat                     (leaf)
   serialize/   bounded little-endian byte readers/writers              (leaf-up)
   platform/    the OS seam (Win32): window, input, timing, files, sockets, Vulkan surface
+  game/        arena snapshots, interpolation, fixed→float, and DrawItem construction
   render/      raw Vulkan behind a thin renderer seam; GLSL sources in render/shaders/
   sim/         arena-backed deterministic ECS, typed events/systems, schedule + replay codec
   (assets / net arrive in their phases)

@@ -2,7 +2,7 @@
 type: record
 title: "SLATE - Phase 3 M3.3 fixed tick and presentation boundary"
 kind: slate
-status: active
+status: acceptance
 project: moba
 axis: "simulation presentation boundary"
 queued: 2026-08-12
@@ -14,13 +14,14 @@ related:
   - "docs/ROADMAP.md M3.3"
   - "docs/slate-moba-phase3-m3.2.md"
   - "PR #17 / M3.2 systems and schedule"
+  - "PR #28 / M3.3 acceptance repair"
 ---
 
 # Slate - Phase 3 M3.3 fixed tick and presentation boundary
 
-**Status:** active acceptance repair. PRs #21–#24 merged in order, but #23/#24 were
-externally merged before acceptance corrections landed. This non-rewriting corrective
-branch keeps M3.3 open until cadence/presentation contracts and final evidence are green.
+**Status:** implementation-complete on corrective PR #28; independent acceptance, exact-head GitHub
+checks, and squash merge remain the closure gate. PRs #21–#24 merged in order, but #23/#24 were
+externally merged before acceptance corrections landed. History is preserved; #28 repairs forward.
 
 ## Goal
 
@@ -30,9 +31,9 @@ presentation state or timing to feed back into `eng_sim`.
 
 ## Entry gate
 
-- [ ] PR #17 is owner-approved, merged, and present on updated `main`.
-- [ ] Create `moba/slate-phase3-presentation` from that updated `main`.
-- [ ] Re-run the untouched M3.2 Debug/Release stream and record `0x637628abff59c823`.
+- [x] PR #17 is owner-approved, merged, and present on updated `main`.
+- [x] Start M3.3 from updated `main`; acceptance repair continues without rewriting merged history.
+- [x] Re-run the untouched M3.2 Debug/Release stream and record `0x637628abff59c823`.
 
 ## Fence
 
@@ -46,7 +47,8 @@ presentation state or timing to feed back into `eng_sim`.
 
 ## Invariants
 
-- The platform outer loop owns wall-clock accumulation, the OS pump, and the 0.25-second clamp.
+- The executable outer loop owns the OS pump and uses platform-owned cadence state/policy for
+  wall-clock accumulation, the 0.25-second clamp, owed ticks, consumption, and alpha.
 - `sim_tick` remains wall-clock-free and is called zero or more whole times per outer frame.
 - `RenderSnapshot` stores only fixed-point/interpolatable presentation fields and stable identities.
 - Snapshot extraction runs after a completed tick and cannot mutate `SimWorld`.
@@ -65,12 +67,37 @@ presentation state or timing to feed back into `eng_sim`.
 | S2 | Snapshot extraction | ascending entity extraction produces stable IDs and exact fixed fields without mutating world | complete — const view, 64 stable slots, actual live count, hash neutrality covered |
 | S3 | Platform accumulator | variable frame deltas call exactly the expected whole 30 Hz ticks under the catch-up clamp | complete — window-free helper drives sandbox; consume follows successful tick/capture |
 | S4 | Present glue | interpolation and the single fixed→float conversion build renderer inputs without a sim dependency in render | complete — previous→current and EntityId-change cases covered |
-| S5 | Runtime integration | normal, high, low, and minimized render rates preserve one sim hash stream and smooth snapshots | in progress — headless cadence/hash tests green; 90-frame hardware run pending |
-| S6 | Close M3.3 | full matrix, tests, boundary gates, owner interaction check if needed, docs, acceptance, and GitHub gates are green | queued |
+| S5 | Runtime integration | normal, high, low, and minimized render rates preserve one sim hash stream and smooth snapshots | complete — grouping/minimized tests and 90-frame RTX 4070 Ti run green |
+| S6 | Close M3.3 | full matrix, tests, boundary gates, hardware/fresh-walk evidence, docs, acceptance, and GitHub gates are green | in progress — all local gates green; independent verdict and exact-head GitHub/merge pending |
+
+## Acceptance evidence
+
+- PR #21 exact head `04ae177` merged as `8defa10`; #22 exact head `d35adee` merged as
+  `4d250b2`; #23 exact head `6a39c17` merged as `ab774ed`; #24 exact head `c56ade4` merged as
+  `ca5ad22`. #20/#25 are superseded by #21. Wave 5/6 remote branches are retained.
+- Corrective implementation checkpoints: platform cadence `b7bb363`, cadence slate record
+  `8f5e641`, and final cadence/presentation separation `9524185`. Replay format v1,
+  `SIM_LOGIC_HASH = 0xab96814425ba80a4`, same-tick command semantics, and authoritative simulation
+  behavior are unchanged.
+- `/WX` Debug, RelWithDebInfo, and Release builds pass all 27 CTest entries. Debug-ASan also passes
+  27/27 after staging the compiler runtime app-locally for Windows CTest.
+- Cadence tests prove 60 Hz, 30 Hz, mixed-rate, catch-up clamp, minimized rendering, retained debt on
+  tick failure, unchanged hashes, and fresh/distinct commands for both ticks of a two-tick frame.
+- Presentation tests prove transactional under-budget initialization, const/hash-neutral extraction,
+  actual live count, fixed 64-slot mapping, alpha 0/midpoint/near-1, previous→current direction,
+  destroyed slots, and no interpolation across reused generations.
+- `sim_boundary` and `present_boundary` confirm the four dependency seams and reject clocks,
+  presentation cadence, mutation, heap allocation, renderer→sim, and platform→game/sim coupling.
+- A fresh clone at `9524185` completed the README configure/build/test path and rendered 90
+  validation-clean frames. The RTX 4070 Ti screenshot is 1280×720 (2,764,854 bytes) with 64 objects,
+  one batch, one scene draw, three total draws, and 12 allocations.
+- The 10,000-tick oracle remains `0x637628abff59c823`; controlled divergence remains exactly
+  `tick=4321 field=position_x entity=7`.
 
 ## Exit gate
 
 M3.3 closes only when one platform-owned accumulator drives the unchanged deterministic schedule,
 snapshot extraction is fixed-only and one-way, presentation owns the sole fixed→float conversion,
 the renderer cannot see `SimWorld`, and render timing variations leave the M3.2 oracle unchanged.
-M3.4 remains a separate closure slate.
+M3.4 remains the separate [`structural determinism slate`](slate-moba-phase3-m3.4.md); no M3.4
+implementation enters this branch.

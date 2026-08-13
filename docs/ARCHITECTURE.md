@@ -67,6 +67,12 @@ The CMake link graph *is* the architecture. Each module is one static library (`
 `sim_tick`) and on `eng_platform` (sockets). Only `eng_render` sees Vulkan. Only `eng_platform`
 contains Win32-specific `.cpp`.
 
+M3.3 adds two deliberately separate seams. `eng_platform` provides the window-independent
+`PlatformFixedStep` cadence policy and links only core; it has no game/sim dependency. `eng_game`
+links core, math, sim, and Vulkan-free `eng_render_common` to extract read-only snapshots and build
+`DrawItem`s. The executable outer loop wires those libraries together. Neither renderer backend
+links sim, and `eng_game` never calls `sim_tick`.
+
 **`eng_core_group`** is the aggregate used by the broad headless test executable. It currently also
 links `eng_platform` because that executable owns the OS-page-arena and platform-file suites, so it is
 not the proof of simulation isolation. The stronger M3.0 proof is the dedicated
@@ -80,13 +86,13 @@ checks both source imports and `engine/sim/CMakeLists.txt`. `eng_sim` itself res
 |---|---|---|---|---|
 | Core | `eng_core` | Arenas/allocators, containers (`Array`/`HashMap`/`Str`), logging, assert, **handle ABI**, test harness, shared config headers | no | no |
 | Math | `eng_math` | `fix` (Q16.16) + fixed vec/trig/rng for sim; `f32` vec/mat/quat/geom for render; deterministic PRNG | no | no |
-| Platform | `eng_platform` | Win32 window/input/timer/file I/O/DLL load, **page allocator**, **VkSurface creation + Vulkan loader bootstrap**, UDP sockets, dir-watch. The outer loop + accumulator. | **yes (only here)** | headers only (surface) |
+| Platform | `eng_platform` | Win32 window/input/timer/file I/O/DLL load, **page allocator**, **VkSurface creation + Vulkan loader bootstrap**, UDP sockets, dir-watch, and the window-independent fixed-step cadence policy. | **yes (only here)** | headers only (surface) |
 | Render | `eng_render` | Raw Vulkan backend behind the thin renderer seam; bring-up, frames-in-flight, own device-memory allocator, pipelines, instanced forward draw | no | **yes (only here)** |
 | Sim | `eng_sim` | arena-backed sparse-set SoA world, ordered views, typed events, explicit systems/tick schedule, canonical hash/diff, replay codec | no | no |
 | Net | `eng_net` | Server loop driving sim_tick, per-client baseline/delta snapshots + interest management, client prediction/reconciliation, lag-comp history ring, own UDP reliability, command codec, replay, divergence detection | via platform seam | no |
 | Assets | `eng_assets` | Own PNG/glTF/WAV/TGA parsers, baked `.mba` container, runtime loader, resource registry | via platform seam | no (hands blobs to render seam) |
 | Serialize | `eng_serialize` | Bounded, sticky, allocation-free LE byte readers/writers shared by net + replay + asset codecs | no | no |
-| Game | `moba_game` | `WinMain` wiring, gameplay glue, selection/input→commands, present glue | links platform | links render |
+| Game/present | `eng_game` | Arena-backed previous/current snapshots, read-only extraction, identity-aware interpolation, the sole fixed→float conversion, and `DrawItem` construction | no | no (uses `eng_render_common`) |
 
 ---
 
@@ -146,6 +152,10 @@ The rules, binding on every subsystem:
 - **Into the sim flows only `Command`s** — serializable player intents with fixed-point targets.
 - **Out of the sim flows only read-only `RenderSnapshot`s** — a slim copy of interpolatable fields (transform, hp, anim-state, team). The renderer **never** sees `SimWorld`.
 - **Fixed→float conversion happens exactly once,** in the present glue (§9). Nothing downstream of that edge can feed back into the sim, so presentation float is harmless.
+- **Cadence is platform-owned.** The outer executable adds wall-clock frame deltas to
+  `PlatformFixedStep`, runs zero or more owed ticks, captures each successful post-tick state, and
+  consumes that tick only after both operations succeed. Platform-computed alpha is presentation
+  input, never simulation input.
 - **One RNG for the sim** (`pcg32`, §2.7), seeded from the match seed, its state inside `SimWorld` and therefore hashed and serialized. Presentation gets a *separate* RNG.
 - **No wall-clock, no addresses, no pointer-as-key, no hash-bucket iteration** in sim logic. Time is `world.tick`; identity is the handle; iteration is by ascending index.
 - **Debug and Release must be bit-identical.** Sim code must never branch on `ASSERT`/`#if BUILD_DEBUG` in a way that changes the computation (asserts may *read* state, never alter it).
@@ -941,22 +951,49 @@ redesign. `DeathEvent` and presentation events remain gameplay/presentation work
 
 ### 9.6 Snapshots & the present glue (one fixed→float owner)
 
-> **Resolved — the present glue owns interpolation + fixed→float + DrawItem building.** Earlier three owners were named (ECS `loop.c`, net/sim glue, game layer) and the renderer's actual input (`DrawItem[]`+`FrameView`) didn't match the snapshot/alpha the sim/net assumed. Canonical: a **present glue** in `game/present/` takes `RenderSnapshot prev`, `RenderSnapshot curr`, and `alpha`, and emits `DrawItem[]` + `FrameView`. It is the **single place** `fix_to_f32` is called. The renderer stays a pure consumer of float `DrawItem[]`/`FrameView` and never sees `SimWorld`.
+> **Resolved — `eng_game` owns snapshots, interpolation, fixed→float, and DrawItem building;
+> `eng_platform` owns cadence and alpha.** Earlier drafts put accumulator state in presentation and
+> named three loop owners. Canonical: `PlatformFixedStep` accumulates/clamps frame deltas and reports
+> owed whole ticks plus alpha without knowing `SimWorld`. After each successful `sim_tick`, the
+> executable captures the completed state. `eng_game` then interpolates previous→current and emits
+> float `DrawItem[]`. The renderer never sees or links `SimWorld`.
 
 ```c
-typedef struct {                        // slim, flat, memcpy-friendly; presentation fields only
-    uint64_t tick; uint32_t count;
-    EntityId *id; fix *pos_x, *pos_y, *facing; int32_t *hp, *hp_max; uint16_t *anim_state;
+typedef struct {
+    EntityId entity;                    // HANDLE_NULL marks an empty stable unit slot
+    fix x, y, facing;
+} RenderSnapshotUnit;
+
+typedef struct {
+    uint64_t tick;
+    uint32_t live_count;                // actual live mapped units
+    RenderSnapshotUnit *units;          // arena-backed, exactly 64 stable replay slots
 } RenderSnapshot;
-void snapshot_extract(RenderSnapshot* dst, const SimWorld*);  // per tick, sim-side (fixed)
-// present_build(prev, curr, alpha) -> DrawItem[] + FrameView   // game/present, the ONE fixed->float edge
+
+typedef struct { RenderSnapshot previous, current; } PresentState;
+
+size_t present_memory_required(void);
+bool present_init(PresentState*, Arena*, const SimWorld* initial_world); // transactional
+bool snapshot_extract(const SimWorld*, RenderSnapshot*);                 // explicit, const
+bool present_capture(PresentState*, const SimWorld* completed_world);
+uint32_t present_build_draw_items(const PresentState*, double platform_alpha,
+                                  MeshHandle, MaterialHandle, DrawItem*, uint32_t capacity);
 ```
+
+Both snapshots initialize from the pre-tick world. Extraction traverses the fixed 64-slot mapping,
+uses const component views, records actual liveness, and cannot mutate or hash-affect `SimWorld`.
+Same-identity slots interpolate previous→current; an `EntityId` change uses the current transform
+directly so destroyed/reused generations never blend. Allocation failure leaves `PresentState` and
+the arena offset unchanged.
 
 ### 9.7 Determinism enforcement & deferrals
 
 The Phase 3 boundary is executable: `sim_boundary` scans all `engine/sim` headers/sources and validates
-the direct CMake link seam, while `sim_determinism` replays 10,000 ticks in both build configurations.
-The sim lib is pinned to `/fp:precise`. **Deferred:** archetypes, multithreaded systems/job system
+the direct CMake link seam, while `present_boundary` rejects presentation-owned cadence, mutation,
+heap allocation, renderer→sim coupling, and platform→game/sim coupling. `sim_determinism` replays
+10,000 ticks in Debug, RelWithDebInfo, Release, and Debug-ASan. The sim lib is pinned to
+`/fp:precise`. **Deferred:** centralized compile-policy ownership and game/test binary parity (M3.4),
+archetypes, multithreaded systems/job system
 (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
 first), rollback machinery, generic query DSL, reflection/serialization codegen, and
 scene-graph/parent-child entities.
