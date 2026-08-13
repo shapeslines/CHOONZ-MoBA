@@ -461,7 +461,11 @@ static bool end_one_shot(Renderer* r, VkCommandBuffer cb) {
 // lives only inside the caller's TempMemory scope.
 static VkShaderModule load_shader_module(Renderer* r, const char* spv_name) {
     char path[512];
-    snprintf(path, sizeof(path), "%s/%s", MOBA_SHADER_DIR, spv_name);
+    const int path_length = snprintf(path, sizeof(path), "%s/%s", MOBA_SHADER_DIR, spv_name);
+    if (path_length < 0 || static_cast<size_t>(path_length) >= sizeof(path)) {
+        platform_log("renderer: shader path too long\n");
+        return VK_NULL_HANDLE;
+    }
 
     PlatformFile f;
     if (!platform_file_read(path, arena_allocator(&r->arena), &f)) {
