@@ -35,6 +35,10 @@ is the execution ledger.
 | Wave | Branch | PR | Merged as | Notes |
 |---|---|---|---|---|
 | â€” | `moba/gap-close` | â€” | â€” | worktree ledger base |
+| 1 | `moba/gap-close-w1` | #18 | `bf81e64` | merged 2026-08-13 |
+| 2a | `moba/gap-close-w2a` | #19 | `e85ea82` | merged 2026-08-13 |
+| 2b | `moba/gap-close-w2b` | #20 / #25 | â€” | #20 closed; recovery #25 superseded â€” Wave 2b content lands through #21 |
+| 3 | `moba/gap-close-w3` | #21 | pending | includes Wave 2b, determinism guards, and the narrow Vulkan device-gate classifier |
 
 ## Gap status
 
