@@ -107,14 +107,16 @@ Goal: reconcile PRs #29/#33/#34/#36/#40.
 Done means: every malformed input returns the documented exit class with no output/platform side
 effect; log boundaries pass at 4 MiB and fail at 4 MiB plus one.
 
-Status: complete locally. Sandbox frame counts now accept only canonical positive decimal integers
+Status: complete and published at `e4fbd09`. Sandbox frame counts now accept only canonical positive decimal integers
 and reject 14 malformed forms with exit 2 before DPI, window, or renderer activity. Replay numeric
 options reject signed, spaced, trailing, leading-zero, overflowing, and out-of-range values with exit
 1 and no output mutation. The test harness rejects seven missing/unknown selector cases before any
 test runs, and the visualizer validates all three output paths before creating a file. Classifier
 input is read through a bounded 4 MiB + 1 probe: exactly 4 MiB passes and 4 MiB + 1 fails, with all
 15 adversarial cases represented. Dev Debug and `/WX` Debug/Release focused gates pass 7/7; the full
-dev Debug suite passes 39/39.
+dev Debug suite passes 39/39. Every exact-head check is green. The first fresh-walk attempt failed
+before code on transient winget community-source error `0x8a15000f`; its targeted retry completed the
+SDK install and full walk successfully.
 
 ### S6 — Renderer capacity arithmetic
 
@@ -123,7 +125,13 @@ Goal: reconcile PRs #44/#45.
 Done means: valid draws are unchanged; first/last/full/overflow-adjacent and corrupt-state cases fail
 without item reads or count mutation.
 
-Status: pending.
+Status: complete locally. Debug-line and AABB capacity checks now use checked subtraction, and sphere
+segment multiplication is guarded before evaluation. Exact first/last/full and forged
+overflow-adjacent states are covered without count or vertex mutation. The null renderer rejects
+over-capacity and corrupt draw counts before touching a deliberately unreadable item pointer, while
+valid submissions remain unchanged. `render` passes 12 tests/113 checks and `render_null` passes 2
+tests/35 checks; dev Debug and `/WX` Debug/Release focused gates pass 2/2; full dev Debug remains
+39/39.
 
 ### S7 — Provenance and exact-head acceptance
 
@@ -154,5 +162,5 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Reconcile PR #44/#45 into the renderer-capacity slice; keep simulation/replay encoding, asset APIs,
+Run the full provenance and acceptance slice; keep simulation/replay encoding, asset APIs,
 PRs #47-#50, and unfinished S22 outside the branch.

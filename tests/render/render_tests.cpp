@@ -225,3 +225,50 @@ TEST(render, debug_draw_uses_one_frame_arena_block_and_resets) {
     CHECK(render_debug_begin(&list, &arena, 2048));
     CHECK(list.count == 0);
 }
+
+TEST(render, debug_draw_capacity_arithmetic_is_transactional) {
+    RenderDebugVertex vertices[32]{};
+    const mm::vec3 zero = mm::vec3_make(0.0f, 0.0f, 0.0f);
+    const mm::vec3 one = mm::vec3_make(1.0f, 1.0f, 1.0f);
+    RenderDebugList list{vertices, 0u, 2u, 7u};
+
+    CHECK(render_debug_line(&list, zero, one, 0x11223344u));
+    CHECK(list.count == 2u);
+    const uint32_t first_color = vertices[0].color_rgba8;
+    CHECK(!render_debug_line(&list, zero, one, 0xaabbccddu));
+    CHECK(list.count == 2u);
+    CHECK(list.world_count == 7u);
+    CHECK(vertices[0].color_rgba8 == first_color);
+
+    list.count = 0u;
+    list.capacity = 24u;
+    CHECK(render_debug_aabb(&list, zero, one, 0x55667788u));
+    CHECK(list.count == 24u);
+    CHECK(!render_debug_line(&list, zero, one, 0u));
+    CHECK(list.count == 24u);
+
+    list.count = 0u;
+    list.capacity = 18u;
+    CHECK(render_debug_sphere(&list, zero, 1.0f, 0x99aabbccu, 3u));
+    CHECK(list.count == 18u);
+    const uint32_t overflow_canary = vertices[0].color_rgba8;
+
+    list.count = 3u;
+    list.capacity = 2u;
+    CHECK(!render_debug_line(&list, zero, one, 0u));
+    CHECK(list.count == 3u);
+
+    list.count = UINT32_MAX - 1u;
+    list.capacity = UINT32_MAX;
+    CHECK(!render_debug_line(&list, zero, one, 0u));
+    CHECK(list.count == UINT32_MAX - 1u);
+
+    list.count = UINT32_MAX - 23u;
+    CHECK(!render_debug_aabb(&list, zero, one, 0u));
+    CHECK(list.count == UINT32_MAX - 23u);
+
+    list.count = 0u;
+    CHECK(!render_debug_sphere(&list, zero, 1.0f, 0u, UINT32_MAX / 6u + 1u));
+    CHECK(list.count == 0u);
+    CHECK(vertices[0].color_rgba8 == overflow_canary);
+}

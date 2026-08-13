@@ -49,7 +49,9 @@ target_include_directories(engine_tests PRIVATE
 target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common eng::game moba_warnings moba_options)
 
 add_executable(render_null_tests test_main.cpp render/render_null_tests.cpp)
-target_include_directories(render_null_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(render_null_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/engine/render/src)
 target_link_libraries(render_null_tests PRIVATE eng::render_null moba_warnings moba_options)
 
 # --- determinism: the SAME source built twice under different float models. The

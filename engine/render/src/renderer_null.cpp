@@ -1,5 +1,6 @@
 #include "render/renderer.h"
 #include "render_handle_table.h"
+#include "renderer_null_test.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -83,7 +84,8 @@ bool renderer_begin_frame(Renderer* r, const FrameView* view, int width, int hei
 }
 
 bool renderer_submit(Renderer* r, const DrawItem* items, uint32_t count) {
-    if (!r || !r->frame_begun || (!items && count) || count > NULL_MAX_DRAWS - r->draw_count)
+    if (!r || !r->frame_begun || (!items && count) ||
+        r->draw_count > NULL_MAX_DRAWS || count > NULL_MAX_DRAWS - r->draw_count)
         return false;
     for (uint32_t i = 0; i < count; ++i) {
         if (!render_handle_valid(&r->meshes, items[i].mesh.h) ||
@@ -119,3 +121,15 @@ void dbg_line(Renderer*, mm::vec3, mm::vec3, uint32_t) {}
 void dbg_sphere(Renderer*, mm::vec3, float, uint32_t) {}
 void dbg_aabb(Renderer*, mm::vec3, mm::vec3, uint32_t) {}
 void dbg_text_2d(Renderer*, float, float, float, uint32_t, const char*) {}
+
+uint32_t renderer_null_test_draw_capacity(void) { return NULL_MAX_DRAWS; }
+
+uint32_t renderer_null_test_draw_count(const Renderer* r) {
+    return r ? r->draw_count : UINT32_MAX;
+}
+
+bool renderer_null_test_set_draw_count(Renderer* r, uint32_t count) {
+    if (!r) return false;
+    r->draw_count = count;
+    return true;
+}

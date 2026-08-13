@@ -120,6 +120,12 @@ In progress. This section must account for every source diff before ready state.
   exactly 4 MiB succeeds, one byte over fails, and the permanent receipt reports 15 cases.
 - PR #40: retained and expanded. Missing, empty, or option-shaped selectors and unknown harness
   options return exit 2 before any test body runs, while valid filter and list controls remain green.
+- PR #44: retained and strengthened. Debug-line and AABB room checks use ordered subtraction after
+  validating `count <= capacity`; sphere segment multiplication is rejected before evaluation.
+  Exact-full and wrap-adjacent probes preserve vertex bytes and counters.
+- PR #45: retained and strengthened. Null submission validates current draw-count state before
+  subtraction or caller-item access. A private test seam injects full, over-capacity, and
+  `UINT32_MAX` counts and proves rejection leaves each value unchanged.
 
 ### S2 — CI recovery and fresh-walk
 
@@ -190,9 +196,30 @@ In progress. This section must account for every source diff before ready state.
   fixtures to 7/7 passing CTest entries in every configuration.
 - Full dev Debug: all targets build and CTest passes 39/39, including unchanged determinism,
   binary parity, replay, boundary, shader, and fresh-walk contract gates.
-- S5 disposition: PASS pending checkpoint publication.
+- Published checkpoint: `e4fbd09`; exact-head MSVC Debug/RelWithDebInfo/Release, clang-cl/UBSan,
+  both CodeQL checks, and fresh-walk passed. Fresh-walk attempt 1 failed before code on transient
+  winget community-source error `0x8a15000f`; targeted job attempt 2 installed the SDK and completed
+  the full walk green without a code change.
+- S5 disposition: PASS.
+
+### S6 — Renderer capacity arithmetic
+
+- Debug draw: line and AABB use subtraction-based room checks after validating current state; sphere
+  rejects `segments > UINT32_MAX / 6` before multiplication.
+- Boundary matrix: first line, exact-full line/AABB/sphere, full rejection, corrupt `count > capacity`,
+  line/AABB additive-wrap adjacency, and sphere multiplication overflow all preserve counters and
+  vertex canaries on failure.
+- Null renderer: exact-last submission succeeds; full, over-capacity count, corrupt current count,
+  and `UINT32_MAX` state reject before dereferencing an intentionally unreadable `DrawItem*` and do
+  not change `draw_count`.
+- Focused results: `render` passes 12 tests/113 checks; `render_null` passes 2 tests/35 checks. Dev
+  Debug and `/WX` Debug/Release CTest pass 2/2 in each configuration.
+- Full dev Debug: all targets build and CTest remains 39/39 with determinism, replay, boundaries,
+  fresh-walk contracts, and shader declarations unchanged.
+- S6 disposition: PASS pending checkpoint publication.
 
 ## NEXT
 
-Reconcile PRs #44/#45 only; preserve simulation/replay encoding, asset work, PRs #47-#50, and
+Run final source-hunk provenance and the complete acceptance battery; preserve simulation/replay
+encoding, asset work, PRs #47-#50, and
 unfinished S22 separately.

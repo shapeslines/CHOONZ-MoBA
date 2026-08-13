@@ -2,6 +2,10 @@
 
 #include <cmath>
 
+static bool render_debug_has_room(const RenderDebugList* list, uint32_t vertices) {
+    return list && list->count <= list->capacity && vertices <= list->capacity - list->count;
+}
+
 bool render_debug_begin(RenderDebugList* list, Arena* frame_arena, uint32_t capacity) {
     if (!list || !frame_arena || capacity == 0) return false;
     list->vertices = ARENA_PUSH_ARRAY(frame_arena, RenderDebugVertex, capacity);
@@ -12,7 +16,7 @@ bool render_debug_begin(RenderDebugList* list, Arena* frame_arena, uint32_t capa
 }
 
 bool render_debug_line(RenderDebugList* list, mm::vec3 a, mm::vec3 b, uint32_t color) {
-    if (!list || list->count + 2 > list->capacity) return false;
+    if (!render_debug_has_room(list, 2u)) return false;
     list->vertices[list->count++] = {a, color};
     list->vertices[list->count++] = {b, color};
     return true;
@@ -28,7 +32,7 @@ bool render_debug_aabb(RenderDebugList* list, mm::vec3 lo, mm::vec3 hi, uint32_t
     const uint8_t edges[12][2] = {
         {0,1},{1,2},{2,3},{3,0}, {4,5},{5,6},{6,7},{7,4}, {0,4},{1,5},{2,6},{3,7},
     };
-    if (!list || list->count + 24 > list->capacity) return false;
+    if (!render_debug_has_room(list, 24u)) return false;
     for (uint32_t i = 0; i < 12; ++i)
         render_debug_line(list, p[edges[i][0]], p[edges[i][1]], color);
     return true;
@@ -36,7 +40,8 @@ bool render_debug_aabb(RenderDebugList* list, mm::vec3 lo, mm::vec3 hi, uint32_t
 
 bool render_debug_sphere(RenderDebugList* list, mm::vec3 center, float radius,
                          uint32_t color, uint32_t segments) {
-    if (!list || radius <= 0.0f || segments < 3 || list->count + segments * 6 > list->capacity)
+    if (!list || radius <= 0.0f || segments < 3 || segments > UINT32_MAX / 6u ||
+        !render_debug_has_room(list, segments * 6u))
         return false;
     const float tau = 6.28318530718f;
     for (uint32_t ring = 0; ring < 3; ++ring) {
