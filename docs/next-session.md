@@ -8,6 +8,10 @@ local and GitHub gates but failed the required security review, so it was not pr
 findings passed the complete matrix at `f0a56c4`/`7a0d130`, but fresh full security review found one
 remaining descendant cleanup race after root validation. The handle-bound descendant walker and
 exact child-swap/outside-sentinel fixture are focused-green; full final-head revalidation remains.
+The first committed-head fresh walk passed through its 90-frame render but cleanup failed closed on
+Git read-only pack files. The walker now clears only `READONLY` through each verified handle before
+disposition; it removed the preserved residue, and the fixture covers both that case and a real
+descendant junction. This compatibility repair still needs a committed-head fresh walk.
 Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## Consolidation delivered
@@ -42,7 +46,7 @@ Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## First action
 
-1. Commit/push the descendant cleanup repair and rerun the complete local/fresh-walk matrix.
+1. Commit/push the read-only compatibility repair and rerun the complete local/fresh-walk matrix.
 2. Obtain fresh security and acceptance verdicts and require that exact head's MSVC matrix,
    clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
    then mark PR #51 ready.

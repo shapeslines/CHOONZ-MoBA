@@ -20,6 +20,10 @@ state, and fail-closed CLI grammar passed the complete local matrix. Independent
 exact-head GitHub checks then passed, but fresh full security review found descendants still deleted through paths
 after classification. The walker is now handle-bound for every node and its exact child-swap test is
 focused-green; the complete final gate must be rerun.
+The first committed-head fresh walk then passed configure/build/tests/Vulkan but failed safely during
+cleanup on Git's read-only pack files. The same bound handle now clears only `READONLY` before
+disposition; it successfully removed the preserved partial clone, and the permanent fixture covers a
+read-only file plus a descendant junction with an unchanged outside sentinel.
 Merge remains a separate owner action.
 
 ### What changed
@@ -68,7 +72,7 @@ Merge remains a separate owner action.
 
 ### Next
 
-Commit the descendant repair, rerun the complete local/fresh-walk matrix, obtain fresh-context
+Commit the read-only compatibility repair, rerun the complete local/fresh-walk matrix, obtain fresh-context
 security and acceptance verdicts on the final recorded head, require exact-head
 CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
 the squash merge and supersession closure of #26/#27/#29–#46. Retain their branches/worktrees; open

@@ -12,6 +12,7 @@ using Microsoft.Win32.SafeHandles;
 public static class MobaFreshWalkNative {
     private const uint DeleteAccess = 0x00010000;
     private const uint FileReadAttributes = 0x00000080;
+    private const uint FileWriteAttributes = 0x00000100;
     private const uint ShareRead = 0x1;
     private const uint ShareWrite = 0x2;
     private const uint ShareDelete = 0x4;
@@ -55,11 +56,26 @@ public static class MobaFreshWalkNative {
         public bool DeleteFile;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileBasicInformation {
+        public long CreationTime;
+        public long LastAccessTime;
+        public long LastWriteTime;
+        public long ChangeTime;
+        public uint FileAttributes;
+    }
+
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetFileInformationByHandle(
         SafeFileHandle file, int informationClass,
         ref FileDispositionInformation information, uint bufferSize);
+
+    [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetFileBasicInformationByHandle(
+        SafeFileHandle file, int informationClass,
+        ref FileBasicInformation information, uint bufferSize);
 
     private static SafeFileHandle OpenDirectory(string path, uint desiredAccess, uint shareMode) {
         SafeFileHandle handle = CreateFileW(
@@ -77,7 +93,9 @@ public static class MobaFreshWalkNative {
         // Omitting ShareDelete prevents the leased object from being renamed or
         // replaced until this handle is closed. DELETE is used for the final
         // handle-bound disposition after its children are gone.
-        return OpenDirectory(path, DeleteAccess | FileReadAttributes, ShareRead | ShareWrite);
+        return OpenDirectory(
+            path, DeleteAccess | FileReadAttributes | FileWriteAttributes,
+            ShareRead | ShareWrite);
     }
 
     public static string DirectoryIdentity(SafeFileHandle handle) {
@@ -99,7 +117,19 @@ public static class MobaFreshWalkNative {
         }
     }
 
-    public static void MarkDirectoryForDelete(SafeFileHandle handle) {
+    public static void MarkObjectForDelete(SafeFileHandle handle) {
+        const uint ReadOnlyAttribute = 0x1;
+        const uint NormalAttribute = 0x80;
+        ByHandleFileInformation current = Information(handle);
+        if ((current.FileAttributes & ReadOnlyAttribute) != 0) {
+            FileBasicInformation basic = new FileBasicInformation();
+            basic.FileAttributes = current.FileAttributes & ~ReadOnlyAttribute;
+            if (basic.FileAttributes == 0) basic.FileAttributes = NormalAttribute;
+            if (!SetFileBasicInformationByHandle(
+                    handle, 0, ref basic, (uint)Marshal.SizeOf(basic)))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
         FileDispositionInformation information = new FileDispositionInformation();
         information.DeleteFile = true;
         if (!SetFileInformationByHandle(handle, 4, ref information,
@@ -129,22 +159,29 @@ public static class MobaFreshWalkNative {
         // trusted. A vanished or sharing-conflicted entry fails closed.
         string[] children = Directory.GetFileSystemEntries(directoryPath);
         foreach (string childPath in children) {
-            using (SafeFileHandle child = OpenDirectory(
-                childPath, DeleteAccess | FileReadAttributes, ShareRead | ShareWrite)) {
-                ByHandleFileInformation information = Information(child);
-                bool isDirectory = (information.FileAttributes & DirectoryAttribute) != 0;
-                bool isReparsePoint =
-                    (information.FileAttributes & ReparsePointAttribute) != 0;
+            try {
+                using (SafeFileHandle child = OpenDirectory(
+                    childPath, DeleteAccess | FileReadAttributes | FileWriteAttributes,
+                    ShareRead | ShareWrite)) {
+                    ByHandleFileInformation information = Information(child);
+                    bool isDirectory = (information.FileAttributes & DirectoryAttribute) != 0;
+                    bool isReparsePoint =
+                        (information.FileAttributes & ReparsePointAttribute) != 0;
 
-                if (afterChildValidation != null)
-                    afterChildValidation(childPath);
+                    if (afterChildValidation != null)
+                        afterChildValidation(childPath);
 
-                // Reparse points are deleted as the link object. They are never
-                // traversed. Normal directories keep their no-delete-share
-                // handle live for the complete recursive walk.
-                if (isDirectory && !isReparsePoint)
-                    DeleteChildrenBound(child, childPath, afterChildValidation);
-                MarkDirectoryForDelete(child);
+                    // Reparse points are deleted as the link object. They are never
+                    // traversed. Normal directories keep their no-delete-share
+                    // handle live for the complete recursive walk.
+                    if (isDirectory && !isReparsePoint)
+                        DeleteChildrenBound(child, childPath, afterChildValidation);
+                    MarkObjectForDelete(child);
+                }
+            } catch (Exception exception) {
+                throw new IOException(
+                    "Handle-bound cleanup failed at '" + childPath + "': " +
+                    exception.Message, exception);
             }
         }
     }
@@ -292,7 +329,7 @@ function Remove-FreshWalkLease(
         if ([MobaFreshWalkNative]::DirectoryIdentity($handle) -ne $Lease.Identity) {
             throw "CloneDir identity changed during cleanup: $($Lease.ClonePath)"
         }
-        [MobaFreshWalkNative]::MarkDirectoryForDelete($handle)
+        [MobaFreshWalkNative]::MarkObjectForDelete($handle)
     } finally {
         $handle.Dispose()
     }

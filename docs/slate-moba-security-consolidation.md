@@ -149,6 +149,12 @@ holds normal-directory handles through recursion, never traverses reparse points
 node through its own verified handle. A post-child-validation hook attempts a rename plus
 outside-sentinel junction replacement and proves the rename is blocked and sentinel unchanged.
 The focused fixture and complete Debug suite pass; full final-head revalidation remains.
+The first committed-head fresh walk of `0cedd80` then configured, built 92 targets, passed 39/39, and
+rendered 90 frames, but cleanup failed safely on Git's read-only pack files. The bound walker now
+opens objects with write-attributes access, clears only `READONLY` through the same verified handle,
+and then applies disposition; it never falls back to recursive path deletion. The preserved partial
+clone was removed by this repaired walker and verified absent. The fixture now also deletes a real
+descendant junction as a leaf while preserving its outside sentinel.
 
 The first local-acceptance candidate (`a89caf6`) passed the `/WX`
 Debug/RelWithDebInfo/Release builds, all 39 CTest entries in each configuration, Debug-ASan,
@@ -195,7 +201,7 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Commit and push the descendant repair, rerun the full permanent matrix and fresh walk, obtain fresh
+Commit and push the read-only compatibility repair, rerun the full permanent matrix and fresh walk, obtain fresh
 security and acceptance verdicts, require exact-head CI/CodeQL, and mark PR #51
 ready only after all are green. Stop before the separate owner merge gate;
 keep simulation/replay encoding, asset APIs, #47-#50, and unfinished S22 outside the branch.

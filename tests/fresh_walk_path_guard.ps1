@@ -25,6 +25,8 @@ $intervalMoved = Join-Path $tempRoot "$nonce-interval-moved"
 $childRacePath = Join-Path $tempRoot "$nonce-child-race"
 $childRaceMoved = Join-Path $tempRoot "$nonce-child-race-moved"
 $childRaceOutside = Join-Path $tempRoot "$nonce-child-race-outside"
+$childRaceLink = Join-Path $childRacePath 'outside-link'
+$childRaceSwapLink = Join-Path $childRacePath 'payload'
 
 function Invoke-Rejected([string]$name, [string]$path, [string]$pattern) {
     $output = @(
@@ -135,9 +137,13 @@ try {
     $childRaceLease = New-FreshWalkLease $childRacePath $OutsideDir
     New-Item -ItemType Directory -Path (Join-Path $childRacePath '.git') -Force | Out-Null
     Initialize-FreshWalkLease $childRaceLease
-    $childRaceTarget = Join-Path $childRacePath 'payload'
+    $childRaceTarget = $childRaceSwapLink
     New-Item -ItemType Directory -Path $childRaceTarget | Out-Null
-    [System.IO.File]::WriteAllText((Join-Path $childRaceTarget 'owned.txt'), 'owned')
+    New-Item -ItemType Junction -Path $childRaceLink -Target $childRaceOutside | Out-Null
+    $readOnlyChild = Join-Path $childRaceTarget 'owned-readonly.txt'
+    [System.IO.File]::WriteAllText($readOnlyChild, 'owned')
+    [System.IO.File]::SetAttributes(
+        $readOnlyChild, [System.IO.FileAttributes]::ReadOnly)
     $childRaceState = [pscustomobject]@{ MoveBlocked = $false; SwapSucceeded = $false }
     $childHook = [System.Action[string]]{
         param([string]$openedPath)
@@ -192,7 +198,7 @@ try {
     Write-Output 'fresh-walk path guard PASS: unsafe locations, existing targets, and cleanup swaps rejected without deletion'
     exit 0
 } finally {
-    foreach ($link in @($junctionPath, $swapPath, (Join-Path $childRacePath 'payload'))) {
+    foreach ($link in @($junctionPath, $swapPath, $childRaceLink, $childRaceSwapLink)) {
         if (Test-Path -LiteralPath $link) {
             $linkItem = Get-Item -Force -LiteralPath $link
             if (($linkItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {

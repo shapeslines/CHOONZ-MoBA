@@ -613,6 +613,9 @@ Fresh full review of documentation head `7a0d130` then found descendants were st
 recursively removed by path. Every node is now handle-bound with reparse points treated as leaf
 links; the exact child-replacement/outside-sentinel regression is focused-green and the full matrix
 is being rerun.
+The first committed-head walk passed configure/build/tests/render and then failed closed on Git's
+read-only pack files. Bound-handle `READONLY` clearing and a permanent read-only/junction fixture are
+now focused-green; the committed-head walk is being repeated.
 
 ---
 
