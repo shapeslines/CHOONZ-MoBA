@@ -32,7 +32,9 @@ static void print_usage() {
 }
 
 static bool parse_u64(const char* text, uint64_t* out) {
-    if (!text || !out || text[0] == '\0' || text[0] == '-') return false;
+    if (!text || !out || text[0] == '\0') return false;
+    for (const char* p = text; *p != '\0'; ++p)
+        if (*p < '0' || *p > '9') return false;
     errno = 0;
     char* end = nullptr;
     unsigned long long value = std::strtoull(text, &end, 10);

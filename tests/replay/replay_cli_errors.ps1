@@ -34,6 +34,23 @@ try {
     Invoke-ExpectExit 1 @('verify', (Join-Path $WorkDir 'does-not-exist.mbr'))
     Invoke-ExpectExit 1 @('record', '--ticks', '1')
 
+    $invalidNumericCases = @(
+        @{ Name = 'ticks-plus';  Option = '--ticks';  Value = '+1' },
+        @{ Name = 'seed-plus';   Option = '--seed';   Value = '+1' },
+        @{ Name = 'players-plus'; Option = '--players'; Value = '+1' },
+        @{ Name = 'ticks-space'; Option = '--ticks';  Value = ' 1' },
+        @{ Name = 'seed-space';  Option = '--seed';   Value = ' 1' },
+        @{ Name = 'players-space'; Option = '--players'; Value = ' 1' }
+    )
+    foreach ($case in $invalidNumericCases) {
+        $outputPath = Join-Path $WorkDir ("moba_replay_invalid_{0}.mbr" -f $case.Name)
+        $created.Add($outputPath)
+        Invoke-ExpectExit 1 @('record', '--out', $outputPath, $case.Option, $case.Value)
+        if (Test-Path -LiteralPath $outputPath) {
+            throw "Malformed $($case.Option) value created a replay: $($case.Value)"
+        }
+    }
+
     $badMagic = Copy-ReplayBytes 'moba_replay_bad_magic.mbr'
     $created.Add($badMagic)
     $bytes = [IO.File]::ReadAllBytes($badMagic)
