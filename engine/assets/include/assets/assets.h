@@ -3,16 +3,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "assets/asset_id.h"
+#include "assets/asset_catalog.h"
 #include "core/handle.h"
 #include "core/hashmap.h"
 #include "core/mem.h"
-
-typedef enum AssetType {
-    ASSET_TYPE_NONE = 0,
-    ASSET_TYPE_TEXTURE,
-    ASSET_TYPE_SOUND,
-} AssetType;
 
 typedef enum AssetState {
     ASSET_STATE_EMPTY = 0,

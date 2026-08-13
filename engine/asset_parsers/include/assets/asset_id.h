@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // Stable asset identity (ADR-0010). Runtime paths are canonicalized before the
-// FNV-1a/64 hash is computed; generated constants arrive with the M4.1 cooker.
+// FNV-1a/64 hash is computed; generated constants are emitted by the M4.1 cooker.
 typedef uint64_t AssetId;
 
 #define ASSET_ID_NULL ((AssetId)0)

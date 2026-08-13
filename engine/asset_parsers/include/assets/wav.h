@@ -22,7 +22,7 @@ typedef struct WavPcm {
     uint16_t bits_per_sample;
 } WavPcm;
 
-// Strict RIFF/WAVE PCM: one fmt chunk, one data chunk, 1-2 channels, integer
+// Cooker/test RIFF/WAVE PCM: one fmt chunk, one data chunk, 1-2 channels, integer
 // 8/16/24/32-bit samples, and internally consistent byte/block rates. Unknown
 // padded chunks are skipped. Failure is allocation-free and leaves outputs intact.
 bool wav_inspect_pcm(const void* bytes, size_t size, WavInfo* out);

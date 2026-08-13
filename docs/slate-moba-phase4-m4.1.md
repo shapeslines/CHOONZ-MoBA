@@ -35,13 +35,24 @@ M4.1 owns one clean isolated worktree.
 - Old branch/worktree preserved. Active writer:
   `.worktrees/m41-cooker` on `codex/m4.1-cooker`.
 
-### S2 — Lock `.mba` v1 and shared codec — in progress
+### S2 — Lock `.mba` v1 and shared codec — complete
 
 Done-condition: ADR-0015, the POD-only `eng_asset_parsers` target, allocation-free
 codec, known-byte goldens, round trips, and malformed-container matrix pass in Debug
 and Release. Open a draft PR after the green checkpoint.
 
-### S3 — Deterministic cooker and generated catalog — pending
+- ADR-0015 fixes literal `MBA\0`, version 1, the 32-byte outer header, the one-mip
+  RGBA8 texture payload, and integer-PCM sound payload with explicit LE fields.
+- Stable identity, TGA/WAV parsers, catalog PODs, and the allocation-free codec now
+  live in `eng_asset_parsers`; the boundary CTest requires `core + serialize` and
+  rejects platform/render/game/sim/STL/heap contamination.
+- Known-byte texture/sound goldens, encode/inspect round trips, writer/output atomic
+  failure, truncation/trailing input, and outer/typed-field corruption matrices pass.
+- `/WX` Debug and Release builds pass; each configuration passes 45/45 CTest entries.
+- The direct M4.0 registry loaders intentionally remain until S4 replaces them with
+  the catalog-driven baked-only runtime in one vertical change.
+
+### S3 — Deterministic cooker and generated catalog — next
 
 ### S4 — Catalog-driven baked-only runtime — pending
 

@@ -11,7 +11,7 @@ typedef struct TgaImage {
     uint8_t* rgba8;       // width*height*4, rows top-down, caller allocated
 } TgaImage;
 
-// M4.0 direct runtime subset: true-color type 2 (raw) or 10 (RLE), 24/32 bpp,
+// Cooker/test subset: true-color type 2 (raw) or 10 (RLE), 24/32 bpp,
 // top/bottom-left origin, no palette/interleave/right-origin. Inspection validates
 // the complete packet stream before any decode allocation. Failures leave outputs
 // and the caller allocator untouched.

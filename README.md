@@ -139,7 +139,8 @@ engine/        the engine, one static lib per module (the CMake link graph = the
   math/        fix.h (Q16.16), rng.h, vec/mat/quat                     (leaf)
   serialize/   bounded little-endian byte readers/writers              (leaf-up)
   platform/    the OS seam (Win32): window, input, timing, files, sockets, Vulkan surface
-  assets/      normalized IDs, arena-backed registry/lifetimes, direct TGA/WAV loading
+  asset_parsers/ normalized IDs, POD TGA/WAV parsing, shared `.mba` codec
+  assets/      arena-backed registry/lifetimes and platform-backed runtime loading
   game/        arena snapshots, interpolation, fixed→float, and DrawItem construction
   render/      raw Vulkan behind a thin renderer seam; GLSL sources in render/shaders/
   sim/         arena-backed deterministic ECS, typed events/systems, schedule + replay codec
