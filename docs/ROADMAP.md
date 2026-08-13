@@ -328,6 +328,10 @@ seam (`renderer.h`, opaque handles, `DrawItem[]`) from the very first rung.
 ---
 
 ### M2.0 — Instance, device, swapchain → CLEAR the screen  🔴  · XL
+**Status:** complete 2026-08-12. Hand-loaded loader, instance/device/swapchain, and the
+per-frame sync recipe (frames-in-flight=2 + per-image fences) are in; the full scripted
+and owner-interactive validation gate (resize, minimize/restore, alt-tab, F1) passed with
+zero validation messages (JOURNAL Sessions 03, 06).
 **Goal:** full bring-up; clear the window to a color every frame. Proves sync + present end to end.
 **Deliverables:**
 - Instance (API 1.3), debug-utils messenger routing into the log, **assert only on the validation
@@ -363,6 +367,9 @@ deferral. **Exercises:** Renderer, Platform (surface), Memory (alloc Phase 1), B
 ---
 
 ### M2.1 — First triangle (pipeline + offline SPIR-V)  · M
+**Status:** complete 2026-06-11. First graphics pipeline + offline SPIR-V (`add_shader_library`,
+depfile-driven) + on-disk pipeline cache; triangle screenshot-verified by in-process readback
+(JOURNAL Session 04).
 **Goal:** first graphics pipeline; hardcoded verts in the shader.
 **Deliverables:** `add_shader_library` producing `triangle.vert/.frag.spv` (ADR-0008,
 `MOBA_SHADER_DIR`); pipeline created from a small static registry; on-disk `VkPipelineCache` loaded at
@@ -1058,6 +1065,11 @@ built; tag `v0.x-playable-prototype`.
 Each item sits behind an existing seam and is built **only when its trigger fires** — never
 prematurely. No ordering between them beyond "when needed."
 
+> **Shipped, not optional:** CI (GitHub Actions, Windows/MSVC, Debug + Release, `/WX` +
+> `ctest`) landed in Session 02 and is enforced on `main` by the `main-gate` ruleset
+> (required checks `windows-msvc (Debug)`/`(Release)`, 2026-08-12). Items below are the
+> remaining Phase 8 options; none is built until its trigger fires.
+
 | Item | Trigger | Effort | Notes |
 |---|---|---|---|
 | **Vulkan allocator Phase 2 (block sub-allocator)** 🔴 | Phase-1 dedicated-alloc assert fires (~3500 allocs) or real assets grow | L | 256 MB blocks per memory-type, free-list + coalesce, alignment + `bufferImageGranularity`, persistent staging ring; stable `vk_alloc` interface unchanged. |
@@ -1074,7 +1086,6 @@ prematurely. No ordering between them beyond "when needed."
 | **NAT traversal (hole-punch/relay)** | internet (non-LAN) public play | L | Scoped out of v1 deliberately. |
 | **Linux / macOS backends** | a second platform is actually wanted | XL | Designed-for: new `src/linux/`/`src/macos/` implementing the same `platform.h`/`platform_vulkan.h`; **do not build until the Windows engine is real** (premature portability is the over-engineering trap). |
 | **Hot-reload game-code DLL (Handmade-style)** | iteration on gameplay logic demands it | M | `platform_lib_*` enables it; engine stays static otherwise. |
-| **CI (GitHub Actions)** | `/WX`/determinism regressions slip in | S | Configure + build Debug+Release + `ctest` on Windows. |
 | **Bot heroes / advanced AI (behavior trees/GOAP)** | single-player practice / filling matches | L | Tiny FSMs sufficed for minions/towers. |
 | **HPA* / hierarchical pathing, path smoothing** | maps grow beyond small arena, or 8-dir looks bad | M | Small map made plain flow/A* sufficient. |
 
