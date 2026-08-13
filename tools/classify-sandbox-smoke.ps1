@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$maxLogBytes = 4 * 1024 * 1024
 
 function Reject([string]$reason) {
     Write-Output "SANDBOX_SMOKE=FAIL: $reason"
@@ -20,7 +21,27 @@ if (-not (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
 
 # The executable is compiled as UTF-8. Decode explicitly so Windows PowerShell 5.1
 # does not reinterpret the ADR-0012 em dash through the system ANSI code page.
-$output = [System.IO.File]::ReadAllText($LogPath, [System.Text.Encoding]::UTF8)
+# Read one byte beyond the cap so a growing or oversized log fails before the
+# classifier materializes an unbounded string.
+$logStream = [System.IO.File]::OpenRead($LogPath)
+try {
+    $logBuffer = New-Object byte[] ($maxLogBytes + 1)
+    $logRead = 0
+    while ($logRead -lt $logBuffer.Length) {
+        $chunk = $logStream.Read($logBuffer, $logRead, $logBuffer.Length - $logRead)
+        if ($chunk -eq 0) { break }
+        $logRead += $chunk
+    }
+    $logTooLarge = $logRead -gt $maxLogBytes -or $logStream.Length -gt $maxLogBytes
+    if (-not $logTooLarge) {
+        $output = [System.Text.Encoding]::UTF8.GetString($logBuffer, 0, $logRead)
+    }
+} finally {
+    $logStream.Dispose()
+}
+if ($logTooLarge) {
+    Reject "sandbox log exceeds $maxLogBytes bytes"
+}
 $lines = @($output -split "`r?`n" | ForEach-Object { $_.Trim() } |
            Where-Object { $_.Length -ne 0 })
 

@@ -88,11 +88,13 @@ Run-Case 'failure-with-stale-screenshot' ($success + "`nsandbox: capture FAILED"
 Run-Case 'hardware-plus-vk-warning' ($success + "`n[vk WARN] injected") 0 $true 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'hardware-plus-vk-error' ($success + "`n[vk ERROR] injected") 0 $true 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'substring-is-not-device-gate' ($physical -replace 'renderer: no Vulkan physical devices', 'prefix renderer: no Vulkan physical devices suffix') 0 $false 'SANDBOX_SMOKE=FAIL' 1
+$oversizedLog = ('x' * (4 * 1024 * 1024)) + "`n" + $physical
+Run-Case 'oversized-log' $oversizedLog 0 $false 'SANDBOX_SMOKE=FAIL' 1
 
 Remove-Item -LiteralPath $caseRoot -Recurse -Force
 if ($script:failureCount -ne 0) {
     Write-Output "$script:failureCount sandbox smoke classifier case(s) failed"
     exit 1
 }
-Write-Output "sandbox smoke classifier: 14 adversarial cases passed"
+Write-Output "sandbox smoke classifier: 14 adversarial cases passed; oversized log bound passed"
 exit 0
