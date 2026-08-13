@@ -32,14 +32,17 @@ bool render_build_batches(const DrawItem* items, uint32_t count, uint32_t capaci
     if (count == 0)
         return true;
 
+    TempMemory temporary = temp_begin(arena);
     SortItem* sorted = ARENA_PUSH_ARRAY(arena, SortItem, count);
     RenderInstanceData* instances = ARENA_PUSH_ARRAY(arena, RenderInstanceData, count);
     RenderBatch* batches = ARENA_PUSH_ARRAY(arena, RenderBatch, count);
 
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t pipeline_key = 0;
-        if (!resolve(resolve_user, &items[i], &pipeline_key))
+        if (!resolve(resolve_user, &items[i], &pipeline_key)) {
+            temp_end(temporary);
             return false;
+        }
         sorted[i].item = items[i];
         sorted[i].pipeline_key = pipeline_key;
         sorted[i].ordinal = i;

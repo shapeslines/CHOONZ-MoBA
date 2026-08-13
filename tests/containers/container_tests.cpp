@@ -9,8 +9,27 @@
 #include "core/hashmap.h"
 #include "platform/platform.h"
 #include <cstdint>
+#include <cstring>
 
 struct Obj { uint32_t a, b; };   // >= 4 bytes for the intrusive free list
+
+struct PoisonAllocatorState {
+    alignas(16) uint8_t blocks[4][128]{};
+    uint32_t next = 0u;
+};
+
+static void* poison_allocator_fn(void* raw_state, void* ptr, size_t old_size,
+                                 size_t new_size, size_t) {
+    PoisonAllocatorState* state = (PoisonAllocatorState*)raw_state;
+    if (new_size == 0u) {
+        if (ptr && old_size) std::memset(ptr, '?', old_size);
+        return nullptr;
+    }
+    CHECK(ptr == nullptr);
+    CHECK(new_size <= sizeof(state->blocks[0]));
+    CHECK(state->next < 4u);
+    return state->blocks[state->next++];
+}
 
 static void set_free_link(Obj* slot, uint32_t next) {
     memcpy(slot, &next, sizeof(next));
@@ -85,6 +104,23 @@ TEST(containers, str_strview) {
     CHECK(str_eq(&s, &t));
     str_free(&s); str_free(&t);
     CHECK(s.data == nullptr);
+}
+
+TEST(containers, str_aliases_survive_overlap_and_growth) {
+    PoisonAllocatorState state{};
+    Allocator allocator{poison_allocator_fn, &state, ALLOC_HEAP};
+    Str value;
+    str_init(&value, allocator);
+
+    str_set(&value, strview_cstr("0123456789abcdef"));
+    str_set(&value, strview(value.data + 4, 8));
+    CHECK(strview_eq(str_view(&value), strview_cstr("456789ab")));
+
+    str_set(&value, strview_cstr("0123456789abcdef"));
+    const StrView suffix = strview(value.data + 4, 8);
+    str_append(&value, suffix);
+    CHECK(strview_eq(str_view(&value), strview_cstr("0123456789abcdef456789ab")));
+    str_free(&value);
 }
 
 TEST(containers, pool_basics) {
