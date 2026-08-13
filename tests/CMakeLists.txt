@@ -40,10 +40,9 @@ add_executable(engine_tests
     present/present_tests.cpp          # M3.3: cadence integration + snapshot/present glue
     render/render_tests.cpp
     tga/tga_tests.cpp
-    ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
+    wav/wav_tests.cpp)
 target_include_directories(engine_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/tools/sandbox/src
     ${CMAKE_SOURCE_DIR}/engine/render/src
     ${CMAKE_SOURCE_DIR}/engine/platform/src/win32)         # Vulkan-free/internal boundaries under test
 # The aggregate suite links only the Vulkan-free renderer core; the null seam has its
@@ -113,6 +112,7 @@ add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 cadence/snap
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
+add_test(NAME wav         COMMAND engine_tests --suite wav)
 add_test(NAME det_precise COMMAND det_tests)        # /fp:precise golden hash
 add_test(NAME det_fast    COMMAND det_tests_fastfp) # /fp:fast    golden hash (must match)
 add_test(NAME sim_determinism COMMAND sim_determinism_tests --suite sim_determinism)

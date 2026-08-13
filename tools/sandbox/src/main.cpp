@@ -6,8 +6,8 @@
 //                                 readback — session-independent visual proof)
 //   sandbox --orbit               auto-rotates the camera (screenshot verification)
 //   sandbox --sim-self-check      runs the headless 10,000-tick eng_sim oracle
-// Loads assets/uv_test.tga directly (the asset manager arrives in Phase 4) and creates
-// typed mesh/texture/material resources for the instanced cube field.
+// Loads assets/uv_test.tga through the promoted M4.0 parser and creates typed
+// mesh/texture/material resources for the instanced cube field.
 // M2.3: an orbit camera (arrows rotate, wheel zooms) feeds view/proj into the
 // renderer's per-frame set=0 UBO through the seam.
 #include "platform/platform.h"
@@ -17,7 +17,7 @@
 #include "sim/oracle.h"
 #include "sim/sim.h"
 #include "game/present.h"
-#include "tga_direct.h"
+#include "assets/tga.h"
 #include <windows.h>       // SetProcessDpiAwarenessContext (G28)
 #include <cstdio>
 #include <cstdlib>
@@ -210,8 +210,8 @@ int main(int argc, char** argv) {
             else {
                 TextureDesc texture_desc{};
                 texture_desc.pixels = img.rgba8;
-                texture_desc.width = (uint32_t)img.width;
-                texture_desc.height = (uint32_t)img.height;
+                texture_desc.width = img.width;
+                texture_desc.height = img.height;
                 texture_desc.format = RENDERER_TEXTURE_RGBA8_SRGB;
                 texture = renderer_create_texture(rnd, &texture_desc);
                 MaterialDesc material_desc{};
@@ -219,7 +219,8 @@ int main(int argc, char** argv) {
                 material_desc.sampler = RENDERER_SAMPLER_LINEAR_REPEAT;
                 material = renderer_create_material(rnd, &material_desc);
                 if (!handle_is_null(material.h))
-                    std::printf("sandbox: typed cube material loaded (%dx%d from uv_test.tga)\n", img.width, img.height);
+                    std::printf("sandbox: typed cube material loaded (%ux%u from uv_test.tga)\n",
+                                img.width, img.height);
             }
             platform_arena_release(&tex_arena);
         }

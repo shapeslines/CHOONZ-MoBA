@@ -1,7 +1,9 @@
 #include "test.h"
 
 #include "assets/assets.h"
+#include "platform/platform.h"
 
+#include <cstdio>
 #include <cstring>
 
 struct FakeTextures {
@@ -184,4 +186,81 @@ TEST(assets, sound_roundtrip_and_capacity_failure_do_not_mutate) {
                                                      ASSET_LIFETIME_LEVEL, texture_source);
     CHECK(handle_is_null(wrong_type.h));
     CHECK(fixture.fake.creates == creates);
+}
+
+static void test_put_u16(uint8_t* out, uint16_t value) {
+    out[0] = (uint8_t)value;
+    out[1] = (uint8_t)(value >> 8u);
+}
+
+static void test_put_u32(uint8_t* out, uint32_t value) {
+    out[0] = (uint8_t)value;
+    out[1] = (uint8_t)(value >> 8u);
+    out[2] = (uint8_t)(value >> 16u);
+    out[3] = (uint8_t)(value >> 24u);
+}
+
+TEST(assets, loose_tga_and_wav_files_load_transactionally) {
+    const char* tga_path = "moba_asset_load_test.tga";
+    const char* wav_path = "moba_asset_load_test.wav";
+    std::remove(tga_path);
+    std::remove("moba_asset_load_test.tga.tmp");
+    std::remove(wav_path);
+    std::remove("moba_asset_load_test.wav.tmp");
+
+    uint8_t tga[22] = {};
+    tga[2] = 2u;
+    tga[12] = 1u; tga[14] = 1u;
+    tga[16] = 32u; tga[17] = 0x28u;
+    tga[18] = 0x11u; tga[19] = 0x22u; tga[20] = 0x33u; tga[21] = 0x44u;
+    CHECK(platform_file_write(tga_path, tga, sizeof(tga)));
+
+    const uint8_t pcm[] = {1u,0u, 2u,0u};
+    uint8_t wav[48] = {};
+    std::memcpy(wav + 0u, "RIFF", 4u);
+    test_put_u32(wav + 4u, 40u);
+    std::memcpy(wav + 8u, "WAVEfmt ", 8u);
+    test_put_u32(wav + 16u, 16u);
+    test_put_u16(wav + 20u, 1u);
+    test_put_u16(wav + 22u, 1u);
+    test_put_u32(wav + 24u, 44100u);
+    test_put_u32(wav + 28u, 88200u);
+    test_put_u16(wav + 32u, 2u);
+    test_put_u16(wav + 34u, 16u);
+    std::memcpy(wav + 36u, "data", 4u);
+    test_put_u32(wav + 40u, sizeof(pcm));
+    std::memcpy(wav + 44u, pcm, sizeof(pcm));
+    CHECK(platform_file_write(wav_path, wav, sizeof(wav)));
+
+    RegistryFixture fixture;
+    CHECK(init_fixture(&fixture, 4u));
+    AssetHandle texture = asset_load_texture_tga(&fixture.registry, tga_path,
+                                                  ASSET_LIFETIME_LEVEL);
+    AssetHandle sound = asset_load_sound_wav(&fixture.registry, wav_path,
+                                              ASSET_LIFETIME_LEVEL);
+    CHECK(!handle_is_null(texture.h) && !handle_is_null(sound.h));
+    AssetTextureView texture_view{};
+    AssetSoundView sound_view{};
+    CHECK(asset_get_texture(&fixture.registry, texture, &texture_view));
+    CHECK(texture_view.width == 1u && texture_view.height == 1u);
+    CHECK(texture_view.rgba8[0] == 0x33u && texture_view.rgba8[1] == 0x22u &&
+          texture_view.rgba8[2] == 0x11u && texture_view.rgba8[3] == 0x44u);
+    CHECK(asset_get_sound(&fixture.registry, sound, &sound_view));
+    CHECK(sound_view.sample_rate == 44100u && sound_view.frame_count == 2u &&
+          std::memcmp(sound_view.pcm, pcm, sizeof(pcm)) == 0);
+    CHECK(fixture.io.offset == fixture.registry.io_base_offset);
+
+    const size_t level_offset = fixture.level.offset;
+    const uint32_t live_count = fixture.registry.live_count;
+    AssetHandle missing = asset_load_texture_tga(&fixture.registry,
+                                                  "missing_asset.tga",
+                                                  ASSET_LIFETIME_LEVEL);
+    CHECK(handle_is_null(missing.h));
+    CHECK(fixture.level.offset == level_offset &&
+          fixture.registry.live_count == live_count &&
+          fixture.io.offset == fixture.registry.io_base_offset);
+
+    asset_registry_shutdown(&fixture.registry, 0u);
+    std::remove(tga_path);
+    std::remove(wav_path);
 }

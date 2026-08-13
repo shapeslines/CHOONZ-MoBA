@@ -28,7 +28,7 @@ record and commit the green checkpoint, then advance.
 
 - [x] Land/rebaseline gate.
 - [x] Stable `AssetId` plus transactional arena-backed registry and lifetime tests.
-- [ ] Promote TGA and add bounded WAV parsing/file loads.
+- [x] Promote TGA and add bounded WAV parsing/file loads.
 - [ ] Route the sandbox texture through `eng_assets` and prove unload ownership.
 - [ ] Full Debug/RelWithDebInfo/Release, ASan, oracle, boundary, fresh review, and PR.
 
@@ -51,3 +51,15 @@ record and commit the green checkpoint, then advance.
 - Normalized relative paths, forged/stale handle rejection, level rewind,
   generation reuse, global refcounts, capacity failure, and transactional
   under-budget initialization are covered directly.
+
+### Direct loaders
+
+- `tools/sandbox/src/tga_direct.*` is removed; sandbox and tests consume
+  `eng_assets`.
+- TGA covers raw/RLE 24/32-bit true-color, both vertical origins, complete packet
+  preflight, malformed run/truncation rejection, and allocation-free failure.
+- WAV covers strict RIFF PCM, padded unknown chunks, 1-2 channels, integer
+  8/16/24/32-bit samples, and rate/alignment consistency.
+- Loose file loads use a bounded allocator during the open/read race, rewind the
+  I/O arena after every outcome, and preserve durable state on failure.
+- Focused asset/TGA/WAV tests: 4/4. Full Debug CTest: 42/42.

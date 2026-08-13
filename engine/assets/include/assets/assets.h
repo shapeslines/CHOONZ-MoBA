@@ -134,6 +134,14 @@ AssetHandle asset_register_texture(AssetRegistry* registry, const char* path,
 AssetHandle asset_register_sound(AssetRegistry* registry, const char* path,
                                  AssetLifetime lifetime, AssetSoundSource source);
 
+// Loose-file M4.0 path. Files are bounded before and during the platform read,
+// decoded in the dedicated I/O arena, copied into the selected lifetime arena,
+// then the I/O arena is rewound. Failures leave the registry/lifetime unchanged.
+AssetHandle asset_load_texture_tga(AssetRegistry* registry, const char* path,
+                                   AssetLifetime lifetime);
+AssetHandle asset_load_sound_wav(AssetRegistry* registry, const char* path,
+                                 AssetLifetime lifetime);
+
 AssetHandle asset_registry_find(const AssetRegistry* registry, AssetId id);
 AssetHandle asset_registry_find_path(const AssetRegistry* registry, const char* path);
 bool asset_registry_valid(const AssetRegistry* registry, AssetHandle handle);
