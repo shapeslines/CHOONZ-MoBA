@@ -6,12 +6,11 @@
 # path so every suite finds "test.h".
 
 # --- Headless aggregate: the non-window/non-Vulkan engine libs the test binary links.
-# eng_platform is here ONLY for its OS page-allocator + file-I/O backends (plat_mem_*,
-# platform_file_*, the OS deps core's arenas and the file suites need — ADR-0005);
-# those live in their own TUs (win32_mem.cpp/win32_file.cpp/win32_log.cpp, G14), so
-# the window TU is never pulled into the test executables. As sim/net/assets land
-# they join this group, with their OS impls kept in the app layer (ADR-0006) so
-# headless testing holds.
+# eng_platform is here ONLY for its OS page-allocator backend (plat_mem_*, the one OS
+# dependency core's arenas need — ADR-0005); its window/input code is never called by
+# tests. As sim/net/assets land they join this group, with their OS impls kept in the
+# app layer (ADR-0006) so headless testing holds. Splitting the page backend out of
+# the Win32 window TU so this group is literally window-free is a later cleanup.
 add_library(engine_core_group INTERFACE)
 target_link_libraries(engine_core_group INTERFACE
     eng::core eng::math eng::serialize eng::sim eng::platform)
