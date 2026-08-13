@@ -104,9 +104,29 @@ identity, and preserves all durable state on failure.
 - `/WX` Debug and Release builds pass and both configurations pass 46/46 CTest
   entries, including the strengthened runtime boundary scan.
 
-### S5 — CMake content gate and sandbox migration — next
+### S5 — CMake content gate and sandbox migration — complete
 
-### S6 — Adversarial boundary hardening — pending
+Done-condition: a clean sandbox build first cooks configuration-local content, and
+both sandbox binaries load the generated catalog entry with no source/procedural
+fallback.
+
+- `moba_content` exposes only the active configuration's generated include root and
+  baked asset root. Its `content` dependency builds `moba_cooker`, generates the
+  sorted manifest, publishes every `.mba`, and publishes `asset_ids.gen.h` last.
+- Debug and Release independently emit `uv_test.tga.mba` SHA-256
+  `43C058906AFD340F3A9E33A40ABC5D88D62516E3D4621A2C3B9D5E33B2ADC90A` and
+  generated header SHA-256
+  `518FA7857829A0F23B84589ABBAFA024052FD7C63EEF963DB3E93D47CAAAD43F`.
+- `moba_sandbox` and `moba_sandbox_null` both link the content gate, initialize from
+  `MOBA_ASSET_CATALOG`, and call `asset_load(ASSET_UV_TEST_TGA)`. The temporary
+  procedural bridge and source-directory definition are gone.
+- A clean Debug sandbox build visibly runs the cooker first; a repeated `content`
+  build is current/no-op. The null sandbox runs two frames and reports the baked
+  64x64 texture at ID `0x3d9bff0eddada061` before a clean shutdown.
+- `/WX` Debug and Release builds pass; each configuration passes 47/47 CTest entries,
+  including generated-output and asset-boundary checks.
+
+### S6 — Adversarial boundary hardening — next
 
 ### S7 — Full acceptance and ready PR — pending
 

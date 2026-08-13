@@ -3,12 +3,12 @@
 # M4.0: consumes the promoted eng_assets parser; the next vertical slice routes
 # texture identity and lifetime through AssetRegistry as well.
 add_executable(sandbox src/main.cpp)
-target_link_libraries(sandbox PRIVATE eng::assets eng::platform eng::render eng::game moba_warnings moba_options)
-target_compile_definitions(sandbox PRIVATE "MOBA_ASSET_DIR=\"${CMAKE_SOURCE_DIR}/assets\"")
+target_link_libraries(sandbox PRIVATE eng::assets eng::platform eng::render eng::game
+    moba::content moba_warnings moba_options)
 
 add_executable(sandbox_null src/main.cpp)
-target_link_libraries(sandbox_null PRIVATE eng::assets eng::platform eng::render_null eng::game moba_warnings moba_options)
-target_compile_definitions(sandbox_null PRIVATE "MOBA_ASSET_DIR=\"${CMAKE_SOURCE_DIR}/assets\"")
+target_link_libraries(sandbox_null PRIVATE eng::assets eng::platform eng::render_null eng::game
+    moba::content moba_warnings moba_options)
 
 # Both runnable variants participate in the M3.4 binary-parity test under the
 # Debug-ASan preset, so stage the dynamic sanitizer runtime beside their shared

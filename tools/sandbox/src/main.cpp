@@ -18,6 +18,7 @@
 #include "sim/sim.h"
 #include "game/present.h"
 #include "assets/assets.h"
+#include "assets/asset_ids.gen.h"
 #include <windows.h>       // SetProcessDpiAwarenessContext (G28)
 #include <cstdio>
 #include <cstdlib>
@@ -210,12 +211,13 @@ int main(int argc, char** argv) {
         mesh = renderer_create_mesh(rnd, &mesh_desc);
     }
 
-    // S4 procedural bridge: the runtime registry is already baked-only, while S5
-    // wires the generated catalog/content target into this executable. The registry
-    // still owns the texture handle and level lifetime; no source-file fallback exists.
+    // Generated catalog -> baked .mba -> AssetRegistry -> renderer upload callback.
+    // The registry owns the texture handle and level lifetime; the sandbox owns
+    // only its material. No source-file fallback exists at runtime.
     if (rnd) {
         AssetRegistryConfig asset_config = asset_registry_config_default(MOBA_ASSET_DIR);
         asset_config.capacity = 64u;
+        asset_config.catalog = MOBA_ASSET_CATALOG;
         const size_t registry_bytes = asset_registry_memory_required(asset_config);
         const size_t LEVEL_BYTES = 64u * 1024u * 1024u;
         const size_t GLOBAL_BYTES = 8u * 1024u * 1024u;
@@ -231,14 +233,8 @@ int main(int argc, char** argv) {
             asset_registry_init(&asset_registry, &asset_persistent_arena,
                                 &asset_level_arena, &asset_global_arena,
                                 &asset_io_arena, asset_renderer, asset_config)) {
-            static const uint8_t bridge_pixels[] = {
-                255u, 255u, 255u, 255u, 32u, 32u, 32u, 255u,
-                32u, 32u, 32u, 255u, 255u, 255u, 255u, 255u,
-            };
-            AssetTextureSource bridge_source{bridge_pixels, 2u, 2u};
-            AssetHandle texture_asset = asset_register_texture(
-                &asset_registry, "uv_test.tga", ASSET_LIFETIME_LEVEL,
-                bridge_source);
+            AssetHandle texture_asset = asset_load(
+                &asset_registry, ASSET_UV_TEST_TGA, ASSET_LIFETIME_LEVEL);
             AssetTextureView texture_view{};
             if (asset_get_texture(&asset_registry, texture_asset, &texture_view)) {
                 texture = texture_view.gpu;

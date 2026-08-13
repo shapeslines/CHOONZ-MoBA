@@ -33,10 +33,15 @@ if(EXISTS "${SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp" OR
 endif()
 
 file(READ "${SOURCE_DIR}/tools/sandbox/src/main.cpp" sandbox)
-if(NOT sandbox MATCHES "asset_registry_shutdown" OR
+if(NOT sandbox MATCHES "#[ \t]*include[ \t]*[\"]assets/asset_ids\\.gen\\.h" OR
+   NOT sandbox MATCHES "MOBA_ASSET_CATALOG" OR
+   NOT sandbox MATCHES "ASSET_UV_TEST_TGA" OR
+   NOT sandbox MATCHES "asset_load[ \t\r\n]*\\(" OR
+   NOT sandbox MATCHES "asset_registry_shutdown" OR
+   sandbox MATCHES "asset_register_texture[ \t\r\n]*\\(" OR
    sandbox MATCHES "asset_load_(texture_tga|sound_wav)" OR
    sandbox MATCHES "tga_decode[ \t\r\n]*\\(")
-    message(FATAL_ERROR "sandbox bypasses the baked/procedural AssetRegistry path")
+    message(FATAL_ERROR "sandbox does not exclusively use generated baked assets")
 endif()
 
 message(STATUS "asset boundary: core/platform only, no Vulkan/render/sim dependency")

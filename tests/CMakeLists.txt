@@ -112,6 +112,12 @@ add_test(NAME cooker_cli
 set_tests_properties(cooker_cli PROPERTIES
     PASS_REGULAR_EXPRESSION
         "cooker CLI: deterministic texture/sound publication and failure matrix passed")
+add_test(NAME content_outputs
+    COMMAND ${CMAKE_COMMAND}
+            -DBAKED_ROOT=${CMAKE_BINARY_DIR}/baked/$<CONFIG>
+            -DGENERATED_ROOT=${CMAKE_BINARY_DIR}/generated/$<CONFIG>
+            -DMANIFEST=${MOBA_ASSET_MANIFEST}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_content_outputs.cmake")
 add_test(NAME core_invariant_tripwire
     COMMAND ${CMAKE_COMMAND}
             -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>
