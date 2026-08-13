@@ -15,7 +15,8 @@ function(moba_collect_sim_contract_errors out_variable sim_root sources links in
         else()
             set(relative_source "${normalized_source}")
         endif()
-        if(NOT relative_source MATCHES "^src/[A-Za-z0-9_./-]+\\.cpp$")
+        if(relative_source MATCHES "(^|/)\\.\\.(/|$)" OR
+                NOT relative_source MATCHES "^src/[A-Za-z0-9_./-]+\\.cpp$")
             list(APPEND errors "forbidden eng_sim implementation source '${source}'")
         endif()
     endforeach()

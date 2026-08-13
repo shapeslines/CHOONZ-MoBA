@@ -33,7 +33,7 @@ function(expect_contract_error fixture_name expected sources links interface_lin
 endfunction()
 
 expect_contract_error(forbidden_source "forbidden eng_sim implementation source"
-    "src/a.cpp;../platform/time.cpp" "${valid_links}"
+    "src/a.cpp;src/../platform/time.cpp" "${valid_links}"
     "${valid_interface_links}" "${valid_includes}")
 expect_contract_error(forbidden_link "forbidden direct link dependency 'eng::platform'"
     "${valid_sources}" "${valid_links};eng::platform"

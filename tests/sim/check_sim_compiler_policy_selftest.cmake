@@ -53,11 +53,18 @@ expect_policy_failure(
     "${duplicate_fp_db}"
     "must receive exactly one /fp:precise option")
 
-string(REPLACE "/nologo" "/nologo -IC:/forbidden/engine/platform/include"
+string(REPLACE "/nologo" "/nologo -I C:/forbidden/engine/platform/include"
     forbidden_include_db "${clean_db}")
 expect_policy_failure(
     forbidden_include_path
     "${forbidden_include_db}"
+    "has forbidden include path")
+
+string(REPLACE "/nologo" "/nologo /external:IC:/forbidden/engine/render/include"
+    forbidden_system_include_db "${clean_db}")
+expect_policy_failure(
+    forbidden_system_include_path
+    "${forbidden_system_include_db}"
     "has forbidden include path")
 
 string(REPLACE "/engine/sim/CMakeFiles/eng_sim.dir/"

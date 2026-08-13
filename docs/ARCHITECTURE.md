@@ -1013,6 +1013,9 @@ policy. Negative fixtures exercise each failure lane. The capability-aware
 real signed-overflow tripwire, and then runs the canonical oracle under instrumented RelWithDebInfo
 with `/WX`, `/fp:precise`, no RTTI, and no exceptions. RelWithDebInfo plus the stretch-only static
 CRT selection match the standalone Windows UBSan runtime ABI; normal MSVC builds are unchanged.
+Together, the direct test probe and Vulkan/null sandbox self-checks pin the mature Phase 3 sim
+artifact before Phase 4 adds asset-facing application code. This structural gate changes no command,
+schedule, replay, or canonical-state semantics, so replay v1 and `SIM_LOGIC_HASH` remain unchanged.
 **Later deferrals:** archetypes, multithreaded systems/job system
 (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
 first), rollback machinery, generic query DSL, reflection/serialization codegen, and

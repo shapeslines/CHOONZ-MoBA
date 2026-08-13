@@ -26,9 +26,9 @@ RTS-class game engine.
 > M3.3 adds a platform-owned fixed-step accumulator, fresh same-tick commands for every owed tick,
 > and arena-backed previous/current presentation snapshots. `eng_game` is the sole interpolation and
 > fixed→float owner; the renderer still cannot see `SimWorld`.
-> **Active: Phase 3 M3.4 structural sim isolation.** The central compiler policy,
-> test/game-binary parity, fail-closed isolation, and clang-cl/UBSan stretch slices are green;
-> the final closure matrix remains.
+> **Phase 3 is acceptance-complete through M3.4 on PR #38.** Central compiler ownership,
+> test/game-binary parity, fail-closed isolation, and clang-cl/UBSan proofs are green. Phase 4 asset
+> work begins only after the owner-approved merge and a green synchronized `main`.
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).

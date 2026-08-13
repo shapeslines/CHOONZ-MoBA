@@ -90,11 +90,13 @@ if(compile_count GREATER 0)
             list(APPEND policy_errors "${entry_file} is missing the deterministic policy marker")
         endif()
 
-        string(REGEX MATCHALL "(^|[ \t])[-/]I(\"[^\"]+\"|[^ \t]+)"
+        set(include_prefix "[-/]I[ =]?|/external:I[ =]?|-isystem[ =]?|-imsvc[ =]?")
+        string(REGEX MATCHALL
+            "(^|[ \t])(${include_prefix})(\"[^\"]+\"|[^ \t]+)"
             command_includes "${command}")
         foreach(command_include IN LISTS command_includes)
             string(STRIP "${command_include}" include_path)
-            string(REGEX REPLACE "^[-/]I" "" include_path "${include_path}")
+            string(REGEX REPLACE "^(${include_prefix})" "" include_path "${include_path}")
             string(REGEX REPLACE "^\"|\"$" "" include_path "${include_path}")
             file(TO_CMAKE_PATH "${include_path}" include_path)
             if(NOT IS_ABSOLUTE "${include_path}")

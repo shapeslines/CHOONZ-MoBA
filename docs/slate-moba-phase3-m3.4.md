@@ -2,7 +2,7 @@
 type: record
 title: "SLATE - Phase 3 M3.4 structural determinism"
 kind: slate
-status: active
+status: complete
 project: moba
 axis: "simulation build isolation"
 queued: 2026-08-13
@@ -18,9 +18,11 @@ related:
 
 # Slate - Phase 3 M3.4 structural determinism
 
-**Status:** active. Corrective PR #28 is squash-merged from exact green head `8cc42c1` as `b03f545`;
-docs closure PR #35 then advanced `main` to `11662ae` without engine changes. S0 captured that exact
-untouched baseline before the M3.4 branch was created. Phase 4 remains blocked until this slate closes.
+**Status:** acceptance-complete on PR #38; its squash merge remains separately owner-approved.
+Corrective PR #28 is squash-merged from exact green head `8cc42c1` as `b03f545`; docs closure PR #35
+then advanced `main` to `11662ae` without engine changes. S0 captured that exact untouched baseline
+before the M3.4 branch was created. Phase 4 implementation remains blocked until PR #38 merges and
+synchronized `main` is green.
 
 ## Goal
 
@@ -75,7 +77,7 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 | S2 | Binary-path parity | test and runnable game paths consume the same sim library and replay the same commands to the exact M3.3 hash stream | complete — probe + Vulkan/null sandboxes match the pinned stream digest |
 | S3 | Strong isolation lint | source, include, link, compile-command, and accidental-source-recompile checks fail on forbidden sim/platform/render/presentation coupling | complete - configure contract + generated-build/source scans fail closed |
 | S4 | Second-toolchain stretch | clang-cl config builds the oracle and UBSan runs where supported, with exact capability/evidence recorded | complete - clang-cl 19.1.5 + UBSan oracle/tripwire green |
-| S5 | Close M3.4 | `/WX` matrix, ASan, parity, boundary scans, fresh walk, docs, independent acceptance, and exact-head GitHub gates are green | queued |
+| S5 | Close M3.4 | `/WX` matrix, ASan, parity, boundary scans, fresh walk, docs, independent acceptance, and exact-head GitHub gates are green | complete - all evidence green; exact-head checks and acceptance verdict are retained on PR #38 |
 
 ## S0 evidence
 
@@ -175,11 +177,23 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 - The local Vulkan sandbox ran exactly 90 frames with validation enabled on an NVIDIA GeForce RTX
   4070 Ti, exited cleanly, and produced a 2,764,854-byte `1280x720` BMP accepted by the strict smoke
   classifier. No validation warning or error was logged.
-- Fresh-walk, documentation closure, independent acceptance, and exact-head hosted checks remain
-  open; S5 and M3.4 are not yet complete.
+- A clean clone of checkpoint `8dcd385` configured and built from the documented path, passed 32/32,
+  repeated the 90-frame strict screenshot contract, and remained clean. Hosted CI run `31675675948`
+  passed Debug/RelWithDebInfo/Release, clang-cl/UBSan capability, and fresh-walk; CodeQL run
+  `31675672904` passed C/C++ and workflow analysis on the same exact head.
+- A final scope audit hardened relative-source traversal and `/external:I`/`-isystem`/`-imsvc`
+  include spellings; the expanded negative fixtures pass under MSVC and clang-cl. ROADMAP,
+  architecture, README, journal, next-session, ADR-0002, and this slate now reflect the observed
+  closure evidence.
+- Fresh-context read-only acceptance verified the compiler policy, three binary paths, generated
+  isolation evidence, clang-cl/UBSan result, local/hosted matrix, unchanged authoritative behavior,
+  and Phase 4 fence. Its sole P1 finding was this slate's stale `active/pending` wording; that
+  contradiction is repaired here. Fresh-context PASS on the final pushed head remains a PR-readiness
+  control, with the exact verdict retained on PR #38 rather than encoded as mutable source state.
 
 ## Exit gate
 
-M3.4 closes only when deterministic flags have one owner, game/test paths prove the same M3.3 oracle
-through the same sim artifact, isolation drift is mechanically rejected, and all blocking MSVC gates
-remain green. The clang-cl/UBSan result must be explicit and reproducible. Only then may Phase 4 open.
+M3.4 acceptance is complete because deterministic flags have one owner, game/test paths prove the
+same M3.3 oracle through the same sim artifact, isolation drift is mechanically rejected, and all
+blocking MSVC plus stretch gates are green. PR merge remains separately owner-approved. Phase 4 may
+open only from synchronized `main` after that merge and green post-merge checks.

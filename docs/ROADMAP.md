@@ -448,7 +448,7 @@ so Phase 4 consumes exactly this. **Exercises:** Renderer seam, Build (PRIVATE V
 **determinism harness built before there is content to break it.** This is the project's spine and the
 reviews' most-watched risk.
 
-> **Complete:** M3.0–M3.3. **Now:** M3.4. **Next:** Phase 4 (assets) and Phase 5 (gameplay) can begin once M3.4 holds.
+> **Complete:** M3.0–M3.4. **Next:** Phase 4 (assets). **Later:** Phase 5 gameplay begins on the cooked asset seams.
 > 🔴 Determinism is global and fragile: one stray float, unordered iteration, or wall-clock read
 > desyncs. The state-hash self-check is the only humane way to catch it — **build it first.**
 
@@ -563,7 +563,7 @@ proves the runnable/test binary paths cannot drift.
 
 ---
 
-### M3.4 — Sim lib isolation + flag pinning  · S
+### M3.4 — Sim lib isolation + flag pinning  · S  ✅ COMPLETE 2026-08-13
 **Goal:** make the deterministic island structurally enforced.
 **Deliverables:** `eng_sim` static lib links **nothing** from render/present; pinned `/fp:strict` (or
 `/fp:precise`) for sim in **one** toolchain include so the test binary and the game binary compile sim
@@ -571,11 +571,19 @@ proves the runnable/test binary paths cannot drift.
 sim wired into the pre-push hook.
 **DoD:** `eng_sim` builds with no render/platform-OS deps; the float-grep lint is part of `ctest`/hook;
 self-check passes from both the test binary and the game binary.
-**M3.0 baseline already landed:** the direct link isolation, `/fp:precise`, source scan, and dedicated
-test-binary self-check are active now. M3.4 extends that gate over the mature ECS and proves the game
-binary path after M3.1–M3.3; it is not otherwise pulled forward.
-Execute this as the separate [`M3.4 structural determinism slate`](slate-moba-phase3-m3.4.md).
-Phase 4 remains blocked until that slate closes.
+**Observed:** `moba_sim_determinism` is the sole `/fp:precise` policy owner for all nine current
+`eng_sim` implementation sources. Generated compile-command checks prove every source is compiled
+once per Debug/RelWithDebInfo/Release configuration, only into `eng_sim`, with only sim/core/math/
+serialize include roots. Configure-time source/include/direct/exported-link contracts and adversarial
+fixtures fail closed on platform/render/game imports, path traversal, system-include injection,
+policy drift, and accidental recompilation. A caller-storage-backed oracle runs through the direct
+test probe and both Vulkan/null game binaries from the same archive; all emit 923 commands, final
+`0x637628abff59c823`, stream digest `0x6f381609f7e59f0c`, and unchanged logic hash
+`0xab96814425ba80a4`. Full `/WX` Debug, RelWithDebInfo, Release, and Debug-ASan suites pass 32/32;
+clang-cl 19.1.5 plus UBSan passes its runtime tripwire and instrumented oracle; local and hosted
+fresh walks complete 90 validation-clean frames. See the closed execution record in
+[`slate-moba-phase3-m3.4.md`](slate-moba-phase3-m3.4.md). Phase 4 may open after owner-approved PR
+merge and a green synchronized `main`.
 **Risks:** flag drift between binaries is a silent desync source — single toolchain include prevents it.
 **Exercises:** Build (sim isolation), Tooling, Determinism.
 
@@ -1145,7 +1153,7 @@ prematurely. No ordering between them beyond "when needed."
 ## Critical path (the spine, in one line)
 
 `window (M0.3) → core/mem + math/fix (M1.0–1.2) → Vulkan clear→triangle→quad→instanced (M2.0–2.3) →
-determinism harness + ECS + fixed-tick loop (M3.0–3.3) → assets (M4.x) → gameplay single-player
+determinism harness + ECS + fixed-tick loop + structural isolation (M3.0–3.4) → assets (M4.x) → gameplay single-player
 (M5.x) → UDP + server-authority + prediction/reconciliation + interest/delta + divergence detection (M6.x) → vertical slice match (M7.x)`
 
 Everything else hangs off this spine or is explicitly deferred to Phase 8+.

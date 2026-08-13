@@ -1,51 +1,53 @@
 # MOBA-proto — next session
 
-## State @ merged `b03f545` · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ PR #38 acceptance head · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
-Phase 3 M3.0–M3.3 is complete on merged `main`. PRs #21–#24 landed in order; corrective PR #28
-preserved that history, passed independent acceptance, and squash-merged exact head `8cc42c1` as
-`b03f545`. Post-merge CI and CodeQL are green. M3.4 has only a queued slate; no M3.4 implementation
-has begun.
+Phase 3 M3.0–M3.4 is acceptance-complete. M3.4 lives on
+`codex/m3.4-structural-determinism` in PR #38; the owner-approved squash merge is the remaining state
+transition. Do not begin Phase 4 from this branch or from stale local `main`.
 
-## Landed stack
+## M3.4 delivered
 
-- PR #21 `04ae177` → `8defa10`: Wave 3 plus superseded Wave 2b content and strict hosted Vulkan gate.
-- PR #22 `d35adee` → `4d250b2`: renderer robustness and restored Vulkan hard-require gate.
-- PR #23 `6a39c17` → `ab774ed`: ADR-0014 and roadmap ownership amendments.
-- PR #24 `c56ade4` → `ca5ad22`: initial M3.3 wave, corrected forward by PR #28.
-- PR #28 `8cc42c1` → `b03f545`: platform cadence, transactional snapshots, boundary repair, strict
-  hosted Vulkan classification, Windows ASan CTest runtime staging, and final evidence/docs.
+- `moba_sim_determinism` is the single `/fp:precise` owner for all authoritative sim translation
+  units. The generated compile database proves nine sources × three MSVC configurations, one object
+  owner, one policy marker, one compatible FP option, and only sim/core/math/serialize include roots.
+- `moba_enforce_sim_target` fails CMake configure on unexpected implementation sources, include
+  roots, direct links, or exported links. Source and negative-fixture scans reject float/libm,
+  wall-clock, heap/unordered containers, platform/render/game imports, path traversal, system-include
+  injection, and accidental sim-source recompilation.
+- `sim_oracle_run` is platform-free and caller-storage-backed. The direct test probe and both
+  Vulkan/null sandbox binaries call the same `eng_sim` archive through `--sim-self-check` and emit
+  an identical 10,000-tick result: 923 commands, final `0x637628abff59c823`, stream
+  `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`.
+- The clang-cl stretch script locates an installed compiler, proves UBSan with a real overflow
+  tripwire, then runs the instrumented RelWithDebInfo oracle under `/WX`, no RTTI/exceptions, and the
+  same sim policy. Local clang-cl 19.1.5 + UBSan and the hosted capability job are green.
+- Both sandbox variants stage the Debug-ASan runtime app-locally, so parity remains executable under
+  the sanitizer tree. No authoritative behavior, replay byte, schedule, or logic hash changed.
 
-## Verified locally
+## Verified
 
-- `/WX` Debug, RelWithDebInfo, and Release builds: 28/28 CTest entries green in each.
-- Debug-ASan: 28/28 green with the ASan runtime staged app-locally.
-- Replay v1 and `SIM_LOGIC_HASH = 0xab96814425ba80a4` are unchanged.
-- Two independent 10,000-tick runs end at `0x637628abff59c823`; mutation reports exactly
-  `tick=4321 field=position_x entity=7`.
-- 60/30/mixed/minimized cadence groupings preserve ticks and hashes; two owed ticks generate two
-  distinct same-tick command buffers; failed ticks retain time debt.
-- Arena snapshot init is transactional; extraction is const and hash-neutral; actual live count and
-  64 stable slots are preserved; interpolation is previous→current and identity-aware.
-- Fresh-clone README walk and a 90-frame validation-clean RTX 4070 Ti screenshot are green.
-- CI and fresh-walk share one smoke classifier; 14 adversarial cases prove device-gate phrases cannot
-  mask nonzero exits, Vulkan validation WARN/ERROR diagnostics, incomplete runs, or missing/invalid
-  screenshots.
-- `eng_sim → core + math + serialize`; `eng_game → core + math + sim + render_common`; renderer has
-  no sim dependency; platform cadence has no game/sim dependency.
-- Exact-head and post-merge Debug/RelWithDebInfo/Release, fresh-walk, CodeQL C/C++, and workflow
-  analysis are green. Remote wave and corrective branches were retained.
+- Full MSVC `/WX` Debug, RelWithDebInfo, and Release builds: 32/32 CTest entries in each.
+- Debug-ASan: 32/32 after the sandbox runtime-stage repair.
+- The 10,000-tick oracle and exact `tick=4321 field=position_x entity=7` divergence remain green.
+- Local Vulkan run: RTX 4070 Ti, validation enabled, exactly 90 frames, clean exit, 2,764,854-byte
+  1280×720 BMP accepted by the strict classifier.
+- Exact-checkpoint fresh clone: configure, complete Debug build, 32/32, 90-frame screenshot, clean
+  worktree. Hosted Debug/RelWithDebInfo/Release, clang-cl/UBSan capability, fresh-walk, CodeQL C/C++,
+  and workflow analysis are green.
+- Boundaries remain `eng_sim → core + math + serialize`; renderer and presentation/platform cadence
+  do not enter the authoritative island.
 
 ## First action
 
-1. Execute M3.4 slice S0 from updated `main`: capture the untouched M3.3 matrix, oracle, logic hash,
-   and dependency seams before changing build policy.
-2. Create a separate M3.4 branch/worktree only after that baseline is recorded. Do not reuse an M3.3
-   branch and do not begin Phase 4.
+1. Confirm PR #38 still points at the recorded ready head and every exact-head check is green.
+2. Owner squash-merges PR #38, verifies the recorded head was merged, then fast-forwards local
+   `main` and waits for post-merge CI/CodeQL.
+3. Only from that synchronized green `main`, open a separate Phase 4 M4.0 asset-pipeline slate.
 
-## Next slate
+## Next slate boundary
 
-Open [`M3.4 structural determinism`](slate-moba-phase3-m3.4.md) from updated green `main`. Centralize
-sim compile flags, prove game/test binary parity, strengthen isolation linting, and run the
-clang-cl/UBSan stretch gate where supported. Keep `SIM_LOGIC_HASH` unchanged unless authoritative
-behavior changes. Phase 4 remains blocked until M3.4 closes.
+M4.0 should define the asset identity/lifetime seam and direct trivial loaders before cooker breadth.
+Keep source assets, baked assets, GPU upload ownership, and hot-reload generations explicit. Do not
+fold gameplay, netcode, generic streaming, compression, or renderer redesign into the first asset
+slice; preserve the M3.4 oracle as the regression gate throughout Phase 4.
