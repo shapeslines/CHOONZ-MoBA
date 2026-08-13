@@ -19,11 +19,16 @@ bool render_handle_table_init(RenderHandleTable* table, Arena* arena, uint32_t c
     return true;
 }
 Handle render_handle_alloc(RenderHandleTable* table) {
-    if (!table || table->free_head == FREE_NONE)
+    if (!table || !table->slots || table->capacity == 0u ||
+        table->live_count >= table->capacity || table->free_head == FREE_NONE ||
+        table->free_head >= table->capacity)
         return HANDLE_NULL;
     const uint32_t index = table->free_head;
     RenderHandleSlot* slot = &table->slots[index];
-    table->free_head = slot->next_free;
+    const uint32_t next = slot->next_free;
+    if (slot->alive || slot->retiring || (next != FREE_NONE && next >= table->capacity))
+        return HANDLE_NULL;
+    table->free_head = next;
     slot->next_free = FREE_NONE;
     slot->alive = true;
     slot->retiring = false;

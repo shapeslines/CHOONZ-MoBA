@@ -124,6 +124,14 @@ static bool resolve_test_draw(void*, const DrawItem* item, uint32_t* out_pipelin
     return true;
 }
 
+static bool reject_second_draw(void* raw_count, const DrawItem* item,
+                               uint32_t* out_pipeline_key) {
+    uint32_t* count = (uint32_t*)raw_count;
+    ++*count;
+    if (*count == 2u) return false;
+    return resolve_test_draw(nullptr, item, out_pipeline_key);
+}
+
 TEST(render, five_hundred_objects_coalesce_to_one_batch) {
     uint8_t memory[256 * 1024];
     Arena arena;
@@ -174,6 +182,26 @@ TEST(render, batching_key_is_deterministic_and_material_aware) {
     CHECK(!render_build_batches(items, 4, 3, &arena, resolve_test_draw, nullptr, &out));
 }
 
+TEST(render, rejected_batch_restores_arena_checkpoint) {
+    uint8_t memory[64 * 1024]{};
+    Arena arena;
+    arena_init_fixed(&arena, memory, sizeof(memory));
+    const size_t before = arena.offset;
+
+    DrawItem items[2]{};
+    for (DrawItem& item : items) {
+        item.mesh = MeshHandle{handle_make(2, 1)};
+        item.material = MaterialHandle{handle_make(4, 1)};
+    }
+    RenderBatchOutput out{};
+    uint32_t resolved = 0u;
+    CHECK(!render_build_batches(items, 2, 2, &arena, reject_second_draw, &resolved, &out));
+    CHECK(resolved == 2u);
+    CHECK(arena.offset == before);
+    CHECK(out.instances == nullptr && out.batches == nullptr);
+    CHECK(out.instance_count == 0u && out.batch_count == 0u);
+}
+
 static void count_release(void* user, uint32_t) {
     ++*(uint32_t*)user;
 }
@@ -205,6 +233,38 @@ TEST(render, handle_table_defers_reuse_and_rejects_stale_handles) {
     CHECK(handle_gen(replacement) != handle_gen(first));
     CHECK(!render_handle_valid(&table, first));
     CHECK(render_handle_valid(&table, replacement));
+}
+
+TEST(render, handle_table_rejects_corrupt_free_list_without_mutation) {
+    uint8_t memory[4096]{};
+    Arena arena;
+    arena_init_fixed(&arena, memory, sizeof(memory));
+    RenderHandleTable table{};
+    CHECK(render_handle_table_init(&table, &arena, 2));
+
+    table.free_head = table.capacity;
+    CHECK(handle_is_null(render_handle_alloc(&table)));
+    CHECK(table.free_head == table.capacity && table.live_count == 0u);
+
+    table.free_head = 0u;
+    table.slots[0].next_free = table.capacity;
+    CHECK(handle_is_null(render_handle_alloc(&table)));
+    CHECK(table.free_head == 0u && table.live_count == 0u);
+
+    table.slots[0].next_free = 1u;
+    table.slots[0].alive = true;
+    CHECK(handle_is_null(render_handle_alloc(&table)));
+    CHECK(table.free_head == 0u && table.live_count == 0u);
+
+    table.slots[0].alive = false;
+    table.slots[0].retiring = true;
+    CHECK(handle_is_null(render_handle_alloc(&table)));
+    CHECK(table.free_head == 0u && table.live_count == 0u);
+
+    table.slots[0].retiring = false;
+    table.live_count = table.capacity;
+    CHECK(handle_is_null(render_handle_alloc(&table)));
+    CHECK(table.free_head == 0u && table.live_count == table.capacity);
 }
 
 TEST(render, debug_draw_uses_one_frame_arena_block_and_resets) {
