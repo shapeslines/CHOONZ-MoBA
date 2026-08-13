@@ -28,10 +28,12 @@ RTS-class game engine.
 > fixed→float owner; the renderer still cannot see `SimWorld`.
 > **Phase 3 is complete through M3.4 on `main`.** Central compiler ownership, test/game-binary
 > parity, fail-closed isolation, and clang-cl/UBSan proofs are green. Interphase security
-> consolidation landed as `a2565ca`. Phase 4 M4.0 now adds portable normalized-path 64-bit asset
-> IDs, a disjoint-arena generational SoA registry, handle-bound asset-root reads, bounded direct
-> TGA/WAV loaders, and a Vulkan-free renderer upload callback. The sandbox texture is loaded and
-> released through that registry; raw loose SPIR-V remains renderer-owned under ADR-0008.
+> consolidation landed as `a2565ca`, and Phase 4 M4.0 landed through PR #52. M4.1 now adds a
+> deterministic offline TGA/WAV cooker, generated stable-ID catalog, little-endian `.mba` v1
+> containers, config-local `content` build gate, and one baked-only runtime `asset_load` path.
+> Source parsers remain POD-only cooker/test infrastructure; the runtime validates the complete
+> catalog/container identity before allocation or renderer upload. Raw loose SPIR-V remains
+> renderer-owned under ADR-0008.
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -97,12 +99,14 @@ caller-storage-backed oracle with clang-cl `/WX` in RelWithDebInfo and requires 
 runtime ABI; normal MSVC builds retain their existing CRT selection.
 
 CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, `asset_id`, the asset registry,
-bounded TGA/WAV parsing and file loads, entity/component/event/system/schedule/sim/presentation
-suites, `render`, `render_null`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
-the generated sim-policy/include/source-owner audit, test/game-binary hash-stream parity, the
-configure-time sim target contract, adversarial isolation self-tests, the sim/presentation boundary
-scans, replay/CLI malformed-input matrices, create-only atomic-write collisions, shader declaration
-contracts, guarded fresh-walk cleanup, and renderer capacity corruption fixtures.
+bounded TGA/WAV parsing, `.mba` byte goldens/corruption, deterministic cooker publication, generated
+content, source/runtime/dependency boundaries, entity/component/event/system/schedule/sim/
+presentation suites, `render`, `render_null`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick
+replay proof, the generated sim-policy/include/source-owner audit, test/game-binary hash-stream
+parity, the configure-time sim target contract, adversarial isolation self-tests, the sim/
+presentation boundary scans, replay/CLI malformed-input matrices, create-only atomic-write
+collisions, shader declaration contracts, guarded fresh-walk cleanup, and renderer capacity
+corruption fixtures.
 The hosted renderer smoke classifier is also tested adversarially: only exact Vulkan device gates
 may skip; nonzero exits, Vulkan validation warnings/errors, incomplete runs, and missing/invalid
 screenshots fail.
@@ -140,13 +144,13 @@ engine/        the engine, one static lib per module (the CMake link graph = the
   serialize/   bounded little-endian byte readers/writers              (leaf-up)
   platform/    the OS seam (Win32): window, input, timing, files, sockets, Vulkan surface
   asset_parsers/ normalized IDs, POD TGA/WAV parsing, shared `.mba` codec
-  assets/      arena-backed registry/lifetimes and platform-backed runtime loading
+  assets/      arena-backed registry/lifetimes and catalog-driven baked runtime loading
   game/        arena snapshots, interpolation, fixed→float, and DrawItem construction
   render/      raw Vulkan behind a thin renderer seam; GLSL sources in render/shaders/
   sim/         arena-backed deterministic ECS, typed events/systems, schedule + replay codec
   (net arrives in its phase)
 cmake/         CompilerWarnings, EngineOptions, CompileShaders helpers
-game/ tools/   the game exe, sandbox, replay, and visualization tools
+game/ tools/   the game exe, sandbox, cooker, replay, and visualization tools
 assets/ tests/
 docs/          ARCHITECTURE.md, ROADMAP.md, DECISIONS/ (ADRs)
 ```

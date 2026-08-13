@@ -8,6 +8,66 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 14 — 2026-08-13 — Phase 4 M4.1 offline cooker and baked runtime
+
+**Scope:** land the approved M4.0 head, lock `.mba` v1, cook the current TGA and PCM WAV source
+types deterministically, generate a stable-ID catalog, and replace runtime source parsing with one
+catalog-driven baked loader without entering M4.2.
+
+**Outcome:** implementation and local acceptance are complete on draft PR #54. M4.0 first landed
+through PR #52 with tree identity verified. `eng_asset_parsers` now owns the POD-only identity,
+TGA/WAV parser, and allocation-free little-endian codec seam. `moba_cooker` preflights a sorted
+manifest, cooks every source in memory, publishes rooted `.mba` files atomically, and publishes the
+generated catalog last. Both sandbox variants inherit the configuration-local content gate and load
+the generated UV-test ID through the sole baked runtime API. Fresh security/acceptance and hosted
+exact-head gates remain before PR readiness; merge remains owner-approved separately.
+
+### What changed
+
+- ADR-0015 fixes literal `MBA\0`, version 1, a 32-byte outer header, exact size/zero-field rules, one
+  RGBA8 mip descriptor/data layout, and integer-PCM sound metadata. Every field is explicitly LE;
+  native structs/padding are never serialized.
+- Generated `AssetCatalogEntry` data is sorted by ID and preserves logical/debug names plus exact
+  `<logical>.mba` paths. Registry initialization validates sorted uniqueness, types, canonical
+  path/hash agreement, and memory disjointness before mutation.
+- `asset_load(registry, id, lifetime)` performs catalog lookup, rooted same-handle bounded read,
+  full container validation, and ID/type agreement before lifetime copies or renderer callbacks.
+  Direct registry TGA/WAV file loaders were removed; in-memory registration remains for tests and
+  procedural assets.
+- CMake generates one canonical manifest and config-local `baked/<CONFIG>/` plus
+  `generated/<CONFIG>/assets/asset_ids.gen.h`. `moba::content` orders cooking before sandbox
+  compilation and supplies the matching include/root contract.
+- Adversarial fixtures cover malformed source/container fields, duplicate/noncanonical manifests,
+  symbol/path collisions, root/reparse escapes, temp collisions, partial publication, missing roots,
+  stale unlisted outputs, renderer failure, and arena exhaustion. Boundary scans keep parser,
+  runtime, cooker, renderer, and simulation dependencies separated.
+
+### Verification
+
+- `/WX` Debug, RelWithDebInfo, and Release builds pass 48/48 CTests each. Debug-ASan passes 48/48.
+  clang-cl 19.1.5 proves UBSan active and passes its 6/6 oracle/isolation matrix.
+- Two clean independent Debug/Release cooks are byte-identical: `uv_test.tga.mba` SHA-256
+  `43C058906AFD340F3A9E33A40ABC5D88D62516E3D4621A2C3B9D5E33B2ADC90A`; generated header
+  SHA-256 `518FA7857829A0F23B84589ABBAFA024052FD7C63EEF963DB3E93D47CAAAD43F`.
+- Debug and Release preserve 10,000 ticks/923 commands, final `0x637628abff59c823`, stream
+  `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`, and exact
+  `tick=4321 field=position_x entity=7` divergence.
+- Fresh-walk configures/builds from a clean clone, passes 48/48, renders 90 validation-clean frames,
+  and removes its handle-bound temp clone. A separate RelWithDebInfo RTX 4070 Ti run reports Vulkan
+  1.3/validation on, loads the baked 64×64 texture ID `0x3d9bff0eddada061`, exits after 90 frames,
+  and produces a visually inspected 1280×720 screenshot (2,764,854 bytes; SHA-256
+  `25E85134E5226B7A8FD238C59AB6189B90A9CC14D8511059BD3FC7406F7B49C9`).
+
+### Next
+
+Commit the closure records, obtain fresh exact-head security and acceptance verdicts, push any
+required repairs through the same loop, and require every PR #54 CI/CodeQL check before marking it
+ready. Owner landing is a separate action. After synchronized green `main`, open M4.2 for cooker-only
+PNG/DEFLATE and mip generation; do not fold PNG, glTF, packs, compression, hot reload, or incremental
+cooking into M4.1.
+
+---
+
 ## Session 13 — 2026-08-13 — Phase 4 M4.0 direct asset foundation
 
 **Scope:** establish stable asset identity and lifetimes, promote the bootstrap TGA path into the

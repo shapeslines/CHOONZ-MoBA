@@ -1123,9 +1123,9 @@ Two tiers: loose source files in dev, baked by an **offline cooker** (`tools/coo
 | Shader | **GLSL** | `glslc` at build time (§3.4) | **loose `.spv`**, loaded via platform file API (not `.mba`) |
 
 Heavy parsers (DEFLATE for PNG, glTF JSON) live **only** in future cooker slices. M4.1 extracts the
-POD-only `eng_asset_parsers` library and locks the unified type-tagged codec before replacing M4.0's
-bounded direct bootstrap calls with the catalog-driven baked loader. Loose raw `.spv` remains
-renderer-owned under ADR-0008.
+POD-only `eng_asset_parsers` library, locks the unified type-tagged codec, and replaces M4.0's
+bounded direct bootstrap calls with the catalog-driven baked loader. The tool may privately use STL;
+the shared library and runtime may not. Loose raw `.spv` remains renderer-owned under ADR-0008.
 
 ### 11.2 The baked container (`.mba`, M4.1)
 
@@ -1138,7 +1138,14 @@ typedef enum { ASSET_TYPE_NONE = 0, ASSET_TYPE_TEXTURE = 1, ASSET_TYPE_SOUND = 2
 typedef struct { uint32_t magic, version, type, payload_bytes; uint64_t asset_id; uint32_t flags, reserved; } MbaHeader;
 ```
 
-Every load is: read header → validate magic/version/flags/reserved/id and exact file size → validate the complete typed payload → switch(type) → the payload is already in the engine's exact layout. Texture payloads use a fixed 32-byte metadata header plus 16-byte mip descriptors and 16-byte-aligned RGBA8 data; M4.1 emits exactly one mip. Sound payloads use 32-byte metadata followed by integer PCM. ADR-0015 fixes the byte-level v1 schema. Cooker output must be **byte-deterministic**. The cooker is brute-force (re-cook all) until cook times hurt; incremental cooking is deferred.
+Every load is: catalog lookup → rooted bounded read → validate magic/version/flags/reserved/id and
+exact file size → validate the complete typed payload → switch(type) → copy/upload the already-native
+payload. Texture payloads use a fixed 32-byte metadata header plus 16-byte mip descriptors and
+16-byte-aligned RGBA8 data; M4.1 emits exactly one mip. Sound payloads use 32-byte metadata followed
+by integer PCM. ADR-0015 fixes the byte-level v1 schema. The cooker publishes each asset atomically,
+then publishes `asset_ids.gen.h` last as the catalog commit marker. Repeated and cross-configuration
+cooks are byte-identical and do not rewrite unchanged outputs. The cooker remains brute-force until
+cook times justify an incremental dependency graph.
 
 ### 11.3 Runtime registry & lifetime
 
@@ -1155,6 +1162,11 @@ canonical literals. This deliberately excludes trailing-dot/space and device-nam
 hashing, so Win32 cannot resolve multiple registry identities to one file. Asset identity never
 depends on pointers, allocation order, or file load order.
 
+The generated catalog is strictly sorted by `AssetId` and stores each canonical logical path plus
+its `<logical-path>.mba` baked path. Registry initialization validates sorted/unique IDs, supported
+types, path/hash agreement, and catalog-memory disjointness transactionally. Only catalog entries
+are loadable, so stale unlisted files in the baked directory are inert.
+
 Initialization is transactional and uses four distinct caller-owned arenas: persistent registry
 metadata, level payloads, small global payloads, and rewindable I/O scratch. Their backing ranges,
 the four arena controls, and the registry control must be pairwise disjoint; overlap and address
@@ -1162,7 +1174,13 @@ overflow fail before any arena or registry mutation. Loose loads enter through a
 rooted-read seam: the asset root and every descendant are opened without following reparses and
 remain handle-bound through final size/read. Reparse components, multi-link files, traversal, and
 root escapes fail before allocation. The same final handle supplies size and bytes under a maximum
-file budget; decode succeeds completely before durable registry or lifetime state is committed.
+file budget; complete `.mba` inspection succeeds before durable registry or lifetime state is
+committed. Runtime code contains no source-format file loading, STL, or heap allocation.
+
+The CMake `content` target builds the cooker and emits configuration-local `baked/<CONFIG>/` and
+`generated/<CONFIG>/assets/asset_ids.gen.h` products. Sandbox/game consumers inherit that dependency,
+the generated include root, and `MOBA_ASSET_DIR` through `moba::content`, so binaries cannot compile
+against a missing catalog or silently fall back to source assets.
 
 - **Level assets (the majority):** owned by a `level_arena`. `assets_unload_level()` releases each GPU
   handle through the renderer callback, invalidates every matching registry handle, and rewinds the

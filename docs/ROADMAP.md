@@ -634,7 +634,8 @@ fresh full exact-head reviews and GitHub checks subsequently passed before landi
 **Goal:** the path from source files to GPU/CPU memory behind stable handles, built bottom-up: direct
 trivial loaders first, then the offline cooker and the unified baked format, then glTF and hot-reload.
 
-> **Complete:** M4.0 landed through PR #52. **Now:** M4.1. **Then:** M4.2 → M4.4.
+> **Complete:** M4.0 landed through PR #52. **Now:** M4.1 implementation/local acceptance is
+> complete on PR #54; exact-head review and owner-gated landing remain. **Then:** M4.2 → M4.4.
 > **Next phase:** Phase 5 (gameplay needs real meshes/maps). **Later:** hot-reload polish.
 
 ---
@@ -667,7 +668,7 @@ configuration. Exact-head hosted checks, owner landing, and post-merge `main` ch
 
 ---
 
-### M4.1 — The cooker + unified `.mba` container  · L
+### M4.1 — The cooker + unified `.mba` container  · L  ✅ IMPLEMENTED 2026-08-13
 **Goal:** move all heavy parsing offline into a separate tool; one runtime loader, one format.
 **Deliverables:** `cooker.exe` (separate target, links the shared `asset_parsers` lib — **POD C
 interface only**, identical exception flags per ADR-0009); `MbaHeader` (magic+version+type+id) + typed
@@ -676,6 +677,23 @@ incremental yet); byte-deterministic output (determinism reproducibility); CMake
 the game.
 **DoD:** cooker bakes a TGA→`.mba` texture; the runtime loads it via the single loader; version/magic
 mismatch hard-rejects and triggers re-cook.
+**Observed on PR #54:** ADR-0015 fixes an explicit little-endian `.mba` v1 outer header plus one-mip
+RGBA8 texture and integer-PCM sound payloads. `eng_asset_parsers` exposes only POD identity,
+TGA/WAV, and allocation-free codec APIs through `core + serialize`; `moba_cooker` privately uses STL
+and links only parsers + platform. A sorted CMake manifest cooks configuration-local `.mba` files and
+publishes `asset_ids.gen.h` last. `moba::content` gates both sandboxes, which use only
+`ASSET_UV_TEST_TGA` plus `asset_load`; direct registry source loaders are gone. Runtime catalog and
+container validation precedes durable allocation, refcount change, or renderer upload. Duplicate,
+malformed, truncated, mismatched, stale-unlisted, root/reparse-escape, budget, renderer-failure, and
+partial-publication fixtures fail closed. Debug/RelWithDebInfo/Release `/WX` and Debug-ASan pass
+48/48; clang-cl 19.1.5 + UBSan passes 6/6; the fresh walk passes 48/48 and renders 90 frames. Clean
+Debug/Release cooks produce identical `uv_test.tga.mba`
+`43C058906AFD340F3A9E33A40ABC5D88D62516E3D4621A2C3B9D5E33B2ADC90A` and generated header
+`518FA7857829A0F23B84589ABBAFA024052FD7C63EEF963DB3E93D47CAAAD43F`. The RTX 4070 Ti gate is
+validation-clean with a visually inspected 1280×720 baked-texture screenshot. Simulation remains at
+final `0x637628abff59c823`, stream `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`, with the exact
+tick-4321 divergence. Fresh security/acceptance and exact-head hosted gates precede readiness;
+landing remains owner-approved separately.
 **Risks:** over-engineering the cooker (no dep-graph/incremental yet); `asset_parsers` is the
 STL-contamination path — keep it POD-only. **Exercises:** Assets, Build (cooker target).
 

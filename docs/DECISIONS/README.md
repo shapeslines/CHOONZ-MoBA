@@ -28,6 +28,10 @@ rather than editing it (note the supersession in both).
 | 0014 | [Command validation, stale targets, event backpressure](0014-command-validation-and-backpressure.md) | Accepted |
 | 0015 | [Unified baked asset container `.mba` version 1](0015-mba-v1-container.md) | Accepted |
 
+ADR-0015 is implemented by the M4.1 shared codec, cooker, generated catalog, and baked-only runtime
+path on PR #54. Later texture/mesh payload extensions must preserve or deliberately supersede its
+versioning contract.
+
 > Numbering note: `0011` was written first (the lockstep → server-authoritative
 > change made during the design phase); `0001–0010` are the foundational
 > cross-cutting contracts, drafted in Phase 0 · M0.1.

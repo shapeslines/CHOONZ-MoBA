@@ -2,13 +2,12 @@
 
 > Reference map back to the canonical System-Architecture library. This repo stays the
 > authoritative home of its own implementation docs; the deep-dive linked below is the
-> system-level synthesis. Generated 2026-06-17; refreshed 2026-08-13 (M3.4 landed, security
-> consolidation acceptance in progress, ADR
-> index current). Refresh from the library when it changes.
+> system-level synthesis. Generated 2026-06-17; refreshed 2026-08-13 (M4.1 local acceptance,
+> ADR index current through 0015). Refresh from the library when it changes.
 
 **Layer:** Game · standalone C++/Vulkan engine — **off-spine**, a separate universe from the Shapes//Lines data spine
 **Role:** Custom from-scratch MOBA/RTS-hybrid game engine (C++17, raw Vulkan 1.3, own ECS, netcode, and math); no shared auth, no database, no GromDB relation — isolation is by design.
-**Status:** Phase 3 M3.0–M3.4 and the interphase security consolidation are complete on `main`. The platform-free 30 Hz Q16.16 simulation owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal schedule, canonical state hash/diff, replay-v1 codec and CLI, and an exact 10,000-tick determinism proof. Platform owns fixed-step cadence and interpolation alpha; `eng_game` owns arena-backed snapshots, interpolation, fixed→float conversion, and `DrawItem` construction. M3.4 structurally enforces the compiler, dependency, and test/game-binary parity contracts. M4.0 landed through PR #52 with portable stable asset identity, disjoint arena ownership, handle-bound asset-root reads, direct TGA/WAV loading, and no authoritative simulation or replay-byte change. M4.1 is active, beginning with the POD-only parser/identity module and `.mba` v1 codec.
+**Status:** Phase 3 M3.0–M3.4 and the interphase security consolidation are complete on `main`. The platform-free 30 Hz Q16.16 simulation owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal schedule, canonical state hash/diff, replay-v1 codec and CLI, and an exact 10,000-tick determinism proof. Platform owns fixed-step cadence and interpolation alpha; `eng_game` owns arena-backed snapshots, interpolation, fixed→float conversion, and `DrawItem` construction. M3.4 structurally enforces the compiler, dependency, and test/game-binary parity contracts. M4.0 landed through PR #52. M4.1 is implemented on PR #54: POD-only asset identity/parsers/codec, a deterministic offline TGA/WAV cooker, generated sorted catalog, `.mba` v1, config-local CMake content products, and catalog-driven baked-only runtime loading. Authoritative simulation and replay bytes remain unchanged.
 
 **Canonical deep-dive:** https://github.com/shapeslines/System-Architecture/blob/main/projects/moba.md
 &nbsp;&nbsp;(local sibling: `../System-Architecture/projects/moba.md`)
@@ -17,7 +16,7 @@
 ## House patterns instanced
 - **determinism-contract** — the one house pattern MOBA-proto instances, and it instances it globally: Q16.16 fixed-point everywhere in `eng_sim`, a platform-owned 30 Hz fixed step (ADR-0001), arena-backed generational identity plus sparse-set SoA state, ascending-entity ordered views, append-order typed events, one explicit system schedule, `pcg32` inside `SimWorld` (hashed + replayed), a per-tick canonical FNV-1a hash with run-twice self-check, sim/presentation boundary CTests, and direct `eng_sim → core + math + serialize` isolation. The **sim / present seam** is concrete: fixed snapshots flow one way into `eng_game`, `fixed→float` happens there exactly once, and nothing downstream can feed back into the sim.
 
-*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0014):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
+*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0015):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
 
 ## Alignment with locked decisions
 - **DATA-1 (Supabase only)** — N/A. No database; all game state is ephemeral in-memory `SimWorld`; persistent player data is explicitly deferred to Phase 8+.
@@ -28,4 +27,4 @@
 - None — off the data spine.
 
 ---
-*This map records alignment status only — it does not resolve open forks (those ride as Phase-0 ledger entries in the relevant execution-roadmaps). The in-repo ADR index (`docs/DECISIONS/README.md`) is current through ADR-0014.*
+*This map records alignment status only — it does not resolve open forks (those ride as Phase-0 ledger entries in the relevant execution-roadmaps). The in-repo ADR index (`docs/DECISIONS/README.md`) is current through ADR-0015.*

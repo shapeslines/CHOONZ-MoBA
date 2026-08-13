@@ -152,7 +152,31 @@ the intended dependency/source boundaries.
 - `/WX` Debug and Release builds pass and both configurations pass 48/48 CTest
   entries, including the destructive temp-root cooker matrix.
 
-### S7 — Full acceptance and ready PR — next
+### S7 — Full acceptance and ready PR — in progress
+
+Done-condition: the final exact head passes the complete local/hosted matrix, fresh
+security and acceptance verdicts, and PR #54 is ready while merge remains owner-gated.
+
+- `/WX` Debug, RelWithDebInfo, and Release builds pass; all three configurations pass
+  48/48 CTest entries. Debug-ASan also builds and passes 48/48.
+- clang-cl 19.1.5 proves UBSan active with its deliberate overflow tripwire and passes
+  6/6 deterministic compiler/isolation tests.
+- Direct Debug and Release probes preserve 10,000 ticks, 923 commands, final
+  `0x637628abff59c823`, stream `0x6f381609f7e59f0c`, and logic
+  `0xab96814425ba80a4`; both exact-divergence suites report tick 4321,
+  `position_x`, entity 7. No `engine/sim` or replay-codec source changed.
+- Two new independent Debug/Release cooks publish the same two hashes recorded in
+  S5. The fresh walk builds from a clean clone, passes 48/48, classifies its 90-frame
+  hardware run PASS, and securely removes the leased clone.
+- A separate RelWithDebInfo RTX 4070 Ti run is Vulkan 1.3/validation-on, loads the
+  baked 64x64 catalog texture, reports no warning/error, exits cleanly at 90 frames,
+  and writes a visually inspected 1280x720 screenshot: 2,764,854 bytes, SHA-256
+  `25E85134E5226B7A8FD238C59AB6189B90A9CC14D8511059BD3FC7406F7B49C9`.
+- README, both architecture records, ROADMAP, journal, next-session, ADR index, and
+  this slate now reflect the observed M4.1 implementation and local evidence.
+- Pending on the closure head: fresh-context security, fresh-context acceptance,
+  exact-head CI/CodeQL, and ready-state promotion. No merge is authorized by this
+  slice.
 
 ## Locked M4.1 decisions
 
