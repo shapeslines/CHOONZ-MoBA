@@ -1,4 +1,4 @@
-# Gap-close ledger — 40-gap sweep (2026-08-12)
+# Gap-close ledger â€” 40-gap sweep (2026-08-12)
 
 Tracks the multi-wave effort closing the 40 gaps found in the 2026-08-12 multi-lens gap
 analysis. One row per gap; status: `open` / `in-progress` / `closed` / `partial` /
@@ -8,12 +8,12 @@ is the execution ledger.
 ## Decisions taken (user-approved)
 
 - LICENSE: **proprietary / all rights reserved** (G2).
-- Vulkan in CI: **yes — install the LunarG SDK on the runner** (G15).
+- Vulkan in CI: **yes â€” install the LunarG SDK on the runner** (G15).
 - Sequencing: **gap waves land before M3.3 starts**.
 - G4 branch retirement: temporarily bypass the `safety` ruleset (authorized 2026-08-12).
 - G19: enforced via ruleset, CODEOWNERS skipped (repo is solo).
 
-## Wave 0 — owner gates (complete 2026-08-12)
+## Wave 0 â€” owner gates (complete 2026-08-12)
 
 - PR #17 (M3.2) squash-merged as `d9f5230`; local + origin `main` updated.
 - Tag `v0.3.0-m3.2` pushed.
@@ -22,23 +22,27 @@ is the execution ledger.
 - Rulesets: `main-gate` (active, required checks `windows-msvc (Debug)` + `(Release)`)
   created; `safety` (deletion + non-fast-forward) restored after recreation.
 - **Incident (logged):** the original `safety` ruleset (id 20581937) was briefly absent
-  during a delete-and-recreate bypass — a name collision blocked the replacement POST
+  during a delete-and-recreate bypass â€” a name collision blocked the replacement POST
   before the old ruleset's DELETE ran. Restored byte-identical (id 20777653) within the
   same command sequence; nothing was pushed in the window. The `deletion` rule then
   blocked nothing further: all four refs were removed. Lesson: `if ($?)`-guard destructive
   sequences.
-- Untouched: `origin/gapfix/2026-08-12/env-ignore` — a concurrent session's branch (its
+- Untouched: `origin/gapfix/2026-08-12/env-ignore` â€” a concurrent session's branch (its
   content landed via PR #16); not part of this sweep.
 
 ## PR log
 
 | Wave | Branch | PR | Merged as | Notes |
 |---|---|---|---|---|
-| — | `moba/gap-close` | — | — | worktree ledger base |
+| â€” | `moba/gap-close` | â€” | â€” | worktree ledger base |
+| 1 | `moba/gap-close-w1` | #18 | `bf81e64` | merged 2026-08-13 |
+| 2a | `moba/gap-close-w2a` | #19 | `e85ea82` | merged 2026-08-13 |
+| 2b | `moba/gap-close-w2b` | #20 / #25 | â€” | #20 closed; recovery #25 superseded â€” Wave 2b content lands through #21 |
+| 3 | `moba/gap-close-w3` | #21 | pending | includes Wave 2b, determinism guards, and the narrow Vulkan device-gate classifier |
 
 ## Gap status
 
-### Lens 1 — Release & project state
+### Lens 1 â€” Release & project state
 
 | # | Gap | Status |
 |---|---|---|
@@ -47,17 +51,17 @@ is the execution ledger.
 | G3 | No tags/releases pinning milestones | **closed** (`v0.3.0-m3.2`, Wave 0; convention noted in Wave 1 docs) |
 | G4 | Retired branches left on origin | **closed** (deleted, Wave 0) |
 
-### Lens 2 — Documentation consistency
+### Lens 2 â€” Documentation consistency
 
 | # | Gap | Status |
 |---|---|---|
 | G5 | `docs/ARCHITECTURE.md:120` misnumbers fixed-point ADR as 0007 (is 0002) | **closed** (Wave 1) |
 | G6 | Root ARCHITECTURE.md map stale (ADR-index note; status) | **closed** (Wave 1) |
 | G7 | ROADMAP Phase 8 table still lists CI as untriggered | **closed** (Wave 1) |
-| G8 | `docs/sessions/` lacks retrospectives for sessions 03–09 | **closed** (Wave 1: 03, 06–09 backfilled; 04–05 already existed) |
+| G8 | `docs/sessions/` lacks retrospectives for sessions 03â€“09 | **closed** (Wave 1: 03, 06â€“09 backfilled; 04â€“05 already existed) |
 | G9 | ROADMAP M2.0/M2.1 lack `Status:` convention | **closed** (Wave 1) |
 
-### Lens 3 — Build & toolchain
+### Lens 3 â€” Build & toolchain
 
 | # | Gap | Status |
 |---|---|---|
@@ -65,9 +69,9 @@ is the execution ledger.
 | G11 | clang-cl/UBSan determinism run never done | open (deferred: optional stretch; re-trigger at M3.4) |
 | G12 | Vulkan SDK version unpinned | open |
 | G13 | `/fp` pinning for eng_sim (M3.4) | open (owned by M3.4 slate) |
-| G14 | `plat_mem_*` still in Win32 window TU | open |
+| G14 | `plat_mem_*` still in Win32 window TU | **closed** (Wave 3: win32_mem/file/log TUs; engine_tests proven user32-free) |
 
-### Lens 4 — CI & quality gates
+### Lens 4 â€” CI & quality gates
 
 | # | Gap | Status |
 |---|---|---|
@@ -78,17 +82,17 @@ is the execution ledger.
 | G19 | No enforced merge policy | **closed** (`main-gate` ruleset, Wave 0) |
 | G40 | No `.editorconfig` / templates | **closed** (Wave 1: .editorconfig + issue/PR templates) |
 
-### Lens 5 — Determinism contract
+### Lens 5 â€” Determinism contract
 
 | # | Gap | Status |
 |---|---|---|
 | G20 | Cross-binary parity unproven | open (owned by M6.7) |
-| G21 | Hash cost at capacity never profiled | open (perf-smoke ceiling, Wave 2-B) |
-| G22 | RNG draw policy undocumented | open |
-| G23 | Replay 64-slot cap migration undocumented | open |
-| G24 | Pool-hash inclusion guard missing | open |
+| G21 | Hash cost at capacity never profiled | **closed** (Wave 2-B perf ceiling + Wave 3 capacity test) |
+| G22 | RNG draw policy undocumented | **closed** (Wave 3: ADR-0013 — fixed per-tick script, positional draws) |
+| G23 | Replay 64-slot cap migration undocumented | **closed** (Wave 3: sim.h comment + M5.2 roadmap note) |
+| G24 | Pool-hash inclusion guard missing | **closed** (Wave 3: every SimStateField enum member proven hash-sensitive by test) |
 
-### Lens 6 — Renderer / Vulkan
+### Lens 6 â€” Renderer / Vulkan
 
 | # | Gap | Status |
 |---|---|---|
@@ -98,16 +102,16 @@ is the execution ledger.
 | G28 | No DPI awareness | open |
 | G29 | Pipeline-cache defense is size-bound only | open |
 
-### Lens 7 — Simulation / ECS
+### Lens 7 â€” Simulation / ECS
 
 | # | Gap | Status |
 |---|---|---|
 | G30 | Stale-target policy undefined | open (decision before M3.3) |
 | G31 | Event backpressure policy unspecified | open (decision before M3.3) |
-| G32 | No capacity-pressure test (16,384 entities) | open |
+| G32 | No capacity-pressure test (16,384 entities) | **closed** (Wave 3: twin-run + churn test) |
 | G33 | No command rejection-reason field | open (design note for M6.0) |
 
-### Lens 8 — Robustness & security
+### Lens 8 â€” Robustness & security
 
 | # | Gap | Status |
 |---|---|---|
@@ -115,7 +119,7 @@ is the execution ledger.
 | G35 | No hardening-flag audit (`/guard:cf`) | open |
 | G36 | Fresh-clone sweep is manual prose | open |
 
-### Lens 9 — Ownership & architecture
+### Lens 9 â€” Ownership & architecture
 
 | # | Gap | Status |
 |---|---|---|

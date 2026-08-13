@@ -346,8 +346,101 @@ TEST(sim, canonical_diff_reports_matching_field_and_index_domain) {
     CHECK(diff.field == SIM_STATE_FIELD_NONE);
 }
 
-TEST(sim, invalid_canonical_hash_and_diff_fail_closed) {
-    HashWorldFixture invalid{};
+// G24: SimStateField is the canonical hash/diff surface. A new pool or field added
+// to the enum MUST get hash coverage — this test enumerates the whole enum and fails
+// on any member that is neither mutated here nor listed as covered by the dedicated
+// tests in this file. Adding a field without extending coverage is a red suite, not
+// a quiet miss.
+TEST(sim, every_state_field_enum_member_is_hash_covered) {
+    const SimStateField directly_mutated[] = {
+        SIM_STATE_FIELD_TICK, SIM_STATE_FIELD_RNG_STATE, SIM_STATE_FIELD_RNG_INC,
+        SIM_STATE_FIELD_POSITION_X, SIM_STATE_FIELD_POSITION_Y, SIM_STATE_FIELD_FACING,
+        SIM_STATE_FIELD_VELOCITY_X, SIM_STATE_FIELD_VELOCITY_Y,
+        SIM_STATE_FIELD_HEALTH_CURRENT, SIM_STATE_FIELD_HEALTH_MAXIMUM,
+        SIM_STATE_FIELD_DAMAGE_COOLDOWN,
+    };
+    const SimStateField covered_by_dedicated_tests[] = {
+        SIM_STATE_FIELD_NONE, SIM_STATE_FIELD_INVALID,             // sentinels, not fields
+        SIM_STATE_FIELD_CONFIG_MAX_ENTITIES,                       // other_config test
+        SIM_STATE_FIELD_CONFIG_INITIAL_UNIT_COUNT,                 // other_config test
+        SIM_STATE_FIELD_CONFIG_DAMAGE_EVENT_CAPACITY,              // other_config test
+        SIM_STATE_FIELD_ENTITY_CAPACITY,                           // set from config at init
+        SIM_STATE_FIELD_ENTITY_LIVE_COUNT,                         // lifecycle test
+        SIM_STATE_FIELD_ENTITY_NEXT_FRESH,                         // lifecycle test
+        SIM_STATE_FIELD_ENTITY_FREE_COUNT,                         // lifecycle test
+        SIM_STATE_FIELD_ENTITY_GENERATION,                         // lifecycle test
+        SIM_STATE_FIELD_ENTITY_LIVENESS,                           // lifecycle test
+        SIM_STATE_FIELD_ENTITY_FREE_STACK,                         // free-order test
+        SIM_STATE_FIELD_UNIT_ENTITY,                               // mapping test
+        SIM_STATE_FIELD_PENDING_DESTROY_COUNT,                     // queue-order test
+        SIM_STATE_FIELD_PENDING_DESTROY_ENTITY,                    // queue-order test
+        SIM_STATE_FIELD_DAMAGE_EVENT_READ_COUNT,                   // read/write phase test
+        SIM_STATE_FIELD_DAMAGE_EVENT_READ_SOURCE,                  // read/write phase test
+        SIM_STATE_FIELD_DAMAGE_EVENT_READ_TARGET,                  // read/write phase test
+        SIM_STATE_FIELD_DAMAGE_EVENT_READ_AMOUNT,                  // read/write phase test
+        SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_COUNT,                  // event-order test
+        SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_SOURCE,                 // event-field test
+        SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_TARGET,                 // event-field test
+        SIM_STATE_FIELD_DAMAGE_EVENT_WRITE_AMOUNT,                 // event-field test
+        SIM_STATE_FIELD_TRANSFORM_COUNT,                           // membership test
+        SIM_STATE_FIELD_TRANSFORM_ENTITY,                          // membership test
+        SIM_STATE_FIELD_VELOCITY_COUNT,                            // membership test
+        SIM_STATE_FIELD_VELOCITY_ENTITY,                           // membership test
+        SIM_STATE_FIELD_HEALTH_COUNT,                              // membership test
+        SIM_STATE_FIELD_HEALTH_ENTITY,                             // membership test
+    };
+
+    bool covered[SIM_STATE_FIELD_DAMAGE_COOLDOWN + 1] = {};
+    for (SimStateField field : directly_mutated) covered[field] = true;
+    for (SimStateField field : covered_by_dedicated_tests) covered[field] = true;
+
+    for (int member = SIM_STATE_FIELD_NONE + 1; member <= SIM_STATE_FIELD_DAMAGE_COOLDOWN;
+         ++member) {
+        SimStateField field = static_cast<SimStateField>(member);
+        if (covered[field]) continue;
+
+        bool found = false;
+        for (SimStateField direct : directly_mutated) {
+            if (direct == field) { found = true; break; }
+        }
+        if (found) continue;
+        std::printf("UNCOVERED SimStateField: %s — add a mutation case or list it as "
+                    "dedicated-covered (G24)\n", sim_state_field_name(field));
+        CHECK(!"uncovered state field");
+        return;
+    }
+
+    // The directly-mutated members must each move the hash AND be named by the diff.
+    for (SimStateField field : directly_mutated) {
+        HashWorldFixture base{}, changed{};
+        CHECK(hash_world_init(&base));
+        CHECK(hash_world_init(&changed));
+        TransformView transform{};
+        VelocityView velocity{};
+        HealthView health{};
+        CHECK(unit_views(&changed.world, 2u, &transform, &velocity, &health));
+        switch (field) {
+            case SIM_STATE_FIELD_TICK: ++changed.world.tick; break;
+            case SIM_STATE_FIELD_RNG_STATE: changed.world.rng.state ^= 1u; break;
+            case SIM_STATE_FIELD_RNG_INC: changed.world.rng.inc ^= 2u; break;
+            case SIM_STATE_FIELD_POSITION_X: *transform.position_x ^= 1; break;
+            case SIM_STATE_FIELD_POSITION_Y: *transform.position_y ^= 1; break;
+            case SIM_STATE_FIELD_FACING: *transform.facing ^= 1; break;
+            case SIM_STATE_FIELD_VELOCITY_X: *velocity.velocity_x ^= 1; break;
+            case SIM_STATE_FIELD_VELOCITY_Y: *velocity.velocity_y ^= 1; break;
+            case SIM_STATE_FIELD_HEALTH_CURRENT: *health.current = 99; break;
+            case SIM_STATE_FIELD_HEALTH_MAXIMUM: *health.maximum = 101; break;
+            case SIM_STATE_FIELD_DAMAGE_COOLDOWN: *health.damage_cooldown = 1u; break;
+            default: break;
+        }
+        CHECK(sim_hash_state(&changed.world) != sim_hash_state(&base.world));
+        SimStateDiff diff{};
+        CHECK(sim_diff_state(&base.world, &changed.world, &diff));
+        CHECK(diff.field == field);
+    }
+}
+
+TEST(sim, invalid_canonical_hash_and_diff_fail_closed) {    HashWorldFixture invalid{};
     CHECK(hash_world_init(&invalid));
     invalid.world.entities.live_count = invalid.world.entities.next_fresh + 1u;
     CHECK(sim_hash_state(nullptr) == 0u);

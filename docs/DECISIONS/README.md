@@ -24,6 +24,7 @@ rather than editing it (note the supersession in both).
 | 0010 | [Asset id scheme: hashed path + generated constants](0010-asset-id-scheme.md) | Accepted |
 | 0011 | [Server-authoritative netcode](0011-server-authoritative-netcode.md) | Accepted |
 | 0012 | [Vulkan 1.3 hard minimum: dynamicRendering + synchronization2](0012-vulkan-13-minimum-spec.md) | Accepted |
+| 0013 | [Sim RNG draw policy: fixed per-tick script](0013-sim-rng-draw-policy.md) | Accepted |
 
 > Numbering note: `0011` was written first (the lockstep → server-authoritative
 > change made during the design phase); `0001–0010` are the foundational

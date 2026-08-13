@@ -16,7 +16,7 @@
 ## House patterns instanced
 - **determinism-contract** — the one house pattern MOBA-proto instances, and it instances it globally: Q16.16 fixed-point everywhere in `eng_sim`, a 30 Hz fixed tick (ADR-0001), arena-backed generational identity plus sparse-set SoA state, ascending-entity ordered views, append-order typed events, one explicit system schedule, `pcg32` inside `SimWorld` (hashed + replayed), a per-tick canonical FNV-1a hash with run-twice self-check, a sim-boundary CTest, and direct `eng_sim → core + math + serialize` isolation. The **sim / present seam** is its concrete shape: `fixed→float` happens in exactly one place (the present glue), and nothing downstream can feed back into the sim.
 
-*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0012):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
+*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0013):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
 
 ## Alignment with locked decisions
 - **DATA-1 (Supabase only)** — N/A. No database; all game state is ephemeral in-memory `SimWorld`; persistent player data is explicitly deferred to Phase 8+.

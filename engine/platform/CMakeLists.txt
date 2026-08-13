@@ -1,5 +1,11 @@
-# eng_platform — the OS seam (ADR-0005). Win32 impl in src/win32/.
-add_library(eng_platform STATIC src/win32/win32_platform.cpp)
+# eng_platform — the OS seam (ADR-0005). Win32 impl in src/win32/. The page
+# allocator, file I/O, and logging are separate TUs (G14) so the headless test group
+# links eng_platform without pulling the window TU into the test executables.
+add_library(eng_platform STATIC
+    src/win32/win32_platform.cpp     # window/input, clock, Vulkan loader + surface
+    src/win32/win32_mem.cpp          # OS page allocator + page-backed arenas
+    src/win32/win32_file.cpp         # UTF-8 file I/O (atomic .tmp writes)
+    src/win32/win32_log.cpp)         # platform_log / platform_fatal
 add_library(eng::platform ALIAS eng_platform)
 
 target_include_directories(eng_platform

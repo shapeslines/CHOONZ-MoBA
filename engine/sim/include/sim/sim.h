@@ -10,6 +10,10 @@
 #include "sim/events.h"
 #include "sim/sim_config.h"
 
+// SIM_MAX_UNITS is the replay command seam: commands address units by slot, and the
+// replay codec records them per tick (G23). 64 is a v1 cap sized for the placeholder
+// world; widening it is a replay-format + logic-hash break, triggered by a Phase 5
+// scale test showing >64 commanded units per tick are needed.
 static const uint32_t SIM_MAX_UNITS = 64;
 static const uint32_t SIM_MAX_PLAYERS = 10;
 static const uint32_t SIM_MAX_COMMANDS_PER_TICK = 256;
