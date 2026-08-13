@@ -9,6 +9,7 @@
 #include "win32_file_internal.h"
 #include "win32_vulkan_loader.h"
 #include <windows.h>
+#include <winioctl.h>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -79,6 +80,224 @@ TEST(platform, fixed_step_clamps_and_consumes_only_when_owed) {
 static Allocator test_arena_alloc(Arena* a, uint8_t* buf, size_t n) {
     arena_init_fixed(a, buf, n);
     return arena_allocator(a);
+}
+
+struct TestMountPointBuffer {
+    ULONG reparse_tag;
+    USHORT reparse_data_length;
+    USHORT reserved;
+    USHORT substitute_name_offset;
+    USHORT substitute_name_length;
+    USHORT print_name_offset;
+    USHORT print_name_length;
+    wchar_t path_buffer[1024];
+};
+
+static bool test_create_junction(const wchar_t* link_path, const wchar_t* target_path) {
+    wchar_t target_full[MAX_PATH];
+    const DWORD target_length = GetFullPathNameW(target_path, MAX_PATH, target_full, nullptr);
+    if (target_length == 0u || target_length >= MAX_PATH ||
+        !CreateDirectoryW(link_path, nullptr)) return false;
+
+    HANDLE link = CreateFileW(
+        link_path, GENERIC_WRITE, 0u, nullptr, OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (link == INVALID_HANDLE_VALUE) {
+        RemoveDirectoryW(link_path);
+        return false;
+    }
+
+    TestMountPointBuffer buffer{};
+    buffer.reparse_tag = IO_REPARSE_TAG_MOUNT_POINT;
+    const wchar_t prefix[] = L"\\??\\";
+    const size_t prefix_length = (sizeof(prefix) / sizeof(prefix[0])) - 1u;
+    const size_t substitute_chars = prefix_length + target_length;
+    const size_t print_chars = target_length;
+    if (substitute_chars + 1u + print_chars + 1u >
+        sizeof(buffer.path_buffer) / sizeof(buffer.path_buffer[0])) {
+        CloseHandle(link);
+        RemoveDirectoryW(link_path);
+        return false;
+    }
+    memcpy(buffer.path_buffer, prefix, prefix_length * sizeof(wchar_t));
+    memcpy(buffer.path_buffer + prefix_length, target_full,
+           target_length * sizeof(wchar_t));
+    buffer.path_buffer[substitute_chars] = L'\0';
+    memcpy(buffer.path_buffer + substitute_chars + 1u, target_full,
+           print_chars * sizeof(wchar_t));
+    buffer.path_buffer[substitute_chars + 1u + print_chars] = L'\0';
+    buffer.substitute_name_offset = 0u;
+    buffer.substitute_name_length = (USHORT)(substitute_chars * sizeof(wchar_t));
+    buffer.print_name_offset = (USHORT)((substitute_chars + 1u) * sizeof(wchar_t));
+    buffer.print_name_length = (USHORT)(print_chars * sizeof(wchar_t));
+    const size_t path_bytes = (substitute_chars + 1u + print_chars + 1u) *
+                              sizeof(wchar_t);
+    buffer.reparse_data_length = (USHORT)(8u + path_bytes);
+    const DWORD input_bytes = (DWORD)(8u + buffer.reparse_data_length);
+    DWORD returned = 0u;
+    const bool ok = DeviceIoControl(link, FSCTL_SET_REPARSE_POINT, &buffer,
+                                    input_bytes, nullptr, 0u, &returned, nullptr) != 0;
+    CloseHandle(link);
+    if (!ok) RemoveDirectoryW(link_path);
+    return ok;
+}
+
+struct OwnedTestDirectory {
+    char path[128];
+    wchar_t wide_path[128];
+    HANDLE custody;
+};
+
+static bool test_create_owned_directory(const char* label, OwnedTestDirectory* out) {
+    if (!label || !out) return false;
+    static volatile LONG sequence = 0;
+    for (uint32_t attempt = 0u; attempt < 64u; ++attempt) {
+        OwnedTestDirectory candidate{};
+        const unsigned long id = (unsigned long)InterlockedIncrement(&sequence);
+        const int chars = std::snprintf(
+            candidate.path, sizeof(candidate.path), "moba_rooted_%s_%lu_%lu", label,
+            (unsigned long)GetCurrentProcessId(), id);
+        if (chars <= 0 || (size_t)chars >= sizeof(candidate.path) ||
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, candidate.path, -1,
+                                candidate.wide_path,
+                                (int)(sizeof(candidate.wide_path) /
+                                      sizeof(candidate.wide_path[0]))) == 0) return false;
+        if (!CreateDirectoryW(candidate.wide_path, nullptr)) {
+            if (GetLastError() == ERROR_ALREADY_EXISTS) continue;
+            return false;
+        }
+
+        candidate.custody = CreateFileW(
+            candidate.wide_path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, nullptr,
+            OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            nullptr);
+        FILE_ATTRIBUTE_TAG_INFO info{};
+        const bool owned = candidate.custody != INVALID_HANDLE_VALUE &&
+            GetFileInformationByHandleEx(candidate.custody, FileAttributeTagInfo,
+                                         &info, sizeof(info)) != 0 &&
+            (info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0u &&
+            (info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0u;
+        if (!owned) {
+            if (candidate.custody != INVALID_HANDLE_VALUE) CloseHandle(candidate.custody);
+            RemoveDirectoryW(candidate.wide_path);
+            return false;
+        }
+        *out = candidate;
+        return true;
+    }
+    return false;
+}
+
+static bool test_release_owned_directory(OwnedTestDirectory* owned) {
+    if (!owned || owned->custody == INVALID_HANDLE_VALUE) return false;
+    FILE_ATTRIBUTE_TAG_INFO info{};
+    const bool still_owned = GetFileInformationByHandleEx(
+        owned->custody, FileAttributeTagInfo, &info, sizeof(info)) != 0 &&
+        (info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0u &&
+        (info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0u;
+    CloseHandle(owned->custody);
+    owned->custody = INVALID_HANDLE_VALUE;
+    return still_owned && RemoveDirectoryW(owned->wide_path) != 0;
+}
+
+TEST(platform, rooted_file_read_binds_components_and_rejects_junction_escape) {
+    OwnedTestDirectory root{};
+    OwnedTestDirectory outside{};
+    root.custody = INVALID_HANDLE_VALUE;
+    outside.custody = INVALID_HANDLE_VALUE;
+    const bool root_owned = test_create_owned_directory("root", &root);
+    CHECK(root_owned);
+    if (!root_owned) return;
+    const bool outside_owned = test_create_owned_directory("outside", &outside);
+    CHECK(outside_owned);
+    if (!outside_owned) {
+        CHECK(test_release_owned_directory(&root));
+        return;
+    }
+
+    char inside_path[256];
+    char outside_path[256];
+    wchar_t junction[256];
+    wchar_t hard_link[256];
+    wchar_t outside_file_wide[256];
+    const int inside_chars = std::snprintf(
+        inside_path, sizeof(inside_path), "%s/inside.bin", root.path);
+    const int outside_chars = std::snprintf(
+        outside_path, sizeof(outside_path), "%s/payload.bin", outside.path);
+    const int junction_chars = swprintf_s(junction, L"%s\\escape", root.wide_path);
+    const int hard_link_chars = swprintf_s(
+        hard_link, L"%s\\outside-hardlink.bin", root.wide_path);
+    const int outside_wide_chars = swprintf_s(
+        outside_file_wide, L"%s\\payload.bin", outside.wide_path);
+    const bool paths_ready = inside_chars > 0 &&
+        (size_t)inside_chars < sizeof(inside_path) && outside_chars > 0 &&
+        (size_t)outside_chars < sizeof(outside_path) && junction_chars > 0 &&
+        hard_link_chars > 0 && outside_wide_chars > 0;
+    CHECK(paths_ready);
+    if (!paths_ready) {
+        CHECK(test_release_owned_directory(&root));
+        CHECK(test_release_owned_directory(&outside));
+        return;
+    }
+    const char* inside = "inside-root";
+    const char* payload = "outside-sentinel";
+    const bool inside_written = platform_file_write(inside_path, inside, std::strlen(inside));
+    const bool outside_written = platform_file_write(outside_path, payload, std::strlen(payload));
+    CHECK(inside_written && outside_written);
+    if (!inside_written || !outside_written) {
+        if (inside_written) CHECK(DeleteFileA(inside_path) != 0);
+        if (outside_written) CHECK(DeleteFileA(outside_path) != 0);
+        CHECK(test_release_owned_directory(&root));
+        CHECK(test_release_owned_directory(&outside));
+        return;
+    }
+
+    alignas(16) uint8_t memory[512];
+    Arena arena;
+    Allocator alloc = test_arena_alloc(&arena, memory, sizeof(memory));
+    PlatformFile file{};
+    CHECK(platform_file_read_rooted(root.path, "inside.bin", 64u,
+                                    alloc, &file));
+    CHECK(file.size == std::strlen(inside) &&
+          std::memcmp(file.data, inside, file.size) == 0);
+
+    const size_t offset = arena.offset;
+    PlatformFile untouched{(void*)(uintptr_t)0xC0FFEEu, 77u};
+    CHECK(!platform_file_read_rooted(root.path, "inside.bin", 2u,
+                                     alloc, &untouched));
+    CHECK(untouched.data == (void*)(uintptr_t)0xC0FFEEu && untouched.size == 77u);
+    CHECK(arena.offset == offset);
+
+    const bool junction_created = test_create_junction(junction, outside.wide_path);
+    CHECK(junction_created);
+    if (!junction_created) {
+        CHECK(DeleteFileA(inside_path) != 0);
+        CHECK(DeleteFileA(outside_path) != 0);
+        CHECK(test_release_owned_directory(&root));
+        CHECK(test_release_owned_directory(&outside));
+        return;
+    }
+    CHECK(!platform_file_read_rooted(root.path, "escape/payload.bin",
+                                     64u, alloc, &untouched));
+    CHECK(untouched.data == (void*)(uintptr_t)0xC0FFEEu && untouched.size == 77u);
+    CHECK(arena.offset == offset);
+    CHECK(!platform_file_read_rooted(root.path, "../payload.bin",
+                                     64u, alloc, &untouched));
+    CHECK(arena.offset == offset);
+    const bool owned_hard_link_created = CreateHardLinkW(
+        hard_link, outside_file_wide, nullptr) != 0;
+    CHECK(owned_hard_link_created);
+    CHECK(!platform_file_read_rooted(root.path, "outside-hardlink.bin",
+                                     64u, alloc, &untouched));
+    CHECK(untouched.data == (void*)(uintptr_t)0xC0FFEEu && untouched.size == 77u);
+    CHECK(arena.offset == offset);
+
+    CHECK(RemoveDirectoryW(junction) != 0);
+    if (owned_hard_link_created) CHECK(DeleteFileW(hard_link) != 0);
+    CHECK(DeleteFileA(inside_path) != 0);
+    CHECK(DeleteFileA(outside_path) != 0);
+    CHECK(test_release_owned_directory(&root));
+    CHECK(test_release_owned_directory(&outside));
 }
 
 TEST(platform, file_write_then_read_roundtrip) {

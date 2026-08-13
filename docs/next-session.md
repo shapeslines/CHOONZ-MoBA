@@ -7,16 +7,18 @@ Phase 3 M3.0–M3.4 and the interphase security consolidation are merged on `mai
 `codex/m4.0-assets` worktree. Draft PR #52 contains only M4.0; the dirty historical root checkout was
 not modified.
 
-Implementation is complete at checkpoint `dc5e208`:
+Implementation is complete; the final security repair is locally accepted and awaits its exact-head
+commit/check identity:
 
-- `eng_assets` owns normalized-path FNV-1a/64 `AssetId`, a fixed-capacity arena-backed generational
-  SoA registry, stable path lookup with collision rejection, level bulk-unload, and a small
-  refcounted global lifetime.
+- `eng_assets` owns portable normalized-path FNV-1a/64 `AssetId`, a fixed-capacity arena-backed
+  generational SoA registry, stable path lookup with collision rejection, level bulk-unload, and a
+  small refcounted global lifetime. Win32 aliases and device stems are rejected before hashing.
 - Direct TGA supports type 2/type 10, 24/32-bit true-color and both vertical origins; direct WAV
   accepts the strict RIFF PCM subset (1–2 channels, 8/16/24/32-bit). Validation completes before
   durable allocation or registry mutation.
-- Loose loads use a bounded allocator in the rewindable I/O arena, closing the stat/open growth
-  race. Initialization and failed loads preserve all caller arenas and registry state.
+- Loose loads size/read one handle-bound file below a handle-bound non-reparse asset root and reject
+  reparse and hard-link aliases. Registry initialization rejects overlapping backing/control ranges;
+  initialization and failed loads preserve all caller arenas and registry state.
 - The renderer still owns GPU memory. `eng_assets` has no Vulkan/render/sim dependency and receives
   only a Vulkan-free upload/destroy callback. The sandbox loads `uv_test.tga` through the registry
   and tears down materials/assets before the renderer.
@@ -33,16 +35,16 @@ Implementation is complete at checkpoint `dc5e208`:
   `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`.
 - RTX 4070 Ti Vulkan 1.3, validation enabled: 90 clean frames, asset-managed 64×64 texture id
   `0x3d9bff0eddada061`, 64 objects, one scene draw, and a visually inspected 1280×720 screenshot.
-- All eight GitHub CI/CodeQL checks passed on implementation head `dc5e208`. The documentation
-  closure commit must pass the same exact-head gate before PR #52 becomes ready.
+- All eight GitHub CI/CodeQL checks passed on earlier head `acc60b4`. The final reviewed security
+  repair head must pass the same exact-head gate before PR #52 becomes ready.
 
 ## First action
 
-1. Review and commit the M4.0 evidence/documentation closure, push it, and require all exact-head
-   GitHub checks.
-2. Obtain final acceptance and mark PR #52 ready only when local and hosted evidence agree.
-3. Stop for the explicit owner decision on squash-merging PR #52. After an authorized merge, verify
-   the recorded exact head landed and synchronize `main`.
+1. Commit and push the final M4.0 security/evidence closure and require all exact-head GitHub checks.
+2. Obtain fresh exact-head security and acceptance verdicts; mark PR #52 ready only when local and
+   hosted evidence agree.
+3. Owner squash-merge authorization is recorded. Merge only the recorded exact green head, verify
+   the merged tree, and synchronize `main`.
 4. Open a separate M4.1 slate from that green `main`; do not stack cooker work on PR #52.
 
 ## M4.1 boundary

@@ -26,6 +26,9 @@ TEST(asset_id, invalid_paths_fail_without_touching_outputs) {
     const char* invalid[] = {
         "", "/absolute.tga", "\\absolute.tga", "C:/drive.tga",
         "../escape.tga", "safe/../../escape.tga", "safe/control\x01.tga",
+        "unit.tga.", "unit.tga ", "ui/my icon.tga", "unicode/\xC3\xA9.tga",
+        "con", "CON.tga", "devices/aux.wav", "devices/com1.bin",
+        "devices/LPT9.data",
     };
     for (size_t i = 0u; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
         char normalized[32] = "untouched";
@@ -44,4 +47,6 @@ TEST(asset_id, invalid_paths_fail_without_touching_outputs) {
     CHECK(std::strcmp(tiny, "old") == 0 && tiny_length == 9u);
     CHECK(asset_id("Not/Canonical.TGA") == ASSET_ID_NULL);
     CHECK(asset_id("bad//path.tga") == ASSET_ID_NULL);
+    CHECK(asset_id("unit.tga.") == ASSET_ID_NULL);
+    CHECK(asset_id("con.tga") == ASSET_ID_NULL);
 }

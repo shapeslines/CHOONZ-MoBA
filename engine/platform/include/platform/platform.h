@@ -56,6 +56,13 @@ typedef struct PlatformFile { void* data; size_t size; } PlatformFile;
 // policy, and an on-disk file's size must never be able to trigger it.
 bool platform_file_size (const char* path, size_t* out_size);
 bool platform_file_read (const char* path, Allocator alloc, PlatformFile* out);
+// Asset-root read: `relative_path` is a forward-slash relative path. The platform
+// opens and binds every component without write/delete sharing, rejects reparse
+// points, multi-link file aliases, and root escapes, derives size from the final
+// open handle, enforces `max_bytes` before allocation, and reads that same handle.
+bool platform_file_read_rooted(const char* root, const char* relative_path,
+                               size_t max_bytes, Allocator alloc,
+                               PlatformFile* out);
 // Atomic whole-file write: creates a new path + ".tmp", flushes, then renames the
 // still-open temporary handle over `path` (readers never observe a torn file). A
 // pre-existing .tmp is never overwritten; that collision returns false and leaves

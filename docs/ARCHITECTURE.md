@@ -1144,14 +1144,20 @@ checked as well, so an observed hash collision fails closed instead of aliasing 
 
 `AssetId` is FNV-1a/64 over a lowercase normalized relative path (ADR-0010). Runtime normalization
 converts backslashes, collapses repeated separators and `.` segments, and rejects `..`, absolute or
-drive paths, controls, and truncation. Compile-time `asset_id("canonical/path")` accepts only already
-canonical literals. Asset identity therefore never depends on pointers, allocation order, or file
-load order.
+drive paths, controls, truncation, non-ASCII names, Windows device stems, and components outside the
+portable `[a-z0-9._-]` grammar. Compile-time `asset_id("canonical/path")` accepts only already
+canonical literals. This deliberately excludes trailing-dot/space and device-name aliases before
+hashing, so Win32 cannot resolve multiple registry identities to one file. Asset identity never
+depends on pointers, allocation order, or file load order.
 
 Initialization is transactional and uses four distinct caller-owned arenas: persistent registry
-metadata, level payloads, small global payloads, and rewindable I/O scratch. Loose loads impose a
-maximum file size before and during open/read so a stat/open growth race cannot escape the scratch
-budget; decode succeeds completely before durable registry or lifetime state is committed.
+metadata, level payloads, small global payloads, and rewindable I/O scratch. Their backing ranges,
+the four arena controls, and the registry control must be pairwise disjoint; overlap and address
+overflow fail before any arena or registry mutation. Loose loads enter through a platform-owned
+rooted-read seam: the asset root and every descendant are opened without following reparses and
+remain handle-bound through final size/read. Reparse components, multi-link files, traversal, and
+root escapes fail before allocation. The same final handle supplies size and bytes under a maximum
+file budget; decode succeeds completely before durable registry or lifetime state is committed.
 
 - **Level assets (the majority):** owned by a `level_arena`. `assets_unload_level()` releases each GPU
   handle through the renderer callback, invalidates every matching registry handle, and rewinds the

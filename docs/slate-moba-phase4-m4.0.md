@@ -1,6 +1,6 @@
 # Phase 4 M4.0 Slate - Direct Assets and Lifetime Registry
 
-**Status:** local acceptance complete; draft PR #52 awaits final exact-head checks and ready state
+**Status:** final security repair locally accepted; draft PR #52 awaits exact-head checks/reviews
 
 **Branch:** `codex/m4.0-assets`
 
@@ -33,8 +33,10 @@ record and commit the green checkpoint, then advance.
 - [x] Promote TGA and add bounded WAV parsing/file loads.
 - [x] Route the sandbox texture through `eng_assets` and prove unload ownership.
 - [x] Full Debug/RelWithDebInfo/Release, ASan, oracle, boundary, and Vulkan acceptance.
-- [ ] Commit the evidence record, pass that exact head's GitHub checks, obtain acceptance, and mark
-  PR #52 ready. Merge remains separately owner-approved.
+- [x] Repair portable identity, arena-overlap, and rooted-file boundary findings; obtain two focused
+  security passes and repeat the full local acceptance matrix.
+- [ ] Commit the final record, pass that exact head's GitHub checks and fresh reviews, mark PR #52
+  ready, then use the recorded owner authorization to squash-merge only that green head.
 
 ## Locked decisions
 
@@ -93,3 +95,19 @@ record and commit the green checkpoint, then advance.
 - Implementation checkpoints are `ad4d3da` (identity/registry), `7a1c352` (bounded direct loaders),
   and `dc5e208` (sandbox integration). All eight CI/CodeQL checks on `dc5e208` passed; the final
   documentation head must earn the same exact-head result before readiness.
+
+### Security repair loop
+
+- Fresh full review found lexical-only root containment, Win32 filename aliases, and independently
+  backed `Arena` controls that could still overlap one memory range. The candidate remained draft.
+- Asset identity now accepts only lowercase portable `[a-z0-9._-]` components and rejects device
+  stems. Registry initialization exhaustively rejects backing/backing, control/control, and
+  control/backing overlap before mutation; exact adjacency remains valid.
+- `platform_file_read_rooted` binds the root and every descendant without following reparses, keeps
+  the chain live through the read, rejects multi-link files, and obtains size and bytes from the same
+  final handle. The asset loaders cannot regress to stat plus ordinary read under boundary lint.
+- Real junction and hard-link fixtures live only in create-new uniquely owned directories with held
+  custody handles and exact nonrecursive teardown. Two independent focused security rereviews pass.
+- Final repaired tree: `/WX` Debug, RelWithDebInfo, and Release 43/43 each; Debug-ASan 43/43;
+  clang-cl/UBSan 6/6; Debug/Release oracle unchanged; RTX 4070 Ti 90-frame validation-on screenshot
+  passes through the rooted loader. Exact-head hosted checks and final acceptance remain.

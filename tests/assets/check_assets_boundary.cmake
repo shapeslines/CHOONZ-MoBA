@@ -19,6 +19,12 @@ foreach(path IN LISTS asset_files)
     endif()
 endforeach()
 
+file(READ "${SOURCE_DIR}/engine/assets/src/assets.cpp" asset_runtime)
+if(NOT asset_runtime MATCHES "platform_file_read_rooted" OR
+   asset_runtime MATCHES "platform_file_size[ \t\r\n]*\\(")
+    message(FATAL_ERROR "asset loads must use the single-handle rooted read seam")
+endif()
+
 if(EXISTS "${SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp" OR
    EXISTS "${SOURCE_DIR}/tools/sandbox/src/tga_direct.h")
     message(FATAL_ERROR "provisional sandbox TGA parser still exists")

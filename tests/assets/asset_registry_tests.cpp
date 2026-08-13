@@ -89,6 +89,123 @@ TEST(assets, initialization_is_transactional_when_persistent_budget_is_short) {
     CHECK(persistent.offset == offset);
 }
 
+TEST(assets, initialization_zeroes_nonzero_registry_backing) {
+    alignas(16) uint8_t persistent_storage[65536];
+    alignas(16) uint8_t level_storage[256];
+    alignas(16) uint8_t global_storage[256];
+    alignas(16) uint8_t io_storage[256];
+    std::memset(persistent_storage, 0xA5, sizeof(persistent_storage));
+    std::memset(level_storage, 0xA5, sizeof(level_storage));
+    std::memset(global_storage, 0xA5, sizeof(global_storage));
+    std::memset(io_storage, 0xA5, sizeof(io_storage));
+
+    Arena persistent, level, global, io;
+    arena_init_fixed(&persistent, persistent_storage, sizeof(persistent_storage));
+    arena_init_fixed(&level, level_storage, sizeof(level_storage));
+    arena_init_fixed(&global, global_storage, sizeof(global_storage));
+    arena_init_fixed(&io, io_storage, sizeof(io_storage));
+    AssetRegistry registry;
+    std::memset(&registry, 0xA5, sizeof(registry));
+    AssetRegistryConfig config = asset_registry_config_default(".");
+    config.capacity = 2u;
+    AssetRendererApi renderer{};
+    CHECK(asset_registry_init(&registry, &persistent, &level, &global, &io,
+                              renderer, config));
+
+    const uint8_t pcm[4] = {1u, 2u, 3u, 4u};
+    AssetSoundSource source{pcm, sizeof(pcm), 48000u, 1u, 8u};
+    AssetHandle sound = asset_register_sound(&registry, "audio/nonzero.wav",
+                                              ASSET_LIFETIME_LEVEL, source);
+    CHECK(!handle_is_null(sound.h));
+    CHECK(handle_index(sound.h) == 0u && handle_gen(sound.h) == 1u);
+    CHECK(registry.live_count == 1u && registry.by_id.count == 1u);
+    AssetSoundView view{};
+    CHECK(asset_get_sound(&registry, sound, &view));
+    CHECK(view.pcm_bytes == sizeof(pcm));
+    CHECK(std::memcmp(view.pcm, pcm, sizeof(pcm)) == 0);
+}
+
+TEST(assets, initialization_rejects_overlapping_backing_without_mutation) {
+    alignas(16) uint8_t shared[65536];
+    alignas(16) uint8_t global_storage[256];
+    alignas(16) uint8_t io_storage[256];
+    Arena persistent, level, global, io;
+    arena_init_fixed(&persistent, shared, sizeof(shared));
+    arena_init_fixed(&level, shared, sizeof(shared));
+    arena_init_fixed(&global, global_storage, sizeof(global_storage));
+    arena_init_fixed(&io, io_storage, sizeof(io_storage));
+    AssetRegistry registry;
+    std::memset(&registry, 0xA5, sizeof(registry));
+    const AssetRegistry before = registry;
+    AssetRegistryConfig config = asset_registry_config_default(".");
+    config.capacity = 2u;
+    const size_t offsets[4] = {persistent.offset, level.offset, global.offset, io.offset};
+    AssetRendererApi renderer{};
+    CHECK(!asset_registry_init(&registry, &persistent, &level, &global, &io,
+                               renderer, config));
+    CHECK(std::memcmp(&registry, &before, sizeof(registry)) == 0);
+    CHECK(persistent.offset == offsets[0] && level.offset == offsets[1] &&
+          global.offset == offsets[2] && io.offset == offsets[3]);
+}
+
+TEST(assets, initialization_accepts_exactly_adjacent_backing_ranges) {
+    alignas(16) uint8_t storage[65536 + 256 * 3];
+    Arena persistent, level, global, io;
+    arena_init_fixed(&persistent, storage, 65536u);
+    arena_init_fixed(&level, storage + 65536u, 256u);
+    arena_init_fixed(&global, storage + 65536u + 256u, 256u);
+    arena_init_fixed(&io, storage + 65536u + 512u, 256u);
+    AssetRegistry registry{};
+    AssetRegistryConfig config = asset_registry_config_default(".");
+    config.capacity = 2u;
+    AssetRendererApi renderer{};
+    CHECK(asset_registry_init(&registry, &persistent, &level, &global, &io,
+                              renderer, config));
+    CHECK(registry.initialized == 1u);
+}
+
+TEST(assets, initialization_rejects_registry_inside_arena_backing) {
+    alignas(AssetRegistry) uint8_t persistent_storage[65536];
+    alignas(16) uint8_t level_storage[256];
+    alignas(16) uint8_t global_storage[256];
+    alignas(16) uint8_t io_storage[256];
+    Arena persistent, level, global, io;
+    arena_init_fixed(&persistent, persistent_storage, sizeof(persistent_storage));
+    arena_init_fixed(&level, level_storage, sizeof(level_storage));
+    arena_init_fixed(&global, global_storage, sizeof(global_storage));
+    arena_init_fixed(&io, io_storage, sizeof(io_storage));
+    AssetRegistry* registry = reinterpret_cast<AssetRegistry*>(persistent_storage);
+    std::memset(registry, 0xA5, sizeof(*registry));
+    const AssetRegistry before = *registry;
+    AssetRegistryConfig config = asset_registry_config_default(".");
+    config.capacity = 2u;
+    AssetRendererApi renderer{};
+    CHECK(!asset_registry_init(registry, &persistent, &level, &global, &io,
+                               renderer, config));
+    CHECK(std::memcmp(registry, &before, sizeof(*registry)) == 0);
+    CHECK(persistent.offset == 0u && level.offset == 0u &&
+          global.offset == 0u && io.offset == 0u);
+}
+
+TEST(assets, windows_path_aliases_fail_without_registry_or_renderer_mutation) {
+    RegistryFixture fixture;
+    CHECK(init_fixture(&fixture, 4u));
+    const uint8_t pixel[4] = {1u, 2u, 3u, 4u};
+    const AssetTextureSource source{pixel, 1u, 1u};
+    const char* aliases[] = {
+        "unit.tga.", "unit.tga ", "con.tga", "dir/aux.wav", "dir/com1.bin",
+    };
+    const size_t level_offset = fixture.level.offset;
+    for (size_t i = 0u; i < sizeof(aliases) / sizeof(aliases[0]); ++i) {
+        const AssetHandle rejected = asset_register_texture(
+            &fixture.registry, aliases[i], ASSET_LIFETIME_LEVEL, source);
+        CHECK(handle_is_null(rejected.h));
+        CHECK(fixture.fake.creates == 0u && fixture.fake.destroys == 0u);
+        CHECK(fixture.registry.live_count == 0u && fixture.registry.by_id.count == 0u);
+        CHECK(fixture.level.offset == level_offset);
+    }
+}
+
 TEST(assets, level_texture_roundtrips_and_unload_invalidates_handle) {
     RegistryFixture fixture;
     CHECK(init_fixture(&fixture, 2u));

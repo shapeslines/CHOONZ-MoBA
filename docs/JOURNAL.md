@@ -23,35 +23,42 @@ path is unchanged.
 ### What changed
 
 - Canonical path normalization lowercases ASCII, normalizes separators, removes repeated and `.`
-  segments, and rejects traversal, absolute/drive paths, controls, and truncation. Stored canonical
-  paths turn a runtime hash collision into a hard rejection instead of an alias.
+  segments, and rejects traversal, absolute/drive paths, controls, truncation, nonportable names,
+  trailing-dot/space aliases, and Windows device stems. Stored canonical paths turn a runtime hash
+  collision into a hard rejection instead of an alias.
 - Persistent registry metadata, level payloads, global payloads, and I/O scratch use distinct
-  caller-owned arenas. Invalid/under-budget initialization and malformed/capacity failures are
-  mutation-free; level unload invalidates every stale handle and rewinds in O(1).
+  caller-owned arenas. Every backing/control range must be pairwise disjoint, including the registry
+  control; invalid/under-budget/overlapping initialization and malformed/capacity failures are
+  mutation-free. Level unload invalidates every stale handle and rewinds in O(1).
 - TGA type 2/type 10 true-color decoding covers 24/32-bit pixels and both vertical origins. WAV
   accepts a strict RIFF PCM subset with exact chunk padding, rates, alignment, and sample widths.
-- The stat/open file-growth interval is bounded by a loader allocator; scratch rewinds after every
-  result and durable state commits only after complete decode.
+- Loose loads bind the root and every descendant without following reparses, reject multi-link files,
+  and derive size and bytes from the same final handle under the loader budget. Scratch rewinds after
+  every result and durable state commits only after complete decode.
 - The sandbox no longer compiles its own TGA decoder or reads the texture file directly. It binds
   registry upload/destroy callbacks to the existing renderer seam and preserves GPU ownership order.
 - `assets_boundary` permanently rejects renderer, Vulkan, sim, or direct sandbox decode coupling.
 
 ### Verification
 
-- CI-preset `/WX` Debug, RelWithDebInfo, and Release build 97/97 targets and pass 43/43 tests each.
-  Debug-ASan also builds 97/97 and passes 43/43; clang-cl/UBSan passes 6/6.
+- CI-preset `/WX` Debug, RelWithDebInfo, and Release pass 43/43 tests each after the final security
+  corrections. Debug-ASan also passes 43/43; clang-cl 19.1.5 plus UBSan passes 6/6.
 - Debug/Release retain the exact 10,000-tick oracle: 923 commands, final
   `0x637628abff59c823`, stream `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`.
-- An RTX 4070 Ti Vulkan run completed 90 validation-clean frames with the asset-managed 64×64
-  texture, 64 objects, one scene draw, clean shutdown, and a visually inspected screenshot.
+- An RTX 4070 Ti Vulkan run completed 90 validation-clean frames through the final rooted-read seam
+  with the asset-managed 64×64 texture, 64 objects, one scene draw, clean shutdown, and a visually
+  inspected screenshot.
+- Two independent focused security reviews pass the portable identity, pairwise arena ownership,
+  rooted junction/hard-link rejection, and uniquely owned fixture-cleanup contracts.
 - GitHub CI/CodeQL passed all eight checks on implementation head `dc5e208`; the final documentation
   head must repeat that exact-head result before readiness.
 
 ### Next
 
-Commit and push the evidence closure, obtain final acceptance, and promote PR #52 only after its
-exact head is green. Merge remains an explicit owner decision. After landing and synchronizing
-`main`, open M4.1 as a separate cooker/`.mba` slate; do not stack it on this branch.
+Commit and push the reviewed security/evidence closure, obtain final exact-head acceptance, and
+promote PR #52 only after hosted CI and CodeQL are green. Owner squash-merge authorization is
+recorded; land only the recorded green head, verify the merged tree, and synchronize `main`. Then
+open M4.1 as a separate cooker/`.mba` slate; do not stack it on this branch.
 
 ---
 

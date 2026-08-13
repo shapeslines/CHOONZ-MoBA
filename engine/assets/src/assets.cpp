@@ -74,7 +74,46 @@ size_t asset_registry_memory_required(AssetRegistryConfig config) {
 
 static bool valid_arena(const Arena* arena) {
     return arena && arena->base && arena->offset <= arena->committed &&
-           arena->committed <= arena->reserved;
+           arena->committed <= arena->reserved &&
+           arena->reserved <= UINTPTR_MAX - (uintptr_t)arena->base;
+}
+
+typedef struct AddressRange {
+    uintptr_t begin;
+    uintptr_t end;
+} AddressRange;
+
+static bool make_range(const void* base, size_t bytes, AddressRange* out) {
+    if (!base || !out || bytes > UINTPTR_MAX - (uintptr_t)base) return false;
+    AddressRange range{(uintptr_t)base, (uintptr_t)base + bytes};
+    *out = range;
+    return true;
+}
+
+static bool ranges_overlap(AddressRange a, AddressRange b) {
+    return a.begin < b.end && b.begin < a.end;
+}
+
+static bool registry_memory_is_disjoint(const AssetRegistry* registry,
+                                        const Arena* const arenas[4]) {
+    AddressRange backing[4];
+    for (uint32_t i = 0u; i < 4u; ++i) {
+        if (!make_range(arenas[i]->base, arenas[i]->reserved, &backing[i])) return false;
+        for (uint32_t j = 0u; j < i; ++j)
+            if (ranges_overlap(backing[i], backing[j])) return false;
+    }
+
+    AddressRange controls[5];
+    if (!make_range(registry, sizeof(*registry), &controls[0])) return false;
+    for (uint32_t i = 0u; i < 4u; ++i)
+        if (!make_range(arenas[i], sizeof(*arenas[i]), &controls[i + 1u])) return false;
+    for (uint32_t i = 0u; i < 5u; ++i) {
+        for (uint32_t j = 0u; j < i; ++j)
+            if (ranges_overlap(controls[i], controls[j])) return false;
+        for (uint32_t j = 0u; j < 4u; ++j)
+            if (ranges_overlap(controls[i], backing[j])) return false;
+    }
+    return true;
 }
 
 static bool copy_asset_root(const char* root, char* out, uint16_t* out_length) {
@@ -100,6 +139,8 @@ bool asset_registry_init(AssetRegistry* registry, Arena* persistent_arena,
         persistent_arena == level_arena || persistent_arena == global_arena ||
         persistent_arena == io_arena || level_arena == global_arena ||
         level_arena == io_arena || global_arena == io_arena) return false;
+    const Arena* arenas[4] = {persistent_arena, level_arena, global_arena, io_arena};
+    if (!registry_memory_is_disjoint(registry, arenas)) return false;
 
     const size_t required = asset_registry_memory_required(config);
     const uint32_t map_capacity = asset_map_capacity(config.capacity);
@@ -392,26 +433,6 @@ static void* bounded_arena_allocate(void* state, void* ptr, size_t old_size,
     return arena_push(bounded->arena, new_size, alignment);
 }
 
-static bool build_asset_file_path(const AssetRegistry* registry,
-                                  const char* normalized, size_t normalized_length,
-                                  char* out, size_t out_capacity) {
-    if (!registry || !normalized || !out || out_capacity == 0u) return false;
-    const size_t root_length = registry->asset_root_length;
-    const bool has_separator = root_length != 0u &&
-        (registry->asset_root[root_length - 1u] == '/' ||
-         registry->asset_root[root_length - 1u] == '\\');
-    const size_t separator = has_separator ? 0u : 1u;
-    if (root_length > SIZE_MAX - separator ||
-        root_length + separator > SIZE_MAX - normalized_length ||
-        root_length + separator + normalized_length + 1u > out_capacity) return false;
-    memcpy(out, registry->asset_root, root_length);
-    size_t write = root_length;
-    if (!has_separator) out[write++] = '/';
-    memcpy(out + write, normalized, normalized_length);
-    out[write + normalized_length] = '\0';
-    return true;
-}
-
 static AssetHandle begin_file_load(AssetRegistry* registry, const char* path,
                                    AssetType type, AssetLifetime lifetime,
                                    char* normalized, size_t* normalized_length,
@@ -438,20 +459,14 @@ AssetHandle asset_load_texture_tga(AssetRegistry* registry, const char* path,
                                          normalized, &normalized_length, &finished);
     if (finished) return cached;
 
-    char full_path[ASSET_PATH_MAX * 2u + 2u];
-    if (!build_asset_file_path(registry, normalized, normalized_length,
-                               full_path, sizeof(full_path))) return null_asset_handle();
-    size_t file_size = 0u;
-    if (!platform_file_size(full_path, &file_size) || file_size == 0u ||
-        file_size > registry->max_file_bytes) return null_asset_handle();
-
     registry->io_arena->offset = registry->io_base_offset;
     BoundedArenaAlloc bounded{registry->io_arena, registry->max_file_bytes};
     Allocator file_allocator{bounded_arena_allocate, &bounded, ALLOC_ARENA};
     PlatformFile file{};
     AssetHandle result = null_asset_handle();
-    if (platform_file_read(full_path, file_allocator, &file) &&
-        file.size <= registry->max_file_bytes) {
+    if (platform_file_read_rooted(registry->asset_root, normalized,
+                                  registry->max_file_bytes, file_allocator, &file) &&
+        file.size != 0u) {
         uint32_t width = 0u;
         uint32_t height = 0u;
         size_t decoded_bytes = 0u;
@@ -477,20 +492,14 @@ AssetHandle asset_load_sound_wav(AssetRegistry* registry, const char* path,
                                          normalized, &normalized_length, &finished);
     if (finished) return cached;
 
-    char full_path[ASSET_PATH_MAX * 2u + 2u];
-    if (!build_asset_file_path(registry, normalized, normalized_length,
-                               full_path, sizeof(full_path))) return null_asset_handle();
-    size_t file_size = 0u;
-    if (!platform_file_size(full_path, &file_size) || file_size == 0u ||
-        file_size > registry->max_file_bytes) return null_asset_handle();
-
     registry->io_arena->offset = registry->io_base_offset;
     BoundedArenaAlloc bounded{registry->io_arena, registry->max_file_bytes};
     Allocator file_allocator{bounded_arena_allocate, &bounded, ALLOC_ARENA};
     PlatformFile file{};
     AssetHandle result = null_asset_handle();
-    if (platform_file_read(full_path, file_allocator, &file) &&
-        file.size <= registry->max_file_bytes) {
+    if (platform_file_read_rooted(registry->asset_root, normalized,
+                                  registry->max_file_bytes, file_allocator, &file) &&
+        file.size != 0u) {
         WavInfo info{};
         if (wav_inspect_pcm(file.data, file.size, &info) &&
             arena_has_room(registry->io_arena, info.pcm_bytes, 0u)) {

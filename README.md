@@ -28,10 +28,10 @@ RTS-class game engine.
 > fixed→float owner; the renderer still cannot see `SimWorld`.
 > **Phase 3 is complete through M3.4 on `main`.** Central compiler ownership, test/game-binary
 > parity, fail-closed isolation, and clang-cl/UBSan proofs are green. Interphase security
-> consolidation landed as `a2565ca`. Phase 4 M4.0 now adds normalized-path 64-bit asset IDs, an
-> arena-backed generational SoA registry, level/global lifetimes, bounded direct TGA/WAV loaders,
-> and a Vulkan-free renderer upload callback. The sandbox texture is loaded and released through
-> that registry; raw loose SPIR-V remains renderer-owned under ADR-0008.
+> consolidation landed as `a2565ca`. Phase 4 M4.0 now adds portable normalized-path 64-bit asset
+> IDs, a disjoint-arena generational SoA registry, handle-bound asset-root reads, bounded direct
+> TGA/WAV loaders, and a Vulkan-free renderer upload callback. The sandbox texture is loaded and
+> released through that registry; raw loose SPIR-V remains renderer-owned under ADR-0008.
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).

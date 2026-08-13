@@ -656,8 +656,12 @@ TGA decoder or reads its texture directly. `/WX` Debug, RelWithDebInfo, Release,
 43/43; clang-cl/UBSan passes 6/6; Debug/Release retain final oracle `0x637628abff59c823`, stream
 `0x6f381609f7e59f0c`, and logic `0xab96814425ba80a4`. An RTX 4070 Ti completed 90 validation-clean
 frames with the asset-managed 64×64 texture. Raw loose SPIR-V remains renderer-owned under ADR-0008;
-no cooker/container work entered M4.0. Exact-head hosted checks and owner landing remain the closing
-gates.
+no cooker/container work entered M4.0. Fresh security review found and closed three boundary gaps:
+canonical IDs now enforce a portable grammar that rejects Win32 aliases, registry initialization
+rejects every overlapping arena/control range before mutation, and loose loads size/read one
+handle-bound file beneath a handle-bound non-reparse root while rejecting multi-link aliases.
+Junction, hard-link, nonzero-backing, overlap, and exact-adjacency regressions pass in every local
+configuration. Exact-head hosted checks and owner landing remain the closing gates.
 **Risks:** determinism rule — sim references assets by **stable id only**, never pointer/load-order.
 **Exercises:** Assets, Renderer (upload seam), Memory (arenas).
 

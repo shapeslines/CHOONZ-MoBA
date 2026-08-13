@@ -25,6 +25,7 @@ bool asset_path_normalize(const char* path, char* out, size_t out_capacity,
             return false;
         }
         if (segment_length == 0u) continue;
+        const size_t output_segment_begin = write != 0u ? write + 1u : write;
         if (write != 0u) {
             if (write + 1u >= sizeof(normalized)) return false;
             normalized[write++] = '/';
@@ -32,10 +33,11 @@ bool asset_path_normalize(const char* path, char* out, size_t out_capacity,
         if (segment_length >= sizeof(normalized) - write) return false;
         for (size_t i = 0u; i < segment_length; ++i) {
             unsigned char c = (unsigned char)path[segment_begin + i];
-            if (c < 0x20u || c == 0x7fu || c == ':') return false;
             if (c >= 'A' && c <= 'Z') c = (unsigned char)(c + ('a' - 'A'));
+            if (!asset_portable_char(c)) return false;
             normalized[write++] = (char)c;
         }
+        if (!asset_literal_segment_valid(normalized, output_segment_begin, write)) return false;
     }
 
     if (write == 0u || write + 1u > out_capacity) return false;
