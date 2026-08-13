@@ -32,7 +32,8 @@ if ($ProcessExitCode -ne 0) {
 
 $badDiagnostics = @($lines | Where-Object {
     $_ -match '(?i)\b(?:failed|failure|fatal|error)\b' -or
-    $_ -match '(?i)^validation(?:-layer)?\s*:'
+    $_ -match '(?i)^validation(?:-layer)?\s*:' -or
+    $_ -match '^\[vk (?:WARN|ERROR)\]'
 })
 if ($badDiagnostics.Count -ne 0) {
     Reject "sandbox logged a failure diagnostic: $($badDiagnostics[0])"

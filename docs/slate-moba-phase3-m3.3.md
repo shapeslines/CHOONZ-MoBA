@@ -89,8 +89,9 @@ presentation state or timing to feed back into `eng_sim`.
 - `sim_boundary` and `present_boundary` confirm the four dependency seams and reject clocks,
   presentation cadence, mutation, heap allocation, renderer→sim, and platform→game/sim coupling.
 - One shared hosted-smoke classifier checks process exit and failure diagnostics before exact,
-  anchored device-gate matching. Eleven adversarial cases reject phrase-plus-failure, incomplete,
-  stale/invalid screenshot, and unknown no-screenshot runs while accepting the three exact gates.
+  anchored device-gate matching. Fourteen adversarial cases reject phrase-plus-failure, Vulkan
+  validation WARN/ERROR, incomplete, stale/invalid screenshot, and unknown no-screenshot runs while
+  accepting the three exact gates.
 - A fresh clone of the final corrective tree completed the README configure/build/test path and rendered 90
   validation-clean frames. The RTX 4070 Ti screenshot is 1280×720 (2,764,854 bytes) with 64 objects,
   one batch, one scene draw, three total draws, and 12 allocations.

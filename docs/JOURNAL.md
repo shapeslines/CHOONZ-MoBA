@@ -27,7 +27,7 @@ acceptance, GitHub checks, and squash merge remain the final external closure lo
   outcome fails and prints the sandbox log. CI and the fresh-walk script invoke one shared classifier.
   A first independent acceptance pass caught that matching the phrase before the exit status could
   mask an unrelated failure; the repaired classifier checks exit and failure diagnostics first and
-  has 11 adversarial CTest cases.
+  has 14 adversarial CTest cases, including Vulkan validation WARN and ERROR records.
 - `PlatformFixedStep` is window-independent platform code: initialize, clamp accumulated frame debt,
   query/consume whole 30 Hz ticks, and calculate alpha. It has no game or sim dependency.
 - The sandbox generates orbit commands inside each owed-tick iteration and consumes debt only after

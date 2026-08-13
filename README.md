@@ -84,7 +84,8 @@ schedule/sim/presentation suites, `render`,
 `render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
 the sim/presentation boundary scans, and replay CLI fixtures.
 The hosted renderer smoke classifier is also tested adversarially: only exact Vulkan device gates
-may skip; nonzero exits, validation diagnostics, incomplete runs, and missing/invalid screenshots fail.
+may skip; nonzero exits, Vulkan validation warnings/errors, incomplete runs, and missing/invalid
+screenshots fail.
 
 To run the replay tool directly:
 

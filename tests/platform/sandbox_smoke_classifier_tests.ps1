@@ -80,10 +80,13 @@ Run-Case 'no-driver-skip' $driver 0 $false 'SANDBOX_SMOKE=SKIP' 0
 Run-Case 'minimum-spec-skip' $minimum 0 $false 'SANDBOX_SMOKE=SKIP' 0
 Run-Case 'device-phrase-nonzero' $physical 3 $false 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'device-phrase-plus-validation-error' ($physical + "`nvalidation: ERROR injected") 0 $false 'SANDBOX_SMOKE=FAIL' 1
+Run-Case 'device-phrase-plus-vk-warning' ($physical + "`n[vk WARN] injected") 0 $false 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'device-phrase-missing-clean-exit' "renderer: no Vulkan physical devices`nsandbox: renderer unavailable (null backend / no Vulkan)" 0 $false 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'unknown-missing-screenshot' "sandbox: renderer unavailable (null backend / no Vulkan)`nreached 90 frames -> quit`nsandbox: clean exit after 90 frames (0.60s)" 0 $false 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'hardware-missing-screenshot' $success 0 $false 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'failure-with-stale-screenshot' ($success + "`nsandbox: capture FAILED") 0 $true 'SANDBOX_SMOKE=FAIL' 1
+Run-Case 'hardware-plus-vk-warning' ($success + "`n[vk WARN] injected") 0 $true 'SANDBOX_SMOKE=FAIL' 1
+Run-Case 'hardware-plus-vk-error' ($success + "`n[vk ERROR] injected") 0 $true 'SANDBOX_SMOKE=FAIL' 1
 Run-Case 'substring-is-not-device-gate' ($physical -replace 'renderer: no Vulkan physical devices', 'prefix renderer: no Vulkan physical devices suffix') 0 $false 'SANDBOX_SMOKE=FAIL' 1
 
 Remove-Item -LiteralPath $caseRoot -Recurse -Force
@@ -91,5 +94,5 @@ if ($script:failureCount -ne 0) {
     Write-Output "$script:failureCount sandbox smoke classifier case(s) failed"
     exit 1
 }
-Write-Output "sandbox smoke classifier: 11 adversarial cases passed"
+Write-Output "sandbox smoke classifier: 14 adversarial cases passed"
 exit 0

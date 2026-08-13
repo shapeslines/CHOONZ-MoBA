@@ -111,7 +111,7 @@ add_test(NAME sandbox_smoke_classifier
             -Classifier "${CMAKE_SOURCE_DIR}/tools/classify-sandbox-smoke.ps1"
             -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(sandbox_smoke_classifier PROPERTIES
-    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 11 adversarial cases passed")
+    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 14 adversarial cases passed")
 
 # --- replay CLI: one fixture records a real file; consumers independently inspect,
 #     verify, and exercise exact public exit classes before cleanup runs.

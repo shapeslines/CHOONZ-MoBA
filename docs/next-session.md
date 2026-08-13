@@ -28,8 +28,9 @@ M3.4 implementation has begun.
 - Arena snapshot init is transactional; extraction is const and hash-neutral; actual live count and
   64 stable slots are preserved; interpolation is previous→current and identity-aware.
 - Fresh-clone README walk and a 90-frame validation-clean RTX 4070 Ti screenshot are green.
-- CI and fresh-walk share one smoke classifier; 11 adversarial cases prove device-gate phrases cannot
-  mask nonzero exits, validation diagnostics, incomplete runs, or missing/invalid screenshots.
+- CI and fresh-walk share one smoke classifier; 14 adversarial cases prove device-gate phrases cannot
+  mask nonzero exits, Vulkan validation WARN/ERROR diagnostics, incomplete runs, or missing/invalid
+  screenshots.
 - `eng_sim → core + math + serialize`; `eng_game → core + math + sim + render_common`; renderer has
   no sim dependency; platform cadence has no game/sim dependency.
 
