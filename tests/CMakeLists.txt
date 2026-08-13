@@ -127,6 +127,11 @@ add_test(NAME replay_cli_errors
             -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(replay_cli_errors PROPERTIES FIXTURES_REQUIRED replay_file)
 
+add_test(NAME sandbox_cli_errors
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/sandbox_cli_errors.ps1"
+            -Exe $<TARGET_FILE:sandbox_null>)
+
 add_test(NAME replay_cleanup
     COMMAND ${CMAKE_COMMAND} -E rm -f "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_cleanup PROPERTIES FIXTURES_CLEANUP replay_file)

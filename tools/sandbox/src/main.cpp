@@ -16,6 +16,8 @@
 #include "game/present.h"
 #include "tga_direct.h"
 #include <windows.h>       // SetProcessDpiAwarenessContext (G28)
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -76,25 +78,46 @@ static bool write_bmp24(const char* path, const uint8_t* rgba8, int w, int h) {
     return ok;
 }
 
+static bool parse_positive_frame_count(const char* text, int* out) {
+    if (!text || !*text || !out) return false;
+    for (const char* p = text; *p; ++p)
+        if (*p < '0' || *p > '9') return false;
+
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long value = std::strtoul(text, &end, 10);
+    if (errno == ERANGE || end == text || *end != '\0' || value == 0 ||
+        value > static_cast<unsigned long>(INT_MAX))
+        return false;
+
+    *out = static_cast<int>(value);
+    return true;
+}
+
 int main(int argc, char** argv) {
+    int max_frames = -1;
+    const char* screenshot_path = nullptr;
+    bool orbit = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--frames") == 0) {
+            if (i + 1 >= argc || !parse_positive_frame_count(argv[i + 1], &max_frames)) {
+                std::printf("sandbox: --frames expects a positive integer\n");
+                return 2;
+            }
+            ++i;
+        }
+        else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc)
+            screenshot_path = argv[++i];
+        else if (std::strcmp(argv[i], "--orbit") == 0)
+            orbit = true;
+    }
+
     // G28: DPI awareness, before any window exists. Without it Windows scales the
     // window bitmap and overlay text + input coordinates are wrong on scaled
     // displays. SYSTEM_AWARE: one scale, physical pixels everywhere. PER_MONITOR_V2
     // (per-monitor rescale) additionally needs WM_DPICHANGED handling in the
     // platform — a documented follow-up, not silently assumed.
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
-
-    int max_frames = -1;
-    const char* screenshot_path = nullptr;
-    bool orbit = false;
-    for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc)
-            max_frames = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc)
-            screenshot_path = argv[++i];
-        else if (std::strcmp(argv[i], "--orbit") == 0)
-            orbit = true;
-    }
 
     PlatformWindowDesc desc;
     desc.title = "MOBA - sandbox (Phase 2 complete; F1 overlay)";
