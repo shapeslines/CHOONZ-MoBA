@@ -53,4 +53,19 @@ expect_policy_failure(
     "${duplicate_fp_db}"
     "must receive exactly one /fp:precise option")
 
-message(STATUS "eng_sim compiler policy self-test: missing marker and conflicting/duplicate options rejected")
+string(REPLACE "/nologo" "/nologo -IC:/forbidden/engine/platform/include"
+    forbidden_include_db "${clean_db}")
+expect_policy_failure(
+    forbidden_include_path
+    "${forbidden_include_db}"
+    "has forbidden include path")
+
+string(REPLACE "/engine/sim/CMakeFiles/eng_sim.dir/"
+    "/tools/sandbox/CMakeFiles/sandbox.dir/" accidental_recompile_db "${clean_db}")
+expect_policy_failure(
+    accidental_source_recompile
+    "${accidental_recompile_db}"
+    "is compiled outside eng_sim")
+
+message(STATUS
+    "eng_sim compiler policy self-test: marker, option, include, and source-owner drift rejected")

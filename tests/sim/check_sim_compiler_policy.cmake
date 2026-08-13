@@ -12,6 +12,18 @@ file(READ "${SOURCE_DIR}/cmake/EngineOptions.cmake" engine_options)
 file(READ "${SOURCE_DIR}/engine/sim/CMakeLists.txt" sim_cmake)
 
 set(policy_errors "")
+set(allowed_include_paths
+    "${SOURCE_DIR}/engine/sim/include"
+    "${SOURCE_DIR}/engine/sim/src"
+    "${SOURCE_DIR}/engine/core/include"
+    "${SOURCE_DIR}/engine/math/include"
+    "${SOURCE_DIR}/engine/serialize/include")
+set(normalized_allowed_include_paths "")
+foreach(include_path IN LISTS allowed_include_paths)
+    file(TO_CMAKE_PATH "${include_path}" include_path)
+    string(TOLOWER "${include_path}" include_path)
+    list(APPEND normalized_allowed_include_paths "${include_path}")
+endforeach()
 foreach(required IN ITEMS
         "add_library(moba_sim_determinism INTERFACE)"
         "add_library(moba::sim_determinism ALIAS moba_sim_determinism)"
@@ -67,6 +79,7 @@ if(compile_count GREATER 0)
 
         math(EXPR sim_entry_count "${sim_entry_count} + 1")
         string(JSON command GET "${compile_db}" ${entry_index} command)
+        string(JSON entry_directory GET "${compile_db}" ${entry_index} directory)
         string(JSON output GET "${compile_db}" ${entry_index} output)
         file(TO_CMAKE_PATH "${output}" output)
 
@@ -76,6 +89,25 @@ if(compile_count GREATER 0)
         if(NOT command MATCHES "(^|[ \\t])-DMOBA_SIM_DETERMINISTIC=1([ \\t]|$)")
             list(APPEND policy_errors "${entry_file} is missing the deterministic policy marker")
         endif()
+
+        string(REGEX MATCHALL "(^|[ \t])[-/]I(\"[^\"]+\"|[^ \t]+)"
+            command_includes "${command}")
+        foreach(command_include IN LISTS command_includes)
+            string(STRIP "${command_include}" include_path)
+            string(REGEX REPLACE "^[-/]I" "" include_path "${include_path}")
+            string(REGEX REPLACE "^\"|\"$" "" include_path "${include_path}")
+            file(TO_CMAKE_PATH "${include_path}" include_path)
+            if(NOT IS_ABSOLUTE "${include_path}")
+                file(TO_CMAKE_PATH "${entry_directory}/${include_path}" include_path)
+            endif()
+            cmake_path(NORMAL_PATH include_path OUTPUT_VARIABLE include_path)
+            string(TOLOWER "${include_path}" include_path)
+            list(FIND normalized_allowed_include_paths "${include_path}" allowed_at)
+            if(allowed_at EQUAL -1)
+                list(APPEND policy_errors
+                    "${entry_file} has forbidden include path: ${include_path}")
+            endif()
+        endforeach()
         string(REGEX MATCHALL "(^|[ \\t])/fp:(precise|strict|fast)([ \\t]|$)" command_fp "${command}")
         list(LENGTH command_fp command_fp_count)
         if(NOT command_fp_count EQUAL 1 OR NOT "${command_fp}" MATCHES "/fp:precise")

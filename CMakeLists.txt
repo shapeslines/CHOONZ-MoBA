@@ -25,6 +25,7 @@ option(MOBA_VULKAN_REQUIRED "Hard-require the Vulkan SDK (find_package REQUIRED)
 # --- Project-wide flag/posture targets (must precede module add_subdirectory) ---
 include(cmake/CompilerWarnings.cmake)   # moba_warnings
 include(cmake/EngineOptions.cmake)      # moba_options
+include(cmake/SimIsolation.cmake)       # moba_enforce_sim_target()
 include(cmake/CompileShaders.cmake)     # add_shader_library()
 
 # --- Vulkan (ADR-0004: link HEADERS only; the loader is hand-loaded) ---

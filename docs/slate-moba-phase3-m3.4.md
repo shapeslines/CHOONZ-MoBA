@@ -73,7 +73,7 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 | S0 | Land and rebaseline | branch starts at merged PR #28 and untouched M3.3 matrix/oracle/boundaries are recorded | complete — exact `11662ae`; 28/28 in Debug, RelWithDebInfo, Release |
 | S1 | Central compiler policy | one CMake-owned deterministic policy applies to every `eng_sim` source in every configuration, with a test that detects drift | complete — `moba_sim_determinism`; all 9 current sources x 3 configs audited |
 | S2 | Binary-path parity | test and runnable game paths consume the same sim library and replay the same commands to the exact M3.3 hash stream | complete — probe + Vulkan/null sandboxes match the pinned stream digest |
-| S3 | Strong isolation lint | source, include, link, compile-command, and accidental-source-recompile checks fail on forbidden sim/platform/render/presentation coupling | queued |
+| S3 | Strong isolation lint | source, include, link, compile-command, and accidental-source-recompile checks fail on forbidden sim/platform/render/presentation coupling | complete - configure contract + generated-build/source scans fail closed |
 | S4 | Second-toolchain stretch | clang-cl config builds the oracle and UBSan runs where supported, with exact capability/evidence recorded | queued |
 | S5 | Close M3.4 | `/WX` matrix, ASan, parity, boundary scans, fresh walk, docs, independent acceptance, and exact-head GitHub gates are green | queued |
 
@@ -124,6 +124,26 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 - The five-test determinism/parity/policy/boundary set passed in all three `/WX` configurations; the
   complete Debug build passed 31/31 CTest entries. No replay bytes, schedule, command, or state hash
   ordering changed.
+
+## S3 evidence
+
+- `moba_enforce_sim_target` executes during CMake configure and permits only `src/*.cpp`
+  implementation files, the sim public/private include roots, the `core + math + serialize` public
+  link seam, and the three private policy targets represented as static-library `LINK_ONLY` entries.
+  Unexpected direct or exported links fail configuration before compilation.
+- `sim_compiler_policy` now audits each actual sim compile command's include paths in addition to
+  marker, floating-point option, configuration, source count, and object owner. Only sim, core,
+  math, and serialize include roots are allowed; every sim implementation source must still compile
+  exactly once per configuration and only into `eng_sim`.
+- `sim_boundary` rejects platform, render, game/presentation, Vulkan, floating-point, wall-clock,
+  unordered-container, and heap imports/usages across all sim headers and sources. Its diagnostics
+  include the offending file and complete include token.
+- Negative fixtures proved rejection of a forbidden implementation source, direct include root,
+  direct link, exported link, source import, policy marker removal, conflicting/duplicate FP option,
+  compile-command include injection, and accidental compilation of sim sources by `sandbox`.
+- The five-test isolation/parity set passed in Debug, RelWithDebInfo, and Release after affected
+  targets built with `/WX`. The complete Debug suite passed 32/32. The canonical oracle and logic
+  hash remain unchanged.
 
 ## Exit gate
 

@@ -26,8 +26,8 @@ RTS-class game engine.
 > M3.3 adds a platform-owned fixed-step accumulator, fresh same-tick commands for every owed tick,
 > and arena-backed previous/current presentation snapshots. `eng_game` is the sole interpolation and
 > fixed→float owner; the renderer still cannot see `SimWorld`.
-> **Active: Phase 3 M3.4 structural sim isolation.** The central compiler policy and
-> test/game-binary parity slices are green; stronger isolation and the second-toolchain proof remain.
+> **Active: Phase 3 M3.4 structural sim isolation.** The central compiler policy,
+> test/game-binary parity, and fail-closed isolation slices are green; the second-toolchain proof remains.
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
@@ -84,7 +84,8 @@ ctest --test-dir build-ci -C Debug --output-on-failure
 CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, entity/component/event/system/
 schedule/sim/presentation suites, `render`,
 `render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
-the generated sim-policy audit, test/game-binary hash-stream parity, the sim/presentation boundary
+the generated sim-policy/include/source-owner audit, test/game-binary hash-stream parity, the
+configure-time sim target contract, adversarial isolation self-tests, the sim/presentation boundary
 scans, and replay CLI fixtures.
 The hosted renderer smoke classifier is also tested adversarially: only exact Vulkan device gates
 may skip; nonzero exits, Vulkan validation warnings/errors, incomplete runs, and missing/invalid

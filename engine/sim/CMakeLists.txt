@@ -19,3 +19,5 @@ target_include_directories(eng_sim
 target_link_libraries(eng_sim
     PUBLIC  eng::core eng::math eng::serialize
     PRIVATE moba_warnings moba_options moba::sim_determinism)
+
+moba_enforce_sim_target(eng_sim "${CMAKE_CURRENT_SOURCE_DIR}")

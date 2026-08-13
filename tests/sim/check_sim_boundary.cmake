@@ -15,8 +15,7 @@ set(BANNED_PATTERNS
     "(^|[^A-Za-z0-9_])(acos|asin|atan|atan2|cos|exp|fmod|log|pow|sin|sqrt|tan)[ \t\r\n]*\\("
     "#[ \t]*include[ \t]*[<\"]chrono[>\"]"
     "(^|[^A-Za-z0-9_])(clock|gettimeofday|QueryPerformanceCounter|platform_time_[A-Za-z0-9_]*)[ \t\r\n]*\\("
-    "#[ \t]*include[ \t]*[<\"]platform/"
-    "#[ \t]*include[ \t]*[<\"]render/"
+    "#[ \t]*include[ \t]*[<\"][^>\"]*(platform|render|game)[/\\][^>\"]*[>\"]"
     "#[ \t]*include[ \t]*[<\"](vulkan|volk)"
     "(^|[^A-Za-z0-9_])(unordered_(map|set)|HashMap)([^A-Za-z0-9_]|$)"
     "#[ \t]*include[ \t]*[<\"]core/hashmap\\.h[>\"]"
@@ -35,7 +34,7 @@ foreach(path IN LISTS SIM_SOURCES)
 endforeach()
 
 file(READ "${SOURCE_DIR}/engine/sim/CMakeLists.txt" sim_cmake)
-if(sim_cmake MATCHES "eng::platform|eng::render|Vulkan::|user32|gdi32|winmm")
+if(sim_cmake MATCHES "eng::platform|eng::render|eng::game|Vulkan::|user32|gdi32|winmm")
     list(APPEND violations "engine/sim/CMakeLists.txt: forbidden link dependency ${CMAKE_MATCH_0}")
 endif()
 foreach(required IN ITEMS "eng::core" "eng::math" "eng::serialize")

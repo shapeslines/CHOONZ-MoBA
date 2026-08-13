@@ -1004,7 +1004,12 @@ heap allocation, renderer→sim coupling, and platform→game/sim coupling. `sim
 10,000 ticks in Debug, RelWithDebInfo, Release, and Debug-ASan. M3.4's named
 `moba_sim_determinism` policy now pins every generated sim compile command to `/fp:precise` from one
 owner. The `sim_binary_parity` gate now compares the direct test probe, Vulkan sandbox, and null
-sandbox through the same canonical command stream. **Deferred within M3.4:** stronger generated-build isolation.
+sandbox through the same canonical command stream. `moba_enforce_sim_target` rejects unexpected
+implementation sources, direct include roots, direct links, or exported link entries during CMake
+configure. The generated compile database then proves that every sim implementation source is
+compiled only by `eng_sim`, sees only the core/math/serialize include roots, and carries the named
+policy. Negative fixtures exercise each failure lane. **Deferred within M3.4:** the clang-cl/UBSan
+capability proof.
 **Later deferrals:** archetypes, multithreaded systems/job system
 (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
 first), rollback machinery, generic query DSL, reflection/serialization codegen, and
