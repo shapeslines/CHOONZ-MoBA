@@ -81,7 +81,11 @@ jobs:
             exit 0
           }
           if ($code -ne 0) {
-            "sandbox FAILED (exit $code):`n$output" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            "sandbox FAILED (exit $code). Sandbox log:" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            "--- sandbox log start ---"
+            Get-Content $log
+            "--- sandbox log end ---"
+            $output | Out-File -Append $env:GITHUB_STEP_SUMMARY
             exit $code
           }
           if (-not (Test-Path "out-${{ matrix.config }}.bmp")) {
