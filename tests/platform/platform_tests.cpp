@@ -68,6 +68,35 @@ TEST(platform, file_write_overwrite_replaces_and_removes_tmp) {
     std::remove(path);
 }
 
+TEST(platform, file_write_refuses_preexisting_tmp) {
+    const char* path = "moba_io_tmp_collision.bin";
+    const char* tmp_path = "moba_io_tmp_collision.bin.tmp";
+    const char* sentinel = "do-not-overwrite";
+    std::remove(path);
+    std::remove(tmp_path);
+
+    FILE* tmp = std::fopen(tmp_path, "wb");
+    CHECK(tmp != nullptr);
+    if (tmp) {
+        CHECK(std::fwrite(sentinel, 1, std::strlen(sentinel), tmp) == std::strlen(sentinel));
+        std::fclose(tmp);
+    }
+
+    CHECK(!platform_file_write(path, "replacement", 11));
+
+    alignas(16) uint8_t mem[256];
+    Arena a; Allocator al = test_arena_alloc(&a, mem, sizeof(mem));
+    PlatformFile f = {};
+    CHECK(platform_file_read(tmp_path, al, &f));
+    CHECK(f.size == std::strlen(sentinel) &&
+          std::memcmp(f.data, sentinel, f.size) == 0);
+    size_t final_size = 0;
+    CHECK(!platform_file_size(path, &final_size));
+
+    std::remove(tmp_path);
+    std::remove(path);
+}
+
 TEST(platform, file_zero_byte_roundtrip) {
     const char* path = "moba_io_empty.bin";
     CHECK(platform_file_write(path, nullptr, 0));

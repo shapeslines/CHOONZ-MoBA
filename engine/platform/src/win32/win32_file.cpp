@@ -75,8 +75,10 @@ bool platform_file_write(const char* path, const void* data, size_t size) {
     wcscpy_s(wtmp, 1024, wpath);
     wcscat_s(wtmp, 1024, L".tmp");
 
+    // The temporary name is predictable. CREATE_NEW is intentional: never overwrite a
+    // stale or attacker-precreated .tmp (which could be a link to another file).
     HANDLE h = CreateFileW(wtmp, GENERIC_WRITE, 0, nullptr,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                           CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         platform_log("platform: create '%s.tmp' failed (%lu)\n", path, (unsigned long)GetLastError());
         return false;
