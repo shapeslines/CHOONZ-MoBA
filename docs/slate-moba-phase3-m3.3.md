@@ -40,6 +40,7 @@ presentation state or timing to feed back into `eng_sim`.
 | fixed-only `RenderSnapshot` extraction | gameplay abilities, AI, fog, pathfinding, or networking |
 | double-buffered previous/current snapshots | renderer reading `SimWorld` or simulation reading presentation |
 | game-owned interpolation and DrawItem construction | assets, audio, UI, packaging, or event-timing changes |
+| **new `game/` target (G37 amendment, 2026-08-12): `moba_game` owns the present glue** — accumulator consumption, interpolation, fixed→float, DrawItem building. Sandbox stays a tool; it links `eng_game` or is superseded by `moba_game` in this milestone | engine modules gaining presentation deps |
 
 ## Invariants
 
@@ -50,6 +51,8 @@ presentation state or timing to feed back into `eng_sim`.
 - Game/present glue is the single fixed→float and interpolation owner; the renderer receives only
   `DrawItem[]` plus `FrameView` and never includes or links against simulation internals.
 - Render rate, minimize/restore, skipped rendering, and interpolation alpha never affect sim hashes.
+- Stale-target and backpressure policy is ADR-0014 as accepted (atomic reject); this slate changes no
+  command-validation behavior.
 
 ## Goal-loop slices
 
