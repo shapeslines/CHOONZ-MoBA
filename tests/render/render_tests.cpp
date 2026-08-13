@@ -6,6 +6,7 @@
 #include "render_batch.h"
 #include "render_debug_draw.h"
 #include "render_handle_table.h"
+#include "shader_path.h"
 #include <cstdint>
 #include <cstring>
 
@@ -24,6 +25,19 @@ static size_t make_blob(uint8_t* out, size_t extra) {
     std::memcpy(out + 16, UUID, 16);
     for (size_t i = 0; i < extra; ++i) out[PIPELINE_CACHE_HEADER_SIZE + i] = (uint8_t)i;
     return PIPELINE_CACHE_HEADER_SIZE + extra;
+}
+
+TEST(render, shader_path_rejects_truncation) {
+    char exact[16]{};
+    CHECK(render_shader_path(exact, sizeof(exact), "1234567890", "abcd"));
+    CHECK(std::strcmp(exact, "1234567890/abcd") == 0);
+
+    char truncated[16]{};
+    CHECK(!render_shader_path(truncated, sizeof(truncated), "1234567890", "abcde"));
+    CHECK(!render_shader_path(nullptr, sizeof(truncated), "dir", "name"));
+    CHECK(!render_shader_path(truncated, 0u, "dir", "name"));
+    CHECK(!render_shader_path(truncated, sizeof(truncated), nullptr, "name"));
+    CHECK(!render_shader_path(truncated, sizeof(truncated), "dir", nullptr));
 }
 
 TEST(render, cache_blob_valid_header_accepted) {

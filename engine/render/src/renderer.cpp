@@ -3,6 +3,7 @@
 #include "render_batch.h"
 #include "render_debug_draw.h"
 #include "render_handle_table.h"
+#include "shader_path.h"
 #include "vk/vk.h"
 #include "platform/platform.h"          // platform_log / platform_fatal / file I/O / arena
 #include "platform/platform_vulkan.h"   // platform_vk_get_loader / platform_vk_create_surface
@@ -461,7 +462,10 @@ static bool end_one_shot(Renderer* r, VkCommandBuffer cb) {
 // lives only inside the caller's TempMemory scope.
 static VkShaderModule load_shader_module(Renderer* r, const char* spv_name) {
     char path[512];
-    snprintf(path, sizeof(path), "%s/%s", MOBA_SHADER_DIR, spv_name);
+    if (!render_shader_path(path, sizeof(path), MOBA_SHADER_DIR, spv_name)) {
+        platform_log("renderer: shader path too long\n");
+        return VK_NULL_HANDLE;
+    }
 
     PlatformFile f;
     if (!platform_file_read(path, arena_allocator(&r->arena), &f)) {

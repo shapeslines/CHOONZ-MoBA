@@ -42,7 +42,8 @@ add_executable(engine_tests
 target_include_directories(engine_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src
-    ${CMAKE_SOURCE_DIR}/engine/render/src)                  # Vulkan-free render internals under test
+    ${CMAKE_SOURCE_DIR}/engine/render/src
+    ${CMAKE_SOURCE_DIR}/engine/platform/src/win32)         # Vulkan-free/internal boundaries under test
 # The aggregate suite links only the Vulkan-free renderer core; the null seam has its
 # own executable below, and neither test binary initializes Vulkan.
 target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common eng::game moba_warnings moba_options)
@@ -210,3 +211,9 @@ add_test(NAME ci_workflow_contract
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/ci_workflow_contract.ps1"
             -Workflow "${CMAKE_SOURCE_DIR}/.github/workflows/ci.yml")
+
+add_test(NAME shader_source_contract
+    COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/shader/check_shader_source_contract.cmake")

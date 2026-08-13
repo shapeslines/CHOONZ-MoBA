@@ -99,6 +99,15 @@ In progress. This section must account for every source diff before ready state.
 - PR #46: retained and repaired. Pool and HandlePool allocation reject missing storage, invalid
   count/head/next state, and invalid generation state without changing slots, counts, generations, or
   free heads. Existing ascending fresh allocation and LIFO reuse remain unchanged.
+- PR #31: retained and strengthened. `CREATE_NEW` enforces create-only predictable temporaries, while
+  a permanent test now proves both an existing destination and attacker-owned `.tmp` remain byte exact.
+- PR #32: retained and repaired. Ambient DLL lookup is removed; the loader lives in a window-independent
+  TU and accepts only System32 or an explicit canonical existing drive-absolute SDK root, with
+  restricted dependency search and transactional path tests.
+- PR #37: retained and repaired. Missing, directory, real-path escape, duplicate, and Windows
+  case-duplicate shader declarations fail during configure; the normal five-shader offline build is green.
+- PR #39: retained and repaired. Bounded runtime shader path composition is factored into a
+  Vulkan-free helper with exact-boundary and truncation tests; the caller returns before file access.
 
 ### S2 — CI recovery and fresh-walk
 
@@ -130,8 +139,29 @@ In progress. This section must account for every source diff before ready state.
 - Focused `/WX` Debug/Release: affected targets build cleanly and the same 3/3 tests pass in each.
 - Affected full dev Debug gate: all targets build and CTest passes 35/35, including the unchanged
   10,000-tick determinism and binary-parity gates.
-- S3 disposition: PASS pending checkpoint publication.
+- Checkpoint `1864012` was pushed; exact-head MSVC Debug/RelWithDebInfo/Release, clang-cl/UBSan,
+  fresh-walk, and CodeQL all passed.
+- S3 disposition: PASS.
+
+### S4 — Platform and shader boundaries
+
+- Platform collision: the existing destination and pre-created `.tmp` sentinel survive byte-exact;
+  normal overwrite and temporary cleanup remain green.
+- Vulkan path matrix: null, relative, drive-relative, UNC, nonexistent, and undersized-output cases
+  reject without changing the output; the installed SDK root canonicalizes successfully. Source scan
+  finds no bare ambient `LoadLibrary` path.
+- Shader declarations: one valid fixture configures; missing file, directory, outside-real-path,
+  duplicate basename, and case-only duplicate basename each fail with the expected diagnostic.
+- Runtime shader path: exact capacity succeeds; one-byte truncation and invalid inputs fail before the
+  renderer's `platform_file_read` call.
+- Focused dev and `/WX` Debug/Release: 4/4 (`platform`, `render`, `render_null`,
+  `shader_source_contract`) in each configuration; normal Debug/Release shader compilation succeeds.
+- Full dev Debug: 36/36 CTests, including unchanged determinism, replay, and binary-parity gates.
+- Real Vulkan evidence: NVIDIA RTX 4070 Ti, Vulkan 1.3, validation on, 90 frames, clean exit,
+  2,764,854-byte 1280x720 screenshot visually inspected.
+- S4 disposition: PASS pending checkpoint publication.
 
 ## NEXT
 
-Reconcile PRs #31/#32/#37/#39 only; preserve asset work, PRs #47-#50, and unfinished S22 separately.
+Reconcile PRs #29/#33/#34/#36/#40 only; preserve replay encoding, asset work, PRs #47-#50, and
+unfinished S22 separately.

@@ -56,8 +56,9 @@ typedef struct PlatformFile { void* data; size_t size; } PlatformFile;
 // policy, and an on-disk file's size must never be able to trigger it.
 bool platform_file_size (const char* path, size_t* out_size);
 bool platform_file_read (const char* path, Allocator alloc, PlatformFile* out);
-// Atomic whole-file write: writes path + ".tmp", flushes, then renames over `path`
-// (readers never observe a torn file). Returns false on any failure (tmp removed).
+// Atomic whole-file write: creates a new path + ".tmp", flushes, then renames over
+// `path` (readers never observe a torn file). A pre-existing .tmp is never overwritten;
+// that collision returns false and leaves both files untouched.
 bool platform_file_write(const char* path, const void* data, size_t size);
 
 // ---- Diagnostics ----

@@ -90,7 +90,14 @@ Goal: reconcile PRs #31/#32/#37/#39.
 Done means: temporary collisions and malformed loader/shader paths fail closed while normal offline
 SPIR-V and Vulkan paths remain green.
 
-Status: pending.
+Status: complete locally. Predictable temporary files use create-only semantics and a collision test
+proves destination and sentinel bytes remain unchanged. Vulkan loader discovery is isolated from the
+window TU, restricted to System32 or a canonical existing drive-absolute `VULKAN_SDK` root, and its
+path helper is transactional. Shader declarations require real in-root files and case-insensitively
+unique output basenames; valid plus missing/directory/outside/duplicate/case-duplicate fixtures pass.
+Runtime shader paths use a tested bounded formatter and return before file access on truncation. Dev
+and `/WX` Debug/Release focused gates pass 4/4; full dev Debug passes 36/36; the real Vulkan sandbox
+completed 90 validation-on frames and wrote a visually inspected 2,764,854-byte screenshot.
 
 ### S5 — CLI and tooling inputs
 
@@ -139,5 +146,5 @@ Status: blocked on future owner gate by design.
 
 ## NEXT
 
-Reconcile PR #31/#32/#37/#39 into the platform/shader boundary slice; keep asset APIs, PRs #47-#50,
-and unfinished S22 outside the branch.
+Reconcile PR #29/#33/#34/#36/#40 into the CLI/tooling slice; keep replay encoding, asset APIs,
+PRs #47-#50, and unfinished S22 outside the branch.
