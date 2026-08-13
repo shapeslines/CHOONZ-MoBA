@@ -23,6 +23,17 @@ inline void str_free(Str* s) {
     if (s->data) mem_free(s->alloc, s->data, s->cap);
     s->data = nullptr; s->len = 0; s->cap = 0;
 }
+static inline bool str_alias_offset(const Str* s, StrView v, uint32_t* out_offset) {
+    if (!s || !s->data || !v.data || !out_offset) return false;
+    const uintptr_t base = reinterpret_cast<uintptr_t>(s->data);
+    if (static_cast<uintptr_t>(s->cap) > UINTPTR_MAX - base) return false;
+    const uintptr_t end = base + static_cast<uintptr_t>(s->cap);
+    const uintptr_t source = reinterpret_cast<uintptr_t>(v.data);
+    if (source < base || source > end || static_cast<uintptr_t>(v.len) > end - source)
+        return false;
+    *out_offset = static_cast<uint32_t>(source - base);
+    return true;
+}
 inline void str_reserve(Str* s, uint32_t n) {
     if (n <= s->cap) return;
     uint64_t nc64 = s->cap ? (uint64_t)s->cap * 2u : 16u;
@@ -35,15 +46,29 @@ inline void str_reserve(Str* s, uint32_t n) {
     s->data = nd; s->cap = nc;
 }
 inline void str_set(Str* s, StrView v) {
+    uint32_t alias_offset = 0u;
+    const bool source_aliases = str_alias_offset(s, v, &alias_offset);
     str_reserve(s, v.len);
-    if (v.len) memcpy(s->data, v.data, v.len);
+    if (source_aliases) {
+        v.data = s->data + alias_offset;
+        if (v.len) memmove(s->data, v.data, v.len);
+    } else if (v.len) {
+        memcpy(s->data, v.data, v.len);
+    }
     s->len = v.len;
 }
 inline void str_append(Str* s, StrView v) {
+    uint32_t alias_offset = 0u;
+    const bool source_aliases = str_alias_offset(s, v, &alias_offset);
     uint64_t need = (uint64_t)s->len + v.len;            // compute in 64-bit: u32 add could wrap and skip growth
     ENSURE_MSG(need <= 0xFFFFFFFFu, "Str length overflow");
     str_reserve(s, (uint32_t)need);
-    if (v.len) memcpy(s->data + s->len, v.data, v.len);
+    if (source_aliases) {
+        v.data = s->data + alias_offset;
+        if (v.len) memmove(s->data + s->len, v.data, v.len);
+    } else if (v.len) {
+        memcpy(s->data + s->len, v.data, v.len);
+    }
     s->len = (uint32_t)need;
 }
 inline StrView str_view(const Str* s) { return strview(s->data, s->len); }
