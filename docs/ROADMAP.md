@@ -634,12 +634,12 @@ fresh full exact-head reviews and GitHub checks subsequently passed before landi
 **Goal:** the path from source files to GPU/CPU memory behind stable handles, built bottom-up: direct
 trivial loaders first, then the offline cooker and the unified baked format, then glTF and hot-reload.
 
-> **Now:** close M4.0 PR #52 from synchronized security-hardened `main`. **Then:** M4.1 → M4.4.
+> **Complete:** M4.0 landed through PR #52. **Now:** M4.1. **Then:** M4.2 → M4.4.
 > **Next phase:** Phase 5 (gameplay needs real meshes/maps). **Later:** hot-reload polish.
 
 ---
 
-### M4.0 — Direct TGA / WAV / SPIR-V loaders + handle registry  · M  🟡 LOCAL ACCEPTANCE COMPLETE 2026-08-13
+### M4.0 — Direct TGA / WAV / SPIR-V loaders + handle registry  · M  ✅ COMPLETE 2026-08-13
 **Goal:** the simplest runtime loaders + the SoA asset registry, replacing M2.2's hardcoded TGA.
 **Deliverables:** direct TGA (uncompressed/RLE) and WAV (header+PCM) parsers; SPIR-V already loaded as
 raw `.spv`; `AssetRegistry` (SoA, handle+generation per ADR-0003, `state` field reserving async later);
@@ -661,7 +661,7 @@ canonical IDs now enforce a portable grammar that rejects Win32 aliases, registr
 rejects every overlapping arena/control range before mutation, and loose loads size/read one
 handle-bound file beneath a handle-bound non-reparse root while rejecting multi-link aliases.
 Junction, hard-link, nonzero-backing, overlap, and exact-adjacency regressions pass in every local
-configuration. Exact-head hosted checks and owner landing remain the closing gates.
+configuration. Exact-head hosted checks, owner landing, and post-merge `main` checks passed.
 **Risks:** determinism rule — sim references assets by **stable id only**, never pointer/load-order.
 **Exercises:** Assets, Renderer (upload seam), Memory (arenas).
 
