@@ -590,7 +590,7 @@ interphase security gate below is the remaining pre-Phase-4 boundary.
 
 ---
 
-### Interphase security consolidation — boundary hardening  · S  🔒 DESCENDANT REPAIR REVALIDATION 2026-08-13
+### Interphase security consolidation — boundary hardening  · S  🔒 FINAL LOCAL ACCEPTANCE COMPLETE 2026-08-13
 **Goal:** reconcile the accepted security drafts into one reviewable head before asset APIs expand the
 runtime boundary.
 **Observed:** PR #51 retains or strengthens every approved hunk from #27 and #29–#46. Core allocation
@@ -611,11 +611,11 @@ shared renderer preflight, and complete fail-closed grammar repairs now pass the
 code checkpoint `f0a56c4`; fresh full security/acceptance reviews remain before ready state.
 Fresh full review of documentation head `7a0d130` then found descendants were still classified and
 recursively removed by path. Every node is now handle-bound with reparse points treated as leaf
-links; the exact child-replacement/outside-sentinel regression is focused-green and the full matrix
-is being rerun.
+links; the exact child-replacement/outside-sentinel regression and focused security rereview pass.
 The first committed-head walk passed configure/build/tests/render and then failed closed on Git's
-read-only pack files. Bound-handle `READONLY` clearing and a permanent read-only/junction fixture are
-now focused-green; the committed-head walk is being repeated.
+read-only pack files. Bound-handle `READONLY` clearing and a permanent read-only/junction fixture now
+pass the complete local matrix at `6ae70c9`; its committed-head walk builds 92 targets, passes
+39/39, renders 90 validation-clean frames, and completes secure cleanup with `FRESH-WALK OK`.
 
 ---
 

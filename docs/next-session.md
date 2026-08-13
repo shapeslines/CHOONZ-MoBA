@@ -1,17 +1,18 @@
 # MOBA-proto — next session
 
-## State @ PR #51 descendant security repair · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ PR #51 final local acceptance · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
 Phase 3 M3.0–M3.4 is complete on `main` at `63f0b1de`. The active interphase security
 consolidation is `codex/security-consolidation` / draft PR #51. Candidate `a89caf6` passed its full
 local and GitHub gates but failed the required security review, so it was not promoted. All three
 findings passed the complete matrix at `f0a56c4`/`7a0d130`, but fresh full security review found one
 remaining descendant cleanup race after root validation. The handle-bound descendant walker and
-exact child-swap/outside-sentinel fixture are focused-green; full final-head revalidation remains.
+exact child-swap/outside-sentinel fixture now pass.
 The first committed-head fresh walk passed through its 90-frame render but cleanup failed closed on
 Git read-only pack files. The walker now clears only `READONLY` through each verified handle before
 disposition; it removed the preserved residue, and the fixture covers both that case and a real
-descendant junction. This compatibility repair still needs a committed-head fresh walk.
+descendant junction. Committed implementation `6ae70c9` now passes the full configuration/sanitizer/determinism matrix
+and a complete fresh walk whose handle-bound cleanup reports `FRESH-WALK OK`.
 Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## Consolidation delivered
@@ -46,8 +47,8 @@ Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## First action
 
-1. Commit/push the read-only compatibility repair and rerun the complete local/fresh-walk matrix.
-2. Obtain fresh security and acceptance verdicts and require that exact head's MSVC matrix,
+1. Publish the final local-acceptance evidence record.
+2. Obtain fresh full security and acceptance verdicts and require that exact head's MSVC matrix,
    clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
    then mark PR #51 ready.
 3. Stop for separate owner merge approval. After an exact-head squash merge, verify the merged tree

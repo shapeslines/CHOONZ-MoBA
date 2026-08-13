@@ -13,17 +13,20 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 **Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and
 prove the hardened boundary without changing simulation behavior, replay encoding, asset APIs, or
 starting Phase 4.
-**Outcome:** a second security repair is under revalidation on draft PR #51. Candidate
+**Outcome:** repaired implementation and local acceptance are complete on draft PR #51 at `6ae70c9`. Candidate
 `a89caf6` passed its full local matrix and GitHub checks, but its required security review found three
 real gaps, so it was not promoted. Focused repairs for cleanup object binding, real-renderer corrupt
 state, and fail-closed CLI grammar passed the complete local matrix. Independent acceptance and
 exact-head GitHub checks then passed, but fresh full security review found descendants still deleted through paths
-after classification. The walker is now handle-bound for every node and its exact child-swap test is
-focused-green; the complete final gate must be rerun.
+after classification. The walker is now handle-bound for every node; the exact child-swap test and
+focused security rereview pass.
 The first committed-head fresh walk then passed configure/build/tests/Vulkan but failed safely during
 cleanup on Git's read-only pack files. The same bound handle now clears only `READONLY` before
 disposition; it successfully removed the preserved partial clone, and the permanent fixture covers a
 read-only file plus a descendant junction with an unchanged outside sentinel.
+The final implementation passes all 39 tests in Debug, RelWithDebInfo, Release, and Debug-ASan;
+clang-cl/UBSan 6/6; direct Debug/Release determinism; and a committed-head
+92-target/39-test/90-frame fresh walk whose secure cleanup reports `FRESH-WALK OK`.
 Merge remains a separate owner action.
 
 ### What changed
@@ -60,7 +63,7 @@ Merge remains a separate owner action.
   configuration. Debug-ASan passes 39/39 and clang-cl 19.1.5 plus UBSan passes 6/6.
 - The first ASan pass exposed a missing app-local runtime beside `visualize.exe` (`0xc0000135`). The
   target now uses the repository's existing staging helper, after which the complete suite passed.
-- A guarded fresh clone of repaired checkpoint `f0a56c4` configured, built 92 targets, passed 39/39, and
+- A guarded fresh clone of final implementation checkpoint `6ae70c9` configured, built 92 targets, passed 39/39, and
   completed `SANDBOX_SMOKE=PASS`. A retained RTX 4070 Ti run completed 90 validation-clean frames;
   its visually inspected 1280×720 screenshot is 2,764,854 bytes.
 - The direct 10,000-tick proof still reports 923 commands, final `0x637628abff59c823`, stream
@@ -72,8 +75,8 @@ Merge remains a separate owner action.
 
 ### Next
 
-Commit the read-only compatibility repair, rerun the complete local/fresh-walk matrix, obtain fresh-context
-security and acceptance verdicts on the final recorded head, require exact-head
+Publish the final evidence record, obtain fresh-context full security and acceptance verdicts on the
+final recorded head, require exact-head
 CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
 the squash merge and supersession closure of #26/#27/#29–#46. Retain their branches/worktrees; open
 M4.0 only from the resulting synchronized green `main`.
