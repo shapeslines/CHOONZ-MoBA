@@ -124,19 +124,38 @@ int main(int argc, char** argv) {
     int max_frames = -1;
     const char* screenshot_path = nullptr;
     bool orbit = false;
+    bool saw_frames = false;
+    bool saw_screenshot = false;
+    bool saw_orbit = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--frames") == 0) {
-            if (i + 1 >= argc || !parse_frame_count(argv[i + 1], &max_frames)) {
+            if (saw_frames || i + 1 >= argc ||
+                !parse_frame_count(argv[i + 1], &max_frames)) {
                 std::fprintf(stderr,
                              "sandbox: --frames expects a canonical positive integer\n");
                 return 2;
             }
+            saw_frames = true;
             ++i;
-        }
-        else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc)
+        } else if (std::strcmp(argv[i], "--screenshot") == 0) {
+            if (saw_screenshot || i + 1 >= argc || argv[i + 1][0] == '\0' ||
+                argv[i + 1][0] == '-') {
+                std::fprintf(stderr, "sandbox: --screenshot expects one output path\n");
+                return 2;
+            }
             screenshot_path = argv[++i];
-        else if (std::strcmp(argv[i], "--orbit") == 0)
+            saw_screenshot = true;
+        } else if (std::strcmp(argv[i], "--orbit") == 0) {
+            if (saw_orbit) {
+                std::fprintf(stderr, "sandbox: duplicate option '--orbit'\n");
+                return 2;
+            }
             orbit = true;
+            saw_orbit = true;
+        } else {
+            std::fprintf(stderr, "sandbox: unknown option '%s'\n", argv[i]);
+            return 2;
+        }
     }
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);

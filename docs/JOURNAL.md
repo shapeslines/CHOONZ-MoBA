@@ -13,9 +13,11 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 **Scope:** consolidate PR #27 and PRs #29–#46 from M3.4 `main`, repair their acceptance gaps, and
 prove the hardened boundary without changing simulation behavior, replay encoding, asset APIs, or
 starting Phase 4.
-**Outcome:** implementation and local acceptance are complete on PR #51. The exact-head independent
-security/acceptance reviews and GitHub checks remain the readiness gate; merge remains a separate
-owner action.
+**Outcome:** implementation is repaired and under final revalidation on draft PR #51. Candidate
+`a89caf6` passed its full local matrix and GitHub checks, but its required security review found three
+real gaps, so it was not promoted. Focused repairs for cleanup object binding, real-renderer corrupt
+state, and fail-closed CLI grammar are green; full final-head acceptance remains the readiness gate.
+Merge remains a separate owner action.
 
 ### What changed
 
@@ -35,6 +37,11 @@ owner action.
 - Debug draw and null-renderer submission capacity checks use ordered subtraction and guarded
   multiplication. Corrupt or over-capacity state is rejected before caller-item reads or count/vertex
   mutation.
+- Fresh-walk final cleanup is object-bound: a non-delete-sharing handle stays open from lease
+  validation through child removal, and the verified root receives its delete disposition through
+  that handle. A post-validation test hook attempts the precise race and proves the move is blocked.
+- Sandbox and replay command grammars now reject missing, duplicate, option-shaped, unknown, and
+  extra arguments before DPI/window/Vulkan or replay file effects.
 
 ### Verification and loop findings
 
@@ -54,7 +61,7 @@ owner action.
 
 ### Next
 
-Obtain fresh-context security and acceptance verdicts on the final recorded head, require exact-head
+Commit the focused repairs, rerun the full local matrix, obtain fresh-context security and acceptance verdicts on the final recorded head, require exact-head
 CI and CodeQL, and mark PR #51 ready only when all are green. The owner may then separately authorize
 the squash merge and supersession closure of #26/#27/#29–#46. Retain their branches/worktrees; open
 M4.0 only from the resulting synchronized green `main`.

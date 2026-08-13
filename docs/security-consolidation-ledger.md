@@ -245,11 +245,23 @@ none is carried solely by source-branch history.
   `tga_direct.cpp`, and `render_batch.cpp`, none of which is changed here.
 - Scope diff: no `engine/sim`, replay codec/container, asset API, or logic-hash file changed. The
   replay CLI parser is the only replay-facing implementation change and retains all on-disk bytes.
-- S7 local disposition: PASS. Independent security/acceptance verdicts and final exact-head GitHub
-  checks remain before ready state.
+- Review correction on candidate `a89caf6`: independent acceptance passed and all eight GitHub checks
+  were green, but the required security review failed. It found (1) a root path-swap interval between
+  cleanup validation and recursive deletion, (2) missing corrupt-count preflight in the real Vulkan
+  renderer, and (3) fail-open sandbox/replay grammar cases. That head remains superseded and draft.
+- Repair checkpoint: both renderer backends now share a preflight that proves `current <= capacity`
+  before subtraction or caller-item access. Sandbox and replay reject missing, duplicate,
+  option-shaped, unknown, or extra grammar before platform/file effects. Fresh-walk keeps a
+  non-delete-sharing handle on the exact leased directory from validation through cleanup and applies
+  final deletion through that handle; a deterministic post-validation hook proves an attempted move
+  is blocked, in addition to the pre-validation junction and same-path replacement cases.
+- Focused repaired evidence: affected renderer, sandbox, replay, and fresh-walk tests pass 9/9; the
+  complete Debug suite passes 39/39. Full exact-head revalidation is still required.
+- S7 disposition: IN PROGRESS. The complete permanent matrix, fresh security/acceptance verdicts, and
+  final exact-head GitHub checks remain before ready state.
 
 ## NEXT
 
-Publish the local-acceptance record, obtain both independent verdicts, require exact-head CI/CodeQL,
-and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
+Publish the focused-green repair checkpoint, run the complete final-head matrix, obtain both
+independent verdicts, require exact-head CI/CodeQL, and make PR #51 ready only when green. Preserve simulation/replay encoding, asset work, #47-#50, and
 unfinished S22 separately; stop before owner merge.

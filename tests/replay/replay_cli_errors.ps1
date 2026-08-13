@@ -43,10 +43,58 @@ function Invoke-ExpectRecordFailure {
     }
 }
 
+function Invoke-ExpectUsageNoSideEffect {
+    param(
+        [string]$Name,
+        [string[]]$Arguments
+    )
+    $caseDir = Join-Path $WorkDir "moba_replay_grammar_$Name"
+    New-Item -ItemType Directory -Path $caseDir | Out-Null
+    try {
+        Push-Location $caseDir
+        try {
+            $savedPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            $output = @(& $Exe @Arguments 2>&1 | ForEach-Object { "$_" })
+            $actual = $LASTEXITCODE
+            $ErrorActionPreference = $savedPreference
+        } finally {
+            Pop-Location
+        }
+        $text = $output -join "`n"
+        $children = @(Get-ChildItem -LiteralPath $caseDir -Force)
+        if ($actual -ne 1 -or $children.Count -ne 0 -or
+            $text -match '(?i)cannot stat|cannot read|recorded ticks|atomically write') {
+            throw "Malformed replay grammar reached I/O: $Name exit=$actual children=$($children.Count) output=$text"
+        }
+    } finally {
+        Remove-Item -LiteralPath $caseDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $created = [Collections.Generic.List[string]]::new()
 try {
     Invoke-ExpectExit 1 @('verify', (Join-Path $WorkDir 'does-not-exist.mbr'))
     Invoke-ExpectExit 1 @('record', '--ticks', '1')
+
+    $grammarOut1 = 'grammar-out-1.mbr'
+    $grammarOut2 = 'grammar-out-2.mbr'
+    Invoke-ExpectUsageNoSideEffect 'out-missing' @('record', '--out')
+    Invoke-ExpectUsageNoSideEffect 'out-empty' @('record', '--out', '')
+    Invoke-ExpectUsageNoSideEffect 'out-option-shaped' @('record', '--out', '--ticks')
+    Invoke-ExpectUsageNoSideEffect 'out-duplicate' @('record', '--out', $grammarOut1,
+                                                     '--out', $grammarOut2)
+    Invoke-ExpectUsageNoSideEffect 'unknown-option' @('record', '--out', $grammarOut1,
+                                                      '--unknown')
+    Invoke-ExpectUsageNoSideEffect 'extra-positional' @('record', '--out', $grammarOut1,
+                                                       'unexpected')
+    Invoke-ExpectUsageNoSideEffect 'ticks-missing' @('record', '--out', $grammarOut1, '--ticks')
+    Invoke-ExpectUsageNoSideEffect 'ticks-option-shaped' @('record', '--out', $grammarOut1,
+                                                           '--ticks', '--seed')
+    Invoke-ExpectUsageNoSideEffect 'inspect-option-shaped' @('inspect', '--help')
+    Invoke-ExpectUsageNoSideEffect 'verify-option-shaped' @('verify', '--help')
+    Invoke-ExpectUsageNoSideEffect 'inspect-extra' @('inspect', $Replay, 'unexpected')
+    Invoke-ExpectUsageNoSideEffect 'help-extra' @('--help', 'unexpected')
 
     $numericValues = @(
         '+1', '-1', ' 1', '1 ', '1x', '01', '00', '18446744073709551616'

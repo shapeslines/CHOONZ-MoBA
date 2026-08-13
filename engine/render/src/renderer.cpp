@@ -3,6 +3,7 @@
 #include "render_batch.h"
 #include "render_debug_draw.h"
 #include "render_handle_table.h"
+#include "render_submission_guard.h"
 #include "shader_path.h"
 #include "vk/vk.h"
 #include "platform/platform.h"          // platform_log / platform_fatal / file I/O / arena
@@ -1699,7 +1700,8 @@ bool renderer_begin_frame(Renderer* r, const FrameView* view,
 }
 
 bool renderer_submit(Renderer* r, const DrawItem* items, uint32_t count) {
-    if (!r || !r->frame_begun || (!items && count > 0) || count > MAX_DRAW_ITEMS - r->draw_count)
+    if (!r || !r->frame_begun ||
+        !render_submission_preflight(items, count, r->draw_count, MAX_DRAW_ITEMS))
         return false;
     if (count > 0) memcpy(r->draw_items + r->draw_count, items, sizeof(DrawItem) * count);
     r->draw_count += count;

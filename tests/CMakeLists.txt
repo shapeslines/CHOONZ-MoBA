@@ -219,6 +219,7 @@ add_test(NAME fresh_walk_path_guard
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/fresh_walk_path_guard.ps1"
             -Script "${CMAKE_SOURCE_DIR}/tools/fresh-walk.ps1"
+            -GuardScript "${CMAKE_SOURCE_DIR}/tools/fresh-walk-guard.ps1"
             -OutsideDir "${CMAKE_SOURCE_DIR}")
 
 add_test(NAME ci_workflow_contract

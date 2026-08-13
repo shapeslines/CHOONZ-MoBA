@@ -1,6 +1,7 @@
 #include "render/renderer.h"
 #include "render_handle_table.h"
 #include "renderer_null_test.h"
+#include "render_submission_guard.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -84,8 +85,8 @@ bool renderer_begin_frame(Renderer* r, const FrameView* view, int width, int hei
 }
 
 bool renderer_submit(Renderer* r, const DrawItem* items, uint32_t count) {
-    if (!r || !r->frame_begun || (!items && count) ||
-        r->draw_count > NULL_MAX_DRAWS || count > NULL_MAX_DRAWS - r->draw_count)
+    if (!r || !r->frame_begun ||
+        !render_submission_preflight(items, count, r->draw_count, NULL_MAX_DRAWS))
         return false;
     for (uint32_t i = 0; i < count; ++i) {
         if (!render_handle_valid(&r->meshes, items[i].mesh.h) ||

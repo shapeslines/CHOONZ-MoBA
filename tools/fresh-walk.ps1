@@ -14,7 +14,7 @@
 # parser (the repo's .bat lesson, same family).
 
 param(
-    [string]$CloneDir = (Join-Path $env:TEMP "moba-fresh-walk"),
+    [string]$CloneDir = (Join-Path $env:TEMP "moba-fresh-walk-$PID-$([Guid]::NewGuid().ToString('N'))"),
     [switch]$Keep
 )
 
@@ -26,50 +26,17 @@ function Fail([string]$msg) {
 }
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'fresh-walk-guard.ps1')
 
-# Cleanup below is destructive. Permit only one direct child of the real system
-# temporary directory, and reject files and reparse points before Remove-Item.
+# A fresh walk owns only a unique, initially nonexistent direct temp child. The
+# lease records its stable file identity and an invocation marker after clone.
 try {
-    $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-    $clonePath = [System.IO.Path]::GetFullPath($CloneDir)
-    $repoPath = [System.IO.Path]::GetFullPath($repoRoot)
+    $cloneLease = New-FreshWalkLease $CloneDir $repoRoot
 } catch {
-    Fail "CloneDir could not be normalized: $CloneDir"
+    Fail $_.Exception.Message
 }
 
-$tempRootForCompare = $tempRoot.TrimEnd(
-    [System.IO.Path]::DirectorySeparatorChar,
-    [System.IO.Path]::AltDirectorySeparatorChar)
-$clonePathForCompare = $clonePath.TrimEnd(
-    [System.IO.Path]::DirectorySeparatorChar,
-    [System.IO.Path]::AltDirectorySeparatorChar)
-$cloneParentInfo = [System.IO.Directory]::GetParent($clonePathForCompare)
-$cloneParent = if ($null -eq $cloneParentInfo) { '' } else { $cloneParentInfo.FullName.TrimEnd(
-    [System.IO.Path]::DirectorySeparatorChar,
-    [System.IO.Path]::AltDirectorySeparatorChar) }
-
-if ($clonePathForCompare.Equals($tempRootForCompare, [System.StringComparison]::OrdinalIgnoreCase) -or
-    -not $cloneParent.Equals($tempRootForCompare, [System.StringComparison]::OrdinalIgnoreCase)) {
-    Fail "CloneDir must be a non-root direct child of the system temp directory: $clonePath"
-}
-if ($clonePathForCompare.Equals($repoPath.TrimEnd(
-        [System.IO.Path]::DirectorySeparatorChar,
-        [System.IO.Path]::AltDirectorySeparatorChar),
-        [System.StringComparison]::OrdinalIgnoreCase)) {
-    Fail "CloneDir must not be the source repository: $clonePath"
-}
-
-if (Test-Path -LiteralPath $clonePath) {
-    $cloneItem = Get-Item -Force -LiteralPath $clonePath
-    if (-not $cloneItem.PSIsContainer) {
-        Fail "CloneDir exists but is not a directory: $clonePath"
-    }
-    if (($cloneItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-        Fail "CloneDir must not be a reparse point: $clonePath"
-    }
-}
-
-$CloneDir = $clonePath
+$CloneDir = $cloneLease.ClonePath
 
 # 0. Locate the VS install + vcvars, like .github/workflows/ci.yml does (Node-free).
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
@@ -88,9 +55,13 @@ function In-VsEnv([string]$dir, [string]$cmd) {
 }
 
 # 1. Clone fresh (no local state, byte-clean like the FIXES.md sweep).
-if (Test-Path -LiteralPath $CloneDir) { Remove-Item -LiteralPath $CloneDir -Recurse -Force }
 git clone --quiet "file://$repoRoot" $CloneDir
 if ($LASTEXITCODE -ne 0) { Fail "git clone of $repoRoot" }
+try {
+    Initialize-FreshWalkLease $cloneLease
+} catch {
+    Fail "could not initialize cleanup lease: $($_.Exception.Message)"
+}
 
 # 2. Configure with the dev preset (the README path).
 In-VsEnv $CloneDir "cmake --preset dev"
@@ -130,7 +101,13 @@ if ($classifierCode -ne 0) {
 }
 
 # 6. Hygiene: leave the temp clone only if asked.
-if (-not $Keep) { Remove-Item -LiteralPath $CloneDir -Recurse -Force }
+if (-not $Keep) {
+    try {
+        Remove-FreshWalkLease $cloneLease
+    } catch {
+        Fail "refused cleanup: $($_.Exception.Message)"
+    }
+}
 
 Write-Output "FRESH-WALK OK - the stranger's path works end to end."
 exit 0

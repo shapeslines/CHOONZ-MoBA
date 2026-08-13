@@ -6,6 +6,7 @@
 #include "render_batch.h"
 #include "render_debug_draw.h"
 #include "render_handle_table.h"
+#include "render_submission_guard.h"
 #include "shader_path.h"
 #include <cstdint>
 #include <cstring>
@@ -271,4 +272,16 @@ TEST(render, debug_draw_capacity_arithmetic_is_transactional) {
     CHECK(!render_debug_sphere(&list, zero, 1.0f, 0u, UINT32_MAX / 6u + 1u));
     CHECK(list.count == 0u);
     CHECK(vertices[0].color_rgba8 == overflow_canary);
+}
+
+TEST(render, submission_preflight_rejects_corrupt_state_before_item_access) {
+    const void* unreadable = reinterpret_cast<const void*>(static_cast<uintptr_t>(1u));
+
+    CHECK(render_submission_preflight(nullptr, 0u, 0u, 4u));
+    CHECK(!render_submission_preflight(nullptr, 1u, 0u, 4u));
+    CHECK(render_submission_preflight(unreadable, 1u, 3u, 4u));
+    CHECK(!render_submission_preflight(unreadable, 1u, 4u, 4u));
+    CHECK(!render_submission_preflight(unreadable, 1u, 5u, 4u));
+    CHECK(!render_submission_preflight(unreadable, UINT32_MAX, 0u, 4u));
+    CHECK(!render_submission_preflight(unreadable, 1u, UINT32_MAX, 4u));
 }

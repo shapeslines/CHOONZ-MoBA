@@ -1,11 +1,12 @@
 # MOBA-proto — next session
 
-## State @ PR #51 local-acceptance candidate · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ PR #51 security-repair revalidation · 2026-08-13 · DESKTOP-BK4F0OA/Codex
 
 Phase 3 M3.0–M3.4 is complete on `main` at `63f0b1de`. The active interphase security
-consolidation is `codex/security-consolidation` / PR #51. Its implementation and full local gate are
-green; fresh-context review and exact-head GitHub checks are the remaining readiness work. Merge is
-still a separate owner decision. Do not begin M4.0 from this branch.
+consolidation is `codex/security-consolidation` / draft PR #51. Candidate `a89caf6` passed its full
+local and GitHub gates but failed the required security review, so it was not promoted. All three
+findings now have focused-green repairs; the complete matrix and fresh reviews must be rerun on the
+new exact head. Merge is still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## Consolidation delivered
 
@@ -39,8 +40,9 @@ still a separate owner decision. Do not begin M4.0 from this branch.
 
 ## First action
 
-1. Finish the two read-only final reviews on the recorded PR #51 head and fix any real finding.
-2. Require that exact head's MSVC matrix, clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
+1. Commit and push the focused-green security repairs, then rerun the full local permanent matrix.
+2. Obtain fresh security and acceptance verdicts and require that exact head's MSVC matrix,
+   clang-cl/UBSan, fresh-walk, and both CodeQL checks pass;
    then mark PR #51 ready.
 3. Stop for separate owner merge approval. After an exact-head squash merge, verify the merged tree
    and `main` run (manual dispatch only if automatic push registration fails), then close

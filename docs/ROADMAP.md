@@ -590,7 +590,7 @@ interphase security gate below is the remaining pre-Phase-4 boundary.
 
 ---
 
-### Interphase security consolidation — boundary hardening  · S  🔒 LOCAL ACCEPTANCE COMPLETE 2026-08-13
+### Interphase security consolidation — boundary hardening  · S  🔒 FINAL REVALIDATION IN PROGRESS 2026-08-13
 **Goal:** reconcile the accepted security drafts into one reviewable head before asset APIs expand the
 runtime boundary.
 **Observed:** PR #51 retains or strengthens every approved hunk from #27 and #29–#46. Core allocation
@@ -605,6 +605,10 @@ frames. Replay v1, command encoding, `SIM_LOGIC_HASH = 0xab96814425ba80a4`, fina
 **Gate:** fresh-context security/acceptance verdicts and exact-head CI/CodeQL must pass before PR #51
 becomes ready. Merge and stale-draft retirement remain separately owner-approved. No M4.0 asset work
 is part of this consolidation.
+**Review correction:** candidate `a89caf6` was kept draft after security review found a cleanup
+path-swap interval, a real-renderer corrupt-count gap, and fail-open CLI grammar. Object-bound cleanup,
+shared renderer preflight, and complete fail-closed grammar repairs are focused-green; the full final
+matrix and both reviews are being rerun on a new exact head.
 
 ---
 
