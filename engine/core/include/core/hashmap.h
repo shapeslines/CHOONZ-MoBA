@@ -84,7 +84,10 @@ template<class K, class V> inline void hashmap__rehash(HashMap<K,V>* m, uint32_t
 }
 template<class K, class V> inline void hashmap_set(HashMap<K,V>* m, K key, V val) {
     if (m->cap == 0) hashmap__rehash(m, 16);
-    else if (((size_t)m->count + 1) * 8 >= (size_t)m->cap * 7) hashmap__rehash(m, m->cap * 2);   // grow at 7/8
+    else if (((size_t)m->count + 1) * 8 >= (size_t)m->cap * 7) {
+        ENSURE_MSG(m->cap <= UINT32_MAX / 2u, "HashMap capacity overflow");
+        hashmap__rehash(m, m->cap * 2);   // grow at 7/8
+    }
     hashmap__place(m, key, val, hashmap_hash(key));
 }
 template<class K, class V> inline V* hashmap_get(HashMap<K,V>* m, K key) {
