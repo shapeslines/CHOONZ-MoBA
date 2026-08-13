@@ -39,9 +39,11 @@ template<class T> inline void pool_free_all(Pool<T>* p) {
     p->slots = nullptr; p->cap = 0; p->count = 0; p->free_head = POOL_INVALID;
 }
 template<class T> inline uint32_t pool_alloc(Pool<T>* p) {       // -> index or POOL_INVALID
-    if (p->free_head == POOL_INVALID) return POOL_INVALID;
+    if (!p || !p->slots || p->cap == 0 || p->count >= p->cap ||
+        p->free_head == POOL_INVALID || p->free_head >= p->cap) return POOL_INVALID;
     uint32_t idx = p->free_head;
     uint32_t nxt; memcpy(&nxt, &p->slots[idx], 4);
+    if (nxt != POOL_INVALID && nxt >= p->cap) return POOL_INVALID;
     p->free_head = nxt; ++p->count;
     return idx;
 }
@@ -83,9 +85,11 @@ template<class T> inline void handlepool_free_all(HandlePool<T>* hp) {
     hp->slots = nullptr; hp->gen = nullptr; hp->cap = 0; hp->count = 0; hp->free_head = POOL_INVALID;
 }
 template<class T> inline Handle handlepool_alloc(HandlePool<T>* hp, T value) {
-    if (hp->free_head == POOL_INVALID) return HANDLE_NULL;        // full
+    if (!hp || !hp->slots || !hp->gen || hp->cap == 0 || hp->count >= hp->cap ||
+        hp->free_head == POOL_INVALID || hp->free_head >= hp->cap) return HANDLE_NULL; // full or corrupt
     uint32_t idx = hp->free_head;
     uint32_t nxt; memcpy(&nxt, &hp->slots[idx], 4);
+    if (nxt != POOL_INVALID && nxt >= hp->cap) return HANDLE_NULL;
     hp->free_head = nxt;
     if (hp->gen[idx] == 0u) hp->gen[idx] = 1u;                    // first use of a never-allocated slot (gen 0 -> 1)
     hp->slots[idx] = value; ++hp->count;
