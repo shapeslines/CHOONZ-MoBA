@@ -65,12 +65,14 @@ jobs:
           ctest --test-dir build-ci -C ${{ matrix.config }} --output-on-failure --no-tests=error --output-junit "%CD%\ctest-${{ matrix.config }}.xml"
 
       # The runnable DoD, in the cloud: 90 frames with validation on, screenshot
-      # written. If the runner has no Vulkan 1.3 device, the renderer's own gate
-      # rejects it — we skip cleanly (compile path was already proven). Any other
-      # nonzero exit is a real failure. A validation-layer ERROR aborts the sandbox,
-      # so "validation-clean" is enforced by the exit code, not observed by hand.
-      # cmd redirection + unconditional echo: pwsh's *> native redirect interacts
-      # badly with its ErrorActionPreference and silently swallowed the failure log.
+      # written. GitHub runners have no Vulkan driver (vkCreateInstance fails) or a
+      # below-spec device; in both cases the render path is compiled but cannot run
+      # here, so we skip cleanly. On real hardware either failure would be genuine —
+      # that's the owner-run protocol in docs/testing-hardware.md. A validation-layer
+      # ERROR aborts the sandbox, so "validation-clean" is enforced by the exit code,
+      # not observed by hand. cmd redirection + unconditional echo: pwsh's *> native
+      # redirect interacts badly with its ErrorActionPreference and silently
+      # swallowed the failure log.
       - name: Sandbox validation run (${{ matrix.config }})
         shell: pwsh
         run: |
@@ -80,8 +82,9 @@ jobs:
           $code = $LASTEXITCODE
           Write-Output "sandbox exited $code"
           if (Test-Path $log) { Get-Content $log }
-          if ($code -ne 0 -and (Get-Content $log -Raw -ErrorAction SilentlyContinue) -match 'no device meets the minimum spec') {
-            "SKIP: no Vulkan 1.3 device on this runner — real renderer compiled but not executed." | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          $output = Get-Content $log -Raw -ErrorAction SilentlyContinue
+          if ($output -match 'no device meets the minimum spec' -or $output -match 'vkCreateInstance failed') {
+            "SKIP: no Vulkan driver/1.3 device on this runner — real renderer compiled but not executed." | Out-File -Append $env:GITHUB_STEP_SUMMARY
             exit 0
           }
           if ($code -ne 0) {
