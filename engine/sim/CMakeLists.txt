@@ -17,7 +17,4 @@ target_include_directories(eng_sim
 
 target_link_libraries(eng_sim
     PUBLIC  eng::core eng::math eng::serialize
-    PRIVATE moba_warnings moba_options)
-
-target_compile_options(eng_sim PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/fp:precise>)
+    PRIVATE moba_warnings moba_options moba::sim_determinism)

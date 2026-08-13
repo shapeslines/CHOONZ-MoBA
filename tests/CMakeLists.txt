@@ -101,6 +101,19 @@ add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_boundary.cmake")
 
+add_test(NAME sim_compiler_policy
+    COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCOMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_compiler_policy.cmake")
+
+add_test(NAME sim_compiler_policy_selftest
+    COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCOMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_compiler_policy_selftest.cmake")
+
 add_test(NAME present_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/present/check_present_boundary.cmake")

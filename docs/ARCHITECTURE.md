@@ -164,8 +164,10 @@ The rules, binding on every subsystem:
 that bans the `float` type. Instead: (1) `eng_sim` is its own library with a CTest source scan that
 rejects float/double, libm, wall-clock, platform/render/Vulkan imports, and unordered containers;
 (2) the same test checks that the direct link seam remains core + math + serialize; (3) the per-tick
-record/replay hash self-check is the behavioral backstop; and (4) `eng_sim` is pinned to
-`/fp:precise` in its target definition.
+record/replay hash self-check is the behavioral backstop; and (4) `eng_sim` privately links the named
+`moba_sim_determinism` policy from `cmake/EngineOptions.cmake`. That policy owns `/fp:precise` and a
+compile marker; `sim_compiler_policy` checks every generated Debug, RelWithDebInfo, and Release
+compile command so a missing, duplicate, contradictory, or executable-local option cannot drift.
 
 ### 2.2 Memory & ownership model
 
@@ -353,6 +355,12 @@ target_link_options   (moba_options INTERFACE $<$<CONFIG:Release>:/LTCG>)
 add_library(moba_asan INTERFACE)
 target_compile_options(moba_asan INTERFACE $<$<CONFIG:Debug>:/fsanitize=address>)
 ```
+
+The same include defines one narrower policy target, `moba_sim_determinism`, which is linked only by
+the library that compiles authoritative simulation sources. It owns the deterministic floating-point
+posture and `MOBA_SIM_DETERMINISTIC=1` marker. Executables consume `eng_sim`; they never repeat this
+policy or compile sim implementation sources. `sim_compiler_policy` audits all three generated MSVC
+configurations from `compile_commands.json` and fails if ownership or flags drift.
 
 | Config | Opt | Debug info | Asserts | Sanitizer | Use |
 |---|---|---|---|---|---|
@@ -991,9 +999,10 @@ the arena offset unchanged.
 The Phase 3 boundary is executable: `sim_boundary` scans all `engine/sim` headers/sources and validates
 the direct CMake link seam, while `present_boundary` rejects presentation-owned cadence, mutation,
 heap allocation, renderer→sim coupling, and platform→game/sim coupling. `sim_determinism` replays
-10,000 ticks in Debug, RelWithDebInfo, Release, and Debug-ASan. The sim lib is pinned to
-`/fp:precise`. **Deferred:** centralized compile-policy ownership and game/test binary parity (M3.4),
-archetypes, multithreaded systems/job system
+10,000 ticks in Debug, RelWithDebInfo, Release, and Debug-ASan. M3.4's named
+`moba_sim_determinism` policy now pins every generated sim compile command to `/fp:precise` from one
+owner. **Deferred within M3.4:** game/test binary parity and stronger generated-build isolation.
+**Later deferrals:** archetypes, multithreaded systems/job system
 (sim stays single-threaded — fast enough at 30 Hz for hundreds of units; parallelize presentation
 first), rollback machinery, generic query DSL, reflection/serialization codegen, and
 scene-graph/parent-child entities.

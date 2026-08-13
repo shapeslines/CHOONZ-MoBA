@@ -4,6 +4,18 @@
 
 add_library(moba_options INTERFACE)
 
+# The deterministic island has one additional, deliberately narrower policy owner.
+# Only targets that compile authoritative simulation implementation sources may link
+# this target. The marker lets generated-build checks prove the policy arrived via
+# this named seam instead of an executable adding an equivalent option ad hoc.
+add_library(moba_sim_determinism INTERFACE)
+add_library(moba::sim_determinism ALIAS moba_sim_determinism)
+target_compile_definitions(moba_sim_determinism INTERFACE
+    MOBA_SIM_DETERMINISTIC=1)
+if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    target_compile_options(moba_sim_determinism INTERFACE /fp:precise)
+endif()
+
 # No RTTI, no exceptions (ADR-0009). _HAS_EXCEPTIONS=0 stops the STL dragging in
 # exception machinery under /EHs-c-.
 target_compile_options(moba_options INTERFACE

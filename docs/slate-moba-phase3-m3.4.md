@@ -71,7 +71,7 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
 | ID | Slice | Observable done-condition | Status |
 |----|-------|---------------------------|--------|
 | S0 | Land and rebaseline | branch starts at merged PR #28 and untouched M3.3 matrix/oracle/boundaries are recorded | complete — exact `11662ae`; 28/28 in Debug, RelWithDebInfo, Release |
-| S1 | Central compiler policy | one CMake-owned deterministic policy applies to every `eng_sim` source in every configuration, with a test that detects drift | queued |
+| S1 | Central compiler policy | one CMake-owned deterministic policy applies to every `eng_sim` source in every configuration, with a test that detects drift | complete — `moba_sim_determinism`; 8 sources x 3 configs audited |
 | S2 | Binary-path parity | test and runnable game paths consume the same sim library and replay the same commands to the exact M3.3 hash stream | queued |
 | S3 | Strong isolation lint | source, include, link, compile-command, and accidental-source-recompile checks fail on forbidden sim/platform/render/presentation coupling | queued |
 | S4 | Second-toolchain stretch | clang-cl config builds the oracle and UBSan runs where supported, with exact capability/evidence recorded | queued |
@@ -93,6 +93,21 @@ full local and exact-head GitHub gates pass. Merge remains separately owner-appr
   include or link dependency. The focused scripts reported 17 sim files and 2 game files clean.
 - The phase manifest at `docs/arc-m3.4-manifest.json` passed the ARC compiler self-test (1,169
   checks), schema validation, and deterministic render check before implementation began.
+
+## S1 evidence
+
+- `cmake/EngineOptions.cmake` is the sole owner of the named `moba_sim_determinism` policy. It emits
+  `MOBA_SIM_DETERMINISTIC=1` and pins MSVC/clang-cl-compatible builds to `/fp:precise`; `eng_sim`
+  consumes that policy privately and no longer owns a target-local floating-point option.
+- `sim_compiler_policy` reads the generated `compile_commands.json` and proved all 8 authoritative
+  sim sources have exactly one compile entry in each of Debug, RelWithDebInfo, and Release, all under
+  `eng_sim`, all carrying the marker and exactly one `/fp:precise` option.
+- `sim_compiler_policy_selftest` proved the check fails closed for a missing policy marker, a
+  contradictory `/fp:fast`, and duplicate `/fp:precise` plus `/fp:fast` options.
+- Focused `/WX` builds and the four-test determinism/policy/boundary set passed in Debug,
+  RelWithDebInfo, and Release. The complete Debug build then passed 30/30 CTest entries.
+- The 10,000-tick oracle remains `0x637628abff59c823`; `SIM_LOGIC_HASH` remains
+  `0xab96814425ba80a4`. No authoritative simulation source or replay layout changed.
 
 ## Exit gate
 
