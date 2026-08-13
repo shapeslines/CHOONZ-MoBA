@@ -18,7 +18,9 @@ related:
 
 # Slate - Phase 3 M3.3 fixed tick and presentation boundary
 
-**Status:** queued behind the owner-approved merge of PR #17. Do not stack on the M3.2 branch.
+**Status:** complete 2026-08-12 (gap-close Wave 6). All slices S0-S6 landed; the oracle
+`0x637628abff59c823` and all prior goldens are untouched. See JOURNAL Session 10 for
+the observed record. M3.4 is the next slate.
 
 ## Goal
 

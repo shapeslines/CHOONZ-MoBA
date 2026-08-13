@@ -12,6 +12,8 @@
 #include "platform/platform.h"
 #include "render/renderer.h"
 #include "math/math.h"
+#include "sim/sim.h"
+#include "game/present.h"
 #include "tga_direct.h"
 #include <windows.h>       // SetProcessDpiAwarenessContext (G28)
 #include <cstdio>
@@ -162,6 +164,41 @@ int main(int argc, char** argv) {
     const uint64_t freq = platform_time_frequency();
     uint64_t prev  = platform_time_ticks();
     uint64_t start = prev;
+
+    // M3.3: one deterministic SimWorld drives presentation through the present glue.
+    // Units orbit the origin on deterministic per-tick SET_VELOCITY commands (pure
+    // integer math — fix_sin tables — so the runtime stream is reproducible).
+    Arena world_arena;
+    SimWorld world{};
+    PresentState present{};
+    if (!platform_arena_reserve(&world_arena, sim_world_memory_required(sim_world_config_default())) ||
+        !sim_init(&world, &world_arena, 0x4D4F4241u, sim_world_config_default())) {
+        std::printf("sandbox: sim world init failed\n");
+        return 1;
+    }
+    present_init(&present);
+
+    // M3.3: deterministic per-tick orbit commands (pure integer math — fix_sin/cos
+    // tables; no RNG, no floats). Each unit circles the origin at its own phase.
+    // Commands are generated once per FRAME from the tick about to run; multi-tick
+    // frames reuse the same buffer (still deterministic — the stream is whatever it
+    // is, and the hash oracle in tests is independent of this demo content).
+    auto orbit_commands = [](const SimWorld* world, SimCommand* out, uint32_t* out_count) {
+        uint32_t n = 0;
+        const int32_t step = (int32_t)((world->tick * 4u) % 360u);
+        const mm::fix deg_to_rad = mm::fix_div(FIX_TWO_PI, mm::fix_from_int(360));
+        for (uint32_t slot = 0; slot < SIM_MAX_UNITS; ++slot) {
+            const mm::fix deg = mm::fix_from_int((int32_t)((slot * 13u + step) % 360u));
+            const mm::fix rad = mm::fix_mul(deg, deg_to_rad);
+            out[n].kind = SIM_COMMAND_SET_VELOCITY;
+            out[n].unit_index = (uint16_t)slot;
+            out[n].value_x = mm::fix_mul(mm::fix_sin(rad), mm::fix_from_int(30));
+            out[n].value_y = mm::fix_mul(mm::fix_cos(rad), mm::fix_from_int(30));
+            ++n;
+        }
+        *out_count = n;
+    };
+
     PlatformFrameInput in;
     long frame = 0;
     double since_print = 0.0;
@@ -172,17 +209,6 @@ int main(int argc, char** argv) {
     int32_t last_height = desc.height;
     bool last_focused = true;
     bool last_minimized = false;
-
-    DrawItem cubes[500]{};
-    for (uint32_t z = 0, i = 0; z < 25; ++z) {
-        for (uint32_t x = 0; x < 20; ++x, ++i) {
-            const float px = ((float)x - 9.5f) * 1.2f;
-            const float pz = ((float)z - 12.0f) * 1.2f;
-            cubes[i].model = mm::mat4_trs(mm::vec3_make(px, 0.5f, pz), mm::quat_identity(), mm::vec3_splat(0.8f));
-            cubes[i].mesh = mesh;
-            cubes[i].material = material;
-        }
-    }
 
     // M2.3 orbit camera: yaw/pitch/distance around the world origin. Arrows rotate,
     // wheel zooms; --orbit auto-rotates for scripted screenshot verification.
@@ -198,6 +224,22 @@ int main(int argc, char** argv) {
         double dt = (double)(now - prev) / (double)freq;
         prev = now;
         ++frame;
+
+        // M3.3: the sim runs at a fixed 30 Hz regardless of render rate; the present
+        // glue owns the accumulator and the interpolation. Runs even when the
+        // renderer is skipped (minimized / null backend) — the policy is "sim keeps
+        // ticking".
+        SimCommand commands[SIM_MAX_COMMANDS_PER_TICK]{};
+        uint32_t command_count = 0;
+        orbit_commands(&world, commands, &command_count);
+        SimCommandBuffer command_buffer{commands, command_count};
+        uint32_t ticks = present_advance(&present, dt, &world, &command_buffer);
+        DrawItem unit_items[SIM_MAX_UNITS]{};
+        uint32_t unit_count = 0;
+        if (rnd)
+            unit_count = present_build_draw_items(&present, mesh, material, nullptr,
+                                                  unit_items, SIM_MAX_UNITS);
+        (void)ticks;
 
         if (in.fb_width != last_width || in.fb_height != last_height) {
             std::printf("sandbox: event resize %dx%d -> %dx%d\n",
@@ -216,9 +258,10 @@ int main(int argc, char** argv) {
 
         since_print += dt;
         if (since_print >= 0.25) {   // ~4 status lines/sec
-            std::printf("  frame %ld  dt=%.2fms  size=%dx%d  focus=%d  min=%d  cam=(%.2f, %.2f, %.2f)\n",
+            std::printf("  frame %ld  dt=%.2fms  size=%dx%d  focus=%d  min=%d  cam=(%.2f, %.2f, %.2f)  sim_tick=%llu units=%u\n",
                         frame, dt * 1000.0, in.fb_width, in.fb_height,
-                        (int)in.window_focused, (int)in.window_minimized, cam_yaw, cam_pitch, cam_dist);
+                        (int)in.window_focused, (int)in.window_minimized, cam_yaw, cam_pitch, cam_dist,
+                        (unsigned long long)world.tick, unit_count);
             since_print = 0.0;
         }
 
@@ -266,8 +309,8 @@ int main(int argc, char** argv) {
             frame_view.time_seconds = (float)((double)(now - start) / (double)freq);
             frame_view.delta_seconds = (float)dt;
             if (renderer_begin_frame(rnd, &frame_view, in.fb_width, in.fb_height, in.window_minimized)) {
-                renderer_submit(rnd, cubes, 500);
-                dbg_aabb(rnd, mm::vec3_make(-12.0f, 0.0f, -15.0f), mm::vec3_make(12.0f, 1.0f, 15.0f), 0xff00ffffu);
+                renderer_submit(rnd, unit_items, unit_count);
+                dbg_aabb(rnd, mm::vec3_make(-20.0f, 0.0f, -20.0f), mm::vec3_make(20.0f, 1.0f, 20.0f), 0xff00ffffu);
                 dbg_sphere(rnd, mm::vec3_make(0, 2, 0), 2.0f, 0xff00ff00u);
                 if (overlay_visible) {
                     RendererStats stats = renderer_get_stats(rnd);

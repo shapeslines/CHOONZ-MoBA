@@ -7,7 +7,7 @@
 
 **Layer:** Game · standalone C++/Vulkan engine — **off-spine**, a separate universe from the Shapes//Lines data spine
 **Role:** Custom from-scratch MOBA/RTS-hybrid game engine (C++17, raw Vulkan 1.3, own ECS, netcode, and math); no shared auth, no database, no GromDB relation — isolation is by design.
-**Status:** Phase 3 M3.0–M3.2 complete (PRs #14/#15/#17 merged, tagged `v0.3.0-m3.2`, 2026-08-12). The platform-free 30 Hz Q16.16 simulation now owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal plain-function schedule, deferred tick-boundary destruction, canonical ECS state hash/diff, replay-v1 codec and CLI, and an exact 10,000-tick determinism proof. M3.3 presentation timing is queued separately in `docs/slate-moba-phase3-m3.3.md`.
+**Status:** Phase 3 M3.0–M3.3 complete (PRs #14/#15/#17 + gap-close Wave 6; M3.2 tagged `v0.3.0-m3.2`, 2026-08-12). The platform-free 30 Hz Q16.16 simulation owns an arena-backed generational entity manager, typed sparse-set SoA pools, derived ascending-entity views, phase-buffered typed damage events, a literal plain-function schedule, deferred tick-boundary destruction, canonical ECS state hash/diff, replay-v1 codec and CLI, an exact 10,000-tick determinism proof — and, since M3.3, the game/present glue (`eng_game`) owning the fixed-tick accumulator, snapshot double-buffer, and the single fixed→float conversion. M3.4 (flag pinning/isolation) is the next slate.
 
 **Canonical deep-dive:** https://github.com/shapeslines/System-Architecture/blob/main/projects/moba.md
 &nbsp;&nbsp;(local sibling: `../System-Architecture/projects/moba.md`)

@@ -35,6 +35,7 @@ add_executable(engine_tests
     sim/schedule_tests.cpp
     sim/sim_tests.cpp
     sim/systems_tests.cpp
+    present/present_tests.cpp          # M3.3: snapshots, accumulator, fixed->float glue
     render/render_tests.cpp
     tga/tga_tests.cpp
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
@@ -44,7 +45,7 @@ target_include_directories(engine_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/render/src)                  # Vulkan-free render internals under test
 # The aggregate suite links only the Vulkan-free renderer core; the null seam has its
 # own executable below, and neither test binary initializes Vulkan.
-target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common moba_warnings moba_options)
+target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common eng::game moba_warnings moba_options)
 
 add_executable(render_null_tests test_main.cpp render/render_null_tests.cpp)
 target_include_directories(render_null_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -83,6 +84,7 @@ add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
 add_test(NAME sim_systems COMMAND engine_tests --suite sim_systems)
+add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 snapshots/accumulator/glue
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)

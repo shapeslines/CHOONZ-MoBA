@@ -59,6 +59,7 @@ add_subdirectory(engine/serialize)
 add_subdirectory(engine/platform)
 add_subdirectory(engine/sim)
 add_subdirectory(engine/render)
+add_subdirectory(engine/game)   # M3.3: game/present glue (fixed-tick loop + snapshots)
 
 # --- Tools & tests ---
 enable_testing()                        # register CTest tests (M1.4); must be top-level

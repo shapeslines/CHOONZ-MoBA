@@ -526,7 +526,14 @@ scale. **Exercises:** ECS, Determinism.
 
 ---
 
-### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M
+### M3.3 — Fixed-tick loop + SIM/PRESENTATION snapshot boundary  🔴  · M  ✅ COMPLETE 2026-08-12
+**Status:** complete (gap-close Wave 6). The game/present glue (`eng_game`,
+`game/present.h`) owns the fixed-tick accumulator (clamped by `SIM_MAX_CATCHUP_S`),
+double-buffered fixed-only `RenderSnapshot`s, and the single fixed→float conversion;
+`snapshot_extract` is const and hash-neutral; the renderer still never sees `SimWorld`.
+Headless tests prove render-rate independence (60/30/mixed fps → identical tick count
+and hash) and the sandbox runs the deterministic orbit demo validation-clean
+(64 units, one batch). M3.4 remains the separate flag-pinning/isolation slate.
 **Goal:** the accumulator loop and the single, one-directional fixed→float interpolation seam.
 **Deliverables:**
 - The accumulator lives in the **platform's outer loop** (it owns the OS pump + clock); the ECS

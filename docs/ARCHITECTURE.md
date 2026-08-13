@@ -62,6 +62,11 @@ The CMake link graph *is* the architecture. Each module is one static library (`
   assert, handle)     vec/mat/rng)
 ```
 
+`eng_game` (M3.3, G37) is the SIM/PRESENTATION boundary owner: it links `eng_sim` and
+`eng_render_common` (never the real Vulkan backend) and owns the fixed-tick
+accumulator, snapshot double-buffer, and the single fixed→float conversion
+(`game/present.h`). The renderer never sees `SimWorld`.
+
 `eng_core` and `eng_math` are dependency-free leaves. `eng_serialize` depends only on core;
 `eng_sim` depends on core, math, and serialize. `eng_net` depends on `eng_sim` (it calls
 `sim_tick`) and on `eng_platform` (sockets). Only `eng_render` sees Vulkan. Only `eng_platform`
