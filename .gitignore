@@ -1,6 +1,7 @@
 # ---- Build output ----
 build/
 build-ci/
+build-asan/
 out/
 bin/
 lib/
