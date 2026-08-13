@@ -6,12 +6,11 @@
 # path so every suite finds "test.h".
 
 # --- Headless aggregate: the non-window/non-Vulkan engine libs the test binary links.
-# eng_platform is here ONLY for its OS page-allocator + file-I/O backends (plat_mem_*,
-# platform_file_*, the OS deps core's arenas and the file suites need — ADR-0005);
-# those live in their own TUs (win32_mem.cpp/win32_file.cpp/win32_log.cpp, G14), so
-# the window TU is never pulled into the test executables. As sim/net/assets land
-# they join this group, with their OS impls kept in the app layer (ADR-0006) so
-# headless testing holds.
+# eng_platform is here ONLY for its OS page-allocator backend (plat_mem_*, the one OS
+# dependency core's arenas need — ADR-0005); its window/input code is never called by
+# tests. As sim/net/assets land they join this group, with their OS impls kept in the
+# app layer (ADR-0006) so headless testing holds. Splitting the page backend out of
+# the Win32 window TU so this group is literally window-free is a later cleanup.
 add_library(engine_core_group INTERFACE)
 target_link_libraries(engine_core_group INTERFACE
     eng::core eng::math eng::serialize eng::sim eng::platform)
@@ -35,7 +34,6 @@ add_executable(engine_tests
     sim/schedule_tests.cpp
     sim/sim_tests.cpp
     sim/systems_tests.cpp
-    present/present_tests.cpp          # M3.3: snapshots, accumulator, fixed->float glue
     render/render_tests.cpp
     tga/tga_tests.cpp
     ${CMAKE_SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp)   # app-layer decoder under test (M2.2; moves to eng_assets at M4.0)
@@ -45,7 +43,7 @@ target_include_directories(engine_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/render/src)                  # Vulkan-free render internals under test
 # The aggregate suite links only the Vulkan-free renderer core; the null seam has its
 # own executable below, and neither test binary initializes Vulkan.
-target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common eng::game moba_warnings moba_options)
+target_link_libraries(engine_tests PRIVATE engine_core_group eng_render_common moba_warnings moba_options)
 
 add_executable(render_null_tests test_main.cpp render/render_null_tests.cpp)
 target_include_directories(render_null_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -84,7 +82,6 @@ add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
 add_test(NAME sim_systems COMMAND engine_tests --suite sim_systems)
-add_test(NAME present COMMAND engine_tests --suite present)  # M3.3 snapshots/accumulator/glue
 add_test(NAME render      COMMAND engine_tests --suite render)    # cache-blob checker (M2.1)
 add_test(NAME render_null COMMAND render_null_tests --suite render_null)
 add_test(NAME tga         COMMAND engine_tests --suite tga)       # direct TGA decode (M2.2)
