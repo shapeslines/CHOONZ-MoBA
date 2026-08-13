@@ -39,6 +39,7 @@ template<class T> inline void array_reserve(Array<T>* a, uint32_t n) {
     a->data = nd; a->cap = nc;
 }
 template<class T> inline T* array_push(Array<T>* a, T v) {
+    ENSURE_MSG(a->len < 0xFFFFFFFFu, "Array length overflow");
     array_reserve(a, a->len + 1u);
     a->data[a->len] = v;
     return &a->data[a->len++];
