@@ -82,7 +82,11 @@ ctest --test-dir build-ci -C Debug --output-on-failure
 CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, entity/component/event/system/
 schedule/sim/presentation suites, `render`,
 `render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
-the sim/presentation boundary scans, and replay CLI fixtures. To run the replay tool directly:
+the sim/presentation boundary scans, and replay CLI fixtures.
+The hosted renderer smoke classifier is also tested adversarially: only exact Vulkan device gates
+may skip; nonzero exits, validation diagnostics, incomplete runs, and missing/invalid screenshots fail.
+
+To run the replay tool directly:
 
 ```bat
 build-ci\tools\replay\Debug\moba_replay.exe record --out match.mbr

@@ -18,8 +18,8 @@ M3.4 implementation has begun.
 
 ## Verified locally
 
-- `/WX` Debug, RelWithDebInfo, and Release builds: 27/27 CTest entries green in each.
-- Debug-ASan: 27/27 green with the ASan runtime staged app-locally.
+- `/WX` Debug, RelWithDebInfo, and Release builds: 28/28 CTest entries green in each.
+- Debug-ASan: 28/28 green with the ASan runtime staged app-locally.
 - Replay v1 and `SIM_LOGIC_HASH = 0xab96814425ba80a4` are unchanged.
 - Two independent 10,000-tick runs end at `0x637628abff59c823`; mutation reports exactly
   `tick=4321 field=position_x entity=7`.
@@ -28,6 +28,8 @@ M3.4 implementation has begun.
 - Arena snapshot init is transactional; extraction is const and hash-neutral; actual live count and
   64 stable slots are preserved; interpolation is previous→current and identity-aware.
 - Fresh-clone README walk and a 90-frame validation-clean RTX 4070 Ti screenshot are green.
+- CI and fresh-walk share one smoke classifier; 11 adversarial cases prove device-gate phrases cannot
+  mask nonzero exits, validation diagnostics, incomplete runs, or missing/invalid screenshots.
 - `eng_sim → core + math + serialize`; `eng_game → core + math + sim + render_common`; renderer has
   no sim dependency; platform cadence has no game/sim dependency.
 

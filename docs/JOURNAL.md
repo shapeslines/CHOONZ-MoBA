@@ -24,7 +24,10 @@ acceptance, GitHub checks, and squash merge remain the final external closure lo
   `ca5ad22`. PR #20 and recovery #25 are superseded by #21. Remote wave branches are retained.
 - The Vulkan smoke classifier now skips only exact “no physical device/compatible driver” or
   ADR-0012 minimum-spec rejection logs. Any other initialization, validation, exit, or missing-image
-  outcome fails and prints the sandbox log. CI and the fresh-walk script share the policy.
+  outcome fails and prints the sandbox log. CI and the fresh-walk script invoke one shared classifier.
+  A first independent acceptance pass caught that matching the phrase before the exit status could
+  mask an unrelated failure; the repaired classifier checks exit and failure diagnostics first and
+  has 11 adversarial CTest cases.
 - `PlatformFixedStep` is window-independent platform code: initialize, clamp accumulated frame debt,
   query/consume whole 30 Hz ticks, and calculate alpha. It has no game or sim dependency.
 - The sandbox generates orbit commands inside each owed-tick iteration and consumes debt only after
@@ -37,8 +40,8 @@ acceptance, GitHub checks, and squash merge remain the final external closure lo
 
 ### Verification
 
-- MSVC `ci` preset (`/WX`): complete Debug, RelWithDebInfo, and Release builds; **27/27 CTest** in
-  each configuration. Debug-ASan also passes **27/27**.
+- MSVC `ci` preset (`/WX`): complete Debug, RelWithDebInfo, and Release builds; **28/28 CTest** in
+  each configuration. Debug-ASan also passes **28/28**.
 - The unchanged 10,000-tick oracle ends at `0x637628abff59c823`; controlled divergence remains
   `tick=4321 field=position_x entity=7`; replay v1 and logic hash `0xab96814425ba80a4` are unchanged.
 - Focused cadence/presentation tests cover 60 Hz, 30 Hz, mixed grouping, catch-up clamping,
@@ -47,7 +50,7 @@ acceptance, GitHub checks, and squash merge remain the final external closure lo
 - `sim_boundary` and `present_boundary` prove `eng_sim → core + math + serialize`,
   `eng_game → core + math + sim + render_common`, no renderer→sim dependency, and no
   platform-cadence→game/sim dependency.
-- A fresh clone at corrective head `9524185` completed configure, build, all 27 Debug tests, and a
+- A fresh clone of the final corrective tree completed configure, build, all 28 Debug tests, and a
   90-frame validation-clean sandbox run. RTX 4070 Ti evidence produced a 2,764,854-byte 1280×720
   screenshot with 64 objects, one batch, one scene draw, three total draws, and 12 allocations.
 

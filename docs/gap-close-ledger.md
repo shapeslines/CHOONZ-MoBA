@@ -83,7 +83,7 @@ history is retained; #28 repairs the contracts forward. Remote `moba/gap-close-w
 
 | # | Gap | Status |
 |---|---|---|
-| G15 | CI builds null renderer only; no Vulkan/validation in CI | **closed** (Wave 3/#21: required SDK build plus strict hosted-device classifier) |
+| G15 | CI builds null renderer only; no Vulkan/validation in CI | **closed** (Wave 3/#21 + #28: required SDK build plus shared strict hosted-device classifier and adversarial cases) |
 | G16 | RelWithDebInfo absent from CI matrix | **closed** (Wave 3/#21: matrix and `main-gate` required check) |
 | G17 | CodeQL claimed-but-absent workflow | **closed** (GitHub default setup supplies exact-head C/C++ and workflow analysis checks) |
 | G18 | No perf/benchmark regression gate | open |

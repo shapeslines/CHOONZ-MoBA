@@ -550,7 +550,8 @@ runs `sim_tick` → `present_capture` → consume; failure retains debt and term
 `eng_game` transactionally allocates two fixed 64-slot snapshots from an arena, extracts through
 const Transform views, records actual live count, interpolates previous→current, and uses current
 state directly across an `EntityId` change. Debug, RelWithDebInfo, Release, and Debug-ASan pass all
-27 CTest entries. Render-rate grouping and minimized-loop tests preserve the unchanged
+28 CTest entries, including 11 adversarial hosted-smoke classifications. Render-rate grouping and
+minimized-loop tests preserve the unchanged
 `0x637628abff59c823` oracle; a two-tick catch-up frame proves distinct per-tick command generation;
 the controlled mutation remains `tick=4321 field=position_x entity=7`. The fresh-clone path and a
 90-frame validation-clean RTX 4070 Ti run produce a 1280×720 screenshot with 64 objects.

@@ -105,6 +105,14 @@ add_test(NAME present_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/present/check_present_boundary.cmake")
 
+add_test(NAME sandbox_smoke_classifier
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/platform/sandbox_smoke_classifier_tests.ps1"
+            -Classifier "${CMAKE_SOURCE_DIR}/tools/classify-sandbox-smoke.ps1"
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
+set_tests_properties(sandbox_smoke_classifier PROPERTIES
+    PASS_REGULAR_EXPRESSION "sandbox smoke classifier: 11 adversarial cases passed")
+
 # --- replay CLI: one fixture records a real file; consumers independently inspect,
 #     verify, and exercise exact public exit classes before cleanup runs.
 set(REPLAY_FIXTURE_FILE "${CMAKE_CURRENT_BINARY_DIR}/moba_replay_fixture.mbr")

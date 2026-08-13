@@ -80,21 +80,20 @@ jobs:
           $code = $LASTEXITCODE
           Write-Output "sandbox exited $code"
           if (Test-Path $log) { Get-Content $log }
-          $output = Get-Content $log -Raw -ErrorAction SilentlyContinue
           $screenshot = "out-${{ matrix.config }}.bmp"
-          $noDevice = $output -match 'renderer: no Vulkan physical device(?:s| or compatible driver)' -or
-                      $output -match 'renderer: no device meets the minimum spec'
-          if ($noDevice -and -not (Test-Path $screenshot)) {
+          $classifierArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\tools\classify-sandbox-smoke.ps1",
+                              "-LogPath", $log, "-ScreenshotPath", $screenshot,
+                              "-ProcessExitCode", $code)
+          $classification = @(& powershell.exe @classifierArgs 2>&1 | ForEach-Object { "$_" })
+          $classifierCode = $LASTEXITCODE
+          $classification | Write-Output
+          if ($classifierCode -ne 0) {
+            "sandbox FAILED — strict classifier rejected the log/exit/screenshot tuple; log above" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            exit $classifierCode
+          }
+          if ($classification -contains "SANDBOX_SMOKE=SKIP") {
             "SKIP: no Vulkan driver/1.3 device on this runner — real renderer compiled but not executed." | Out-File -Append $env:GITHUB_STEP_SUMMARY
             exit 0
-          }
-          if ($code -ne 0) {
-            "sandbox FAILED (exit $code) — log above" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-            exit $code
-          }
-          if (-not (Test-Path $screenshot)) {
-            "sandbox exited 0 but produced no screenshot" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-            exit 1
           }
           "sandbox: 90 validation-clean frames; screenshot written." | Out-File -Append $env:GITHUB_STEP_SUMMARY
 

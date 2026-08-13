@@ -79,8 +79,8 @@ presentation state or timing to feed back into `eng_sim`.
   `8f5e641`, and final cadence/presentation separation `9524185`. Replay format v1,
   `SIM_LOGIC_HASH = 0xab96814425ba80a4`, same-tick command semantics, and authoritative simulation
   behavior are unchanged.
-- `/WX` Debug, RelWithDebInfo, and Release builds pass all 27 CTest entries. Debug-ASan also passes
-  27/27 after staging the compiler runtime app-locally for Windows CTest.
+- `/WX` Debug, RelWithDebInfo, and Release builds pass all 28 CTest entries. Debug-ASan also passes
+  28/28 after staging the compiler runtime app-locally for Windows CTest.
 - Cadence tests prove 60 Hz, 30 Hz, mixed-rate, catch-up clamp, minimized rendering, retained debt on
   tick failure, unchanged hashes, and fresh/distinct commands for both ticks of a two-tick frame.
 - Presentation tests prove transactional under-budget initialization, const/hash-neutral extraction,
@@ -88,7 +88,10 @@ presentation state or timing to feed back into `eng_sim`.
   destroyed slots, and no interpolation across reused generations.
 - `sim_boundary` and `present_boundary` confirm the four dependency seams and reject clocks,
   presentation cadence, mutation, heap allocation, renderer→sim, and platform→game/sim coupling.
-- A fresh clone at `9524185` completed the README configure/build/test path and rendered 90
+- One shared hosted-smoke classifier checks process exit and failure diagnostics before exact,
+  anchored device-gate matching. Eleven adversarial cases reject phrase-plus-failure, incomplete,
+  stale/invalid screenshot, and unknown no-screenshot runs while accepting the three exact gates.
+- A fresh clone of the final corrective tree completed the README configure/build/test path and rendered 90
   validation-clean frames. The RTX 4070 Ti screenshot is 1280×720 (2,764,854 bytes) with 64 objects,
   one batch, one scene draw, three total draws, and 12 allocations.
 - The 10,000-tick oracle remains `0x637628abff59c823`; controlled divergence remains exactly
