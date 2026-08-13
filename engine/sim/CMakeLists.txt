@@ -5,6 +5,7 @@ add_library(eng_sim STATIC
     src/components.cpp
     src/entity.cpp
     src/events.cpp
+    src/oracle.cpp
     src/replay.cpp
     src/sim.cpp
     src/sim_hash.cpp
@@ -17,7 +18,6 @@ target_include_directories(eng_sim
 
 target_link_libraries(eng_sim
     PUBLIC  eng::core eng::math eng::serialize
-    PRIVATE moba_warnings moba_options)
+    PRIVATE moba_warnings moba_options moba::sim_determinism)
 
-target_compile_options(eng_sim PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/fp:precise>)
+moba_enforce_sim_target(eng_sim "${CMAKE_CURRENT_SOURCE_DIR}")

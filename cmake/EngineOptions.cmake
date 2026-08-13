@@ -4,10 +4,23 @@
 
 add_library(moba_options INTERFACE)
 
+# The deterministic island has one additional, deliberately narrower policy owner.
+# Only targets that compile authoritative simulation implementation sources may link
+# this target. The marker lets generated-build checks prove the policy arrived via
+# this named seam instead of an executable adding an equivalent option ad hoc.
+add_library(moba_sim_determinism INTERFACE)
+add_library(moba::sim_determinism ALIAS moba_sim_determinism)
+target_compile_definitions(moba_sim_determinism INTERFACE
+    MOBA_SIM_DETERMINISTIC=1)
+if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    target_compile_options(moba_sim_determinism INTERFACE /fp:precise)
+endif()
+
 # No RTTI, no exceptions (ADR-0009). _HAS_EXCEPTIONS=0 stops the STL dragging in
 # exception machinery under /EHs-c-.
-target_compile_options(moba_options INTERFACE
-    $<$<CXX_COMPILER_ID:MSVC>:/GR- /EHs-c->)
+if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    target_compile_options(moba_options INTERFACE /GR- /EHs-c-)
+endif()
 
 target_compile_definitions(moba_options INTERFACE
     _HAS_EXCEPTIONS=0
@@ -15,6 +28,34 @@ target_compile_definitions(moba_options INTERFACE
     $<$<CONFIG:Debug>:MOBA_DEBUG=1>
     $<$<CONFIG:RelWithDebInfo>:MOBA_DEV=1>
     $<$<CONFIG:Release>:MOBA_RELEASE=1>)
+
+# Stretch-only second-toolchain gate. The script in tools/ first proves that the
+# installed clang-cl runtime catches a real tripwire; this configure check then
+# prevents an ON build from silently accepting but failing to link the flags.
+if(MOBA_UBSAN)
+    if(NOT (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
+            CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+        message(FATAL_ERROR "MOBA_UBSAN requires clang-cl (Clang with the MSVC frontend)")
+    endif()
+    # Visual Studio's clang_rt.ubsan_standalone libraries are built against the
+    # static release CRT. Keep this isolated stretch build ABI-compatible; normal
+    # MSVC/clang-cl builds retain CMake's default runtime selection.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag(
+        "-fsanitize=undefined;-fno-sanitize-recover=undefined"
+        MOBA_CLANG_CL_UBSAN_FLAGS_SUPPORTED)
+    if(NOT MOBA_CLANG_CL_UBSAN_FLAGS_SUPPORTED)
+        message(FATAL_ERROR
+            "clang-cl cannot compile/link the requested UBSan flags and runtime")
+    endif()
+
+    target_compile_options(moba_options INTERFACE
+        -fsanitize=undefined
+        -fno-sanitize-recover=undefined)
+    target_compile_definitions(moba_options INTERFACE MOBA_UBSAN_ENABLED=1)
+    message(STATUS "MOBA UBSan capability: clang-cl compile/link flags supported")
+endif()
 
 # Release whole-program optimization must be explicit AND uniform: CMake's default
 # MSVC Release has neither /GL nor /LTCG, and /GL requires matching /LTCG at link

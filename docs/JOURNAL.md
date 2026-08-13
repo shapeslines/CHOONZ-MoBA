@@ -8,6 +8,61 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 11 — 2026-08-13 — M3.4 structural determinism closure
+
+**Scope:** centralize the mature Phase 3 simulation compiler contract, prove the same `eng_sim`
+archive through test and runnable game paths, fail closed on dependency drift, and add the
+clang-cl/UBSan stretch proof without changing authoritative behavior or starting Phase 4.
+**Outcome:** M3.4 is acceptance-complete on PR #38; merge remains owner-gated. Replay v1, command
+encoding, schedule, canonical state order, `SIM_LOGIC_HASH = 0xab96814425ba80a4`, and the final
+oracle remain unchanged.
+
+### What landed
+
+- A named `moba_sim_determinism` interface policy owns the marker and `/fp:precise`; every current
+  sim implementation source consumes it only through `eng_sim`.
+- Configure-time target introspection and generated compile-command audits enforce implementation
+  ownership, allowed direct/exported links, include roots, configuration coverage, policy marker,
+  and non-conflicting FP flags. Source scans retain the float/libm/clock/heap/unordered/platform/
+  render/game bans. Adversarial fixtures cover path traversal, system-include injection, duplicate or
+  conflicting flags, forbidden links/imports, and accidental recompilation.
+- `sim_oracle_run` reuses the placeholder replay generator and simulation object code from caller-
+  owned fixed storage. A direct test probe plus Vulkan and null sandbox `--sim-self-check` entrypoints
+  compare one exact hash-stream line before window or renderer initialization.
+- The optional clang-cl gate performs a compile/link/runtime capability probe, deliberately trips
+  UBSan on signed overflow, then runs the clean instrumented oracle. MSVC-only `/Zc:preprocessor`
+  stays on cl.exe; the UBSan-only RelWithDebInfo tree selects the static CRT required by the Windows
+  standalone runtime. Normal MSVC ABI and flags are unchanged.
+- Both sandbox variants now stage the Debug-ASan runtime beside their shared output directory, so
+  cross-binary parity executes inside the sanitizer suite instead of failing DLL discovery.
+
+### Verification and loop findings
+
+- Full MSVC `ci` `/WX` builds passed 32/32 CTest entries in Debug, RelWithDebInfo, and Release.
+  Debug-ASan also passed 32/32 after its first run correctly exposed the missing sandbox runtime
+  (`0xc0000135`).
+- Local clang-cl 19.1.5 + UBSan passed the overflow tripwire, the instrumented RelWithDebInfo oracle,
+  and four structural gates (6/6). The hosted clang-cl capability job passed as well.
+- All three binary paths report `ticks=10000 commands=923 final=0x637628abff59c823
+  stream=0x6f381609f7e59f0c logic=0xab96814425ba80a4`; controlled mutation still reports exactly
+  `tick=4321 field=position_x entity=7`.
+- A local RTX 4070 Ti run completed 90 validation-clean frames and wrote a 2,764,854-byte 1280×720
+  BMP. A fresh clone of checkpoint `8dcd385` independently configured, built, passed 32/32, and
+  repeated the same strict screenshot contract. Hosted CI run `31675675948` and CodeQL run
+  `31675672904` are green on that checkpoint.
+- Two early stretch attempts failed for useful reasons: clang-cl rejects `/Zc:preprocessor` as
+  unused under `/WX`; Debug/`/MD` cannot link the static-release Windows UBSan C++ runtime. The final
+  RelWithDebInfo `/MT` stretch posture follows observed toolchain capability rather than masking
+  either failure.
+
+### Next
+
+Owner squash-merges exact green PR #38, synchronizes `main`, and verifies post-merge CI/CodeQL. Then
+open Phase 4 M4.0 as a separate asset-pipeline slate; keep the M3.4 hash stream and isolation checks
+as permanent regression gates.
+
+---
+
 ## Session 10 — 2026-08-13 — M3.3 acceptance repair and presentation boundary
 
 **Scope:** land gap-close PRs #21–#24 in order, repair the hosted Vulkan gate, and close M3.3 without

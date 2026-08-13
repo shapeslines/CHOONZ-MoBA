@@ -125,6 +125,19 @@ jobs:
           }
           ($lines -join "`n") | Out-File -Append $sum
 
+  # M3.4 stretch gate: use an installed clang-cl, prove the
+  # UBSan runtime with a real overflow tripwire, then run the instrumented oracle.
+  # A runner without the optional LLVM component reports UNAVAILABLE explicitly.
+  # A present compiler always runs the oracle; UBSan runs after its capability probe.
+  windows-clang-cl-stretch:
+    name: windows-clang-cl (UBSan capability)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Probe clang-cl + UBSan and run the determinism oracle
+        shell: pwsh
+        run: ./tools/check-clang-cl-determinism.ps1
+
   # G36: the FIXES.md "stranger's walk", scripted — a fresh clone taken through the
   # documented README path. This is the repeatable replacement for the manual sweep.
   fresh-walk:

@@ -4,18 +4,23 @@
 
 add_library(moba_warnings INTERFACE)
 
-target_compile_options(moba_warnings INTERFACE
-    $<$<CXX_COMPILER_ID:MSVC>:
+if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    target_compile_options(moba_warnings INTERFACE
         /W4                 # high warning level
         /permissive-        # strict standard conformance
-        /Zc:preprocessor    # conforming preprocessor
         /Zc:__cplusplus     # report the real __cplusplus value
         /utf-8              # source + execution charset = UTF-8
         /diagnostics:caret  # point at the exact token
         /wd4201             # allow nameless struct/union (used by the math types)
-    >)
+    )
 
-if(MOBA_WERROR)
-    target_compile_options(moba_warnings INTERFACE
-        $<$<CXX_COMPILER_ID:MSVC>:/WX>)
+    if(MOBA_WERROR)
+        target_compile_options(moba_warnings INTERFACE /WX)
+    endif()
+endif()
+
+# clang-cl 19 implements a conforming preprocessor by default and diagnoses
+# /Zc:preprocessor as unused under /WX. cl.exe still needs the explicit switch.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(moba_warnings INTERFACE /Zc:preprocessor)
 endif()

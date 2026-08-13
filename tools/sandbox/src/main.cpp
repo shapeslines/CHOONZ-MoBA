@@ -5,6 +5,7 @@
 //   sandbox --screenshot out.bmp  captures the LAST frame to a 24-bit BMP (M2.1
 //                                 readback — session-independent visual proof)
 //   sandbox --orbit               auto-rotates the camera (screenshot verification)
+//   sandbox --sim-self-check      runs the headless 10,000-tick eng_sim oracle
 // Loads assets/uv_test.tga directly (the asset manager arrives in Phase 4) and creates
 // typed mesh/texture/material resources for the instanced cube field.
 // M2.3: an orbit camera (arrows rotate, wheel zooms) feeds view/proj into the
@@ -13,6 +14,7 @@
 #include "platform/platform_fixed_step.h"
 #include "render/renderer.h"
 #include "math/math.h"
+#include "sim/oracle.h"
 #include "sim/sim.h"
 #include "game/present.h"
 #include "tga_direct.h"
@@ -77,7 +79,27 @@ static bool write_bmp24(const char* path, const uint8_t* rgba8, int w, int h) {
     return ok;
 }
 
+static int run_sim_self_check(void) {
+    alignas(16) static uint8_t world_storage[SIM_ORACLE_WORLD_STORAGE_SIZE];
+    SimOracleResult result{};
+    if (!sim_oracle_run(world_storage, sizeof(world_storage), &result)) {
+        std::printf("sim oracle failed\n");
+        return 2;
+    }
+    std::printf(
+        "sim_oracle ticks=%llu commands=%llu final=0x%016llx stream=0x%016llx logic=0x%016llx\n",
+        static_cast<unsigned long long>(result.tick_count),
+        static_cast<unsigned long long>(result.command_count),
+        static_cast<unsigned long long>(result.final_state_hash),
+        static_cast<unsigned long long>(result.hash_stream_digest),
+        static_cast<unsigned long long>(result.logic_hash));
+    return 0;
+}
+
 int main(int argc, char** argv) {
+    if (argc == 2 && std::strcmp(argv[1], "--sim-self-check") == 0)
+        return run_sim_self_check();
+
     // G28: DPI awareness, before any window exists. Without it Windows scales the
     // window bitmap and overlay text + input coordinates are wrong on scaled
     // displays. SYSTEM_AWARE: one scale, physical pixels everywhere. PER_MONITOR_V2

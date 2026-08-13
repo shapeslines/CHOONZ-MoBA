@@ -28,7 +28,13 @@ static inline fix fix_div(fix a, fix b){ return (fix)(((int64_t)a << 16) / b); }
 - **Transcendentals are table-driven** (`fix_sin`/`fix_cos`/`fix_sqrt` via LUTs) —
   no `<math.h>` in sim.
 - **Float is banned in sim code**, enforced by convention + a grep/CI lint +
-  the run-twice state-hash self-check (see ARCHITECTURE §2.1), not a compiler flag.
+  the run-twice state-hash self-check (see ARCHITECTURE §2.1), not by pretending a
+  compiler flag can ban the type. As a separate build invariant, the named
+  `moba_sim_determinism` CMake policy pins every authoritative sim translation unit
+  to `/fp:precise` and emits a marker checked against `compile_commands.json`.
+  M3.4 additionally runs the same canonical hash stream through clang-cl and, when
+  its compile/link/runtime capability probe succeeds, UBSan. That second toolchain
+  is a structural diagnostic gate, not an alternate authoritative number system.
 
 **World-scale convention:** 1 world unit ≈ 1 "meter"; tile-grid cells = 0.5 unit;
 maps may run to a few hundred units across (a MOBA/RTS hybrid map can exceed a

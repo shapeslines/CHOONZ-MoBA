@@ -26,10 +26,13 @@ RTS-class game engine.
 > M3.3 adds a platform-owned fixed-step accumulator, fresh same-tick commands for every owed tick,
 > and arena-backed previous/current presentation snapshots. `eng_game` is the sole interpolation and
 > fixed→float owner; the renderer still cannot see `SimWorld`.
-> **Next: Phase 3 M3.4 structural sim isolation and cross-binary parity.**
+> **Phase 3 is acceptance-complete through M3.4 on PR #38.** Central compiler ownership,
+> test/game-binary parity, fail-closed isolation, and clang-cl/UBSan proofs are green. Phase 4 asset
+> work begins only after the owner-approved merge and a green synchronized `main`.
 > Run it: `build\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot out.bmp`
 > (the `--frames N` is required — `--screenshot` alone captures only on quit and
 > will run forever).
+> Headless sim parity: `build\tools\sandbox\Debug\sandbox.exe --sim-self-check`.
 >
 > See [`docs/JOURNAL.md`](docs/JOURNAL.md) for the session log,
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan, and
@@ -79,10 +82,23 @@ cmake --build build-ci --config Debug
 ctest --test-dir build-ci -C Debug --output-on-failure
 ```
 
+Optional second-toolchain gate (installed clang-cl plus Visual Studio build tools):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-clang-cl-determinism.ps1 -RequireCompiler -RequireUbsan
+```
+
+The script first proves the installed UBSan runtime with a deliberate overflow, then builds the
+caller-storage-backed oracle with clang-cl `/WX` in RelWithDebInfo and requires the same pinned
+10,000-tick hash stream. RelWithDebInfo intentionally matches Visual Studio's static release UBSan
+runtime ABI; normal MSVC builds retain their existing CRT selection.
+
 CTest covers `mem`, `math`, `containers`, `platform`, `serialize`, entity/component/event/system/
 schedule/sim/presentation suites, `render`,
 `render_null`, `tga`, the `/fp:precise` + `/fp:fast` golden, the 10,000-tick replay proof,
-the sim/presentation boundary scans, and replay CLI fixtures.
+the generated sim-policy/include/source-owner audit, test/game-binary hash-stream parity, the
+configure-time sim target contract, adversarial isolation self-tests, the sim/presentation boundary
+scans, and replay CLI fixtures.
 The hosted renderer smoke classifier is also tested adversarially: only exact Vulkan device gates
 may skip; nonzero exits, Vulkan validation warnings/errors, incomplete runs, and missing/invalid
 screenshots fail.
