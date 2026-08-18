@@ -1,11 +1,17 @@
-# MOBA-proto — next session
+# CHOONZ-MoBA — next session
 
-## State @ M4.0 final local acceptance · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ `ac4d2b4` · 2026-08-18 · main
 
 Phase 3 M3.0–M3.4 and the interphase security consolidation are merged on `main`. PR #51 exact head
 `e516b46` landed as `a2565ca`, which is the synchronized base for the isolated
-`codex/m4.0-assets` worktree. Draft PR #52 contains only M4.0; the dirty historical root checkout was
-not modified.
+`codex/m4.0-assets` worktree. PR #52 (M4.0: direct assets and lifetime registry) is MERGED
+(2026-08-13); the dirty historical root checkout was
+not modified. PR #53 (reconcile-47-50) is also merged; PR #54 (M4.1 offline cooker + `.mba`
+runtime) is open.
+
+**Anomaly for owner glance:** PR #55 (`fix: bind destructive file operations to handles (+ final
+acceptance docs)`, head `pr-51`) re-presents the already-squashed PR #51 head. Do not merge without
+owner review — likely superseded history.
 
 Implementation is complete; the final security repair is locally accepted and awaits its exact-head
 commit/check identity:
@@ -43,14 +49,18 @@ commit/check identity:
   replaced while live. Focused rereview and Debug 43/43 pass; its successor head is the only landing
   candidate.
 
-## First action
+## First action — DONE 2026-08-13
 
-1. Commit and push the final M4.0 security/evidence closure and require all exact-head GitHub checks.
-2. Obtain fresh exact-head security and acceptance verdicts; mark PR #52 ready only when local and
-   hosted evidence agree.
-3. Owner squash-merge authorization is recorded. Merge only the recorded exact green head, verify
-   the merged tree, and synchronize `main`.
-4. Open a separate M4.1 slate from that green `main`; do not stack cooker work on PR #52.
+PR #52 (M4.0) was marked ready after exact-head gates and merged 2026-08-13. The M4.1 slate was
+opened separately as PR #54 (open). Historical first-action items retained for the record:
+
+1. ~~Commit and push the final M4.0 security/evidence closure and require all exact-head GitHub checks.~~
+2. ~~Obtain fresh exact-head security and acceptance verdicts; mark PR #52 ready only when local and
+   hosted evidence agree.~~
+3. ~~Owner squash-merge authorization is recorded. Merge only the recorded exact green head, verify
+   the merged tree, and synchronize `main`.~~
+4. ~~Open a separate M4.1 slate from that green `main`; do not stack cooker work on PR #52.~~
+   (Opened as PR #54.)
 
 ## M4.1 boundary
 
