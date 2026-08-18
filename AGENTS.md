@@ -1,4 +1,4 @@
-# MOBA-proto repository guidance
+# CHOONZ-MoBA repository guidance
 
 Global Codex guidance applies. Read `README.md`, `ARCHITECTURE.md`, `docs/ROADMAP.md`, and the
 relevant ADR before changing engine or renderer code.
