@@ -38,8 +38,11 @@ RTS-class game engine.
 > Headless sim parity: `build\tools\sandbox\Debug\sandbox.exe --sim-self-check`.
 >
 > See [`docs/JOURNAL.md`](docs/JOURNAL.md) for the session log,
-> [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan, and
-> [`docs/DECISIONS/`](docs/DECISIONS/) for the architecture decisions.
+> [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan,
+> [`docs/DECISIONS/`](docs/DECISIONS/) for the architecture decisions, and
+> [`docs/design/`](docs/design/) for the **game** design layer — what the game is, as
+> opposed to how the engine is built (launch scope, the damage pipeline, the unit/ability
+> schema, and the effect vocabulary Phase 5 authors against).
 
 ## Goals
 
