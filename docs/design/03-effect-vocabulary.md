@@ -82,7 +82,7 @@ is also the only way to guarantee both hit exactly the same units.
 | `REMOVE_STATUS` | `category_mask` | Cleanse. Mask over status categories, not individual ids — cleanses should not need editing when a status is added. |
 | `SPAWN_PROJECTILE` | `projectile_id`, `speed`, `max_range`, `pierce_count` | Spawns into `ProjectileSoA`. Its `on_hit`/`on_expire` lists come from the projectile definition. |
 | `DASH` | `subject`, `distance[rank]`, `speed`, `collision_policy` | `subject` ∈ {caster, targets}. `collision_policy` ∈ {stop_at_wall, stop_at_unit, pass_through}. |
-| `MODIFY_RESOURCE` | `amount[rank]`, `sign` | Drain/restore beyond the ability's base cost. |
+| `MODIFY_ENERGY` | `amount[rank]`, `sign` | Drain/restore **energy** (ratified resource, `02-` §3) beyond the ability's base cost. Express amounts as a fraction of `energy_max` when tuning — `02-` §3.4. |
 
 ### 4.3 Control
 

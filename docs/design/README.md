@@ -30,12 +30,14 @@
 
 ## Status
 
-**Decided 2026-08-25:** launch shape **B + C** (small-format 3v3 arena, vs-AI first) · ability
-authoring via the **fixed effect vocabulary** (F1 → `03-`) · roles **`BRUISER` / `CARRY` /
-`BURST` / `SUPPORT`** · fiction **deferred**.
+**Decided 2026-08-25 — the schema layer is closed:** launch shape **B + C** (small-format 3v3
+arena, vs-AI first) · ability authoring via the **fixed effect vocabulary** (F1 → `03-`) · roles
+**`BRUISER` / `CARRY` / `BURST` / `SUPPORT`** · resource **energy** · **3** kit slots ·
+**8** levels · damage types **`physical` / `magic` / `true`** · fiction **deferred**.
 
-**Still open:** the damage-type member list (`01-` §3) · resource kind, `MAX_LEVEL`,
-`KIT_SLOT_COUNT` (`02-` §10) · distribution and the art/audio budget (`04-` §6).
+**Still open — tuning and content, not shape:** the map and match rules · the ability unlock
+schedule (`02-` §7.1) · critical strikes and the negative-resist curve (`01-` §10) · distribution
+and the art/audio budget (`04-` §6).
 
 **Ready to build now:** `M5.3` and `M5.4` are spec-complete and depend on nothing in Phase 4 —
 they can start in parallel with the cooker rather than queueing behind it.

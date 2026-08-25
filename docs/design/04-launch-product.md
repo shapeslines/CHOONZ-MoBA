@@ -44,7 +44,10 @@ new work, not a discount. They are costed in §4 as a full `L`.
 | **Match length** | 12–18 minutes | Long enough for a levelling and item arc; short enough that a bad match is cheap and iteration is fast. |
 | **Win condition** | destroy the enemy core | The genre's readable default. Towers as the intermediate objective. |
 | **Economy** | gold from kills and objectives; a small item set | Minion last-hitting is optional — it depends on whether minion waves ship (§4, M5.5). |
-| **Levelling** | per-match levels with ability ranks | Feeds `02-` §4's baked level table, which already assumes it. |
+| **Levelling** | ✅ **8 levels**, 1 rank point each | Ratified. Two basics (3 ranks) + one ultimate (2 ranks) = exactly 8 points, so a champion is fully ranked at level 8 with nothing left over (`02-` §7.1). |
+| **Kit** | ✅ **3 ability slots** + basic attack | Ratified. ~25 % less ability content across the roster than 4 slots — the dominant cost at this scale (§5). |
+| **Resource** | ✅ **energy** — small pool, fast regen | Ratified. Caps burst *rate* rather than total output, so it gates ability chaining without out-of-mana dead time in a 12–18 minute match (`02-` §3.4). |
+| **Damage types** | ✅ `physical` / `magic` / `true` | Ratified. Two resist stats give build-to-counter; `true` is the escape hatch (`01-` §3). |
 
 ### Roles — ✅ RATIFIED 2026-08-25
 
@@ -150,5 +153,5 @@ treat "is this fun against bots?" as a gate before M7.3 packaging — not after.
 | ~~6.2~~ | ~~Ratify the §2 role list~~ | — | ✅ **RATIFIED 2026-08-25** — `BRUISER` / `CARRY` / `BURST` / `SUPPORT`. `02-` §2.1, bot target priority (M5.5) and the champion budget are unblocked. |
 | **6.3** | Distribution channel and price | M7.3 packaging | should land before M7.3 |
 | **6.4** | Art and audio budget and pipeline | any launch date | §5 — the largest unmeasured item |
-| **6.5** | `02-` §10 items 2–4: resource kind, `MAX_LEVEL`, `KIT_SLOT_COUNT` | `02-` §3, §4, §7 | small, cheap, high-leverage |
+| ~~6.5~~ | ~~resource kind, `MAX_LEVEL`, `KIT_SLOT_COUNT`~~ | — | ✅ **RATIFIED 2026-08-25** — energy · 8 · 3. The schema layer is closed; champion authoring is unblocked. |
 | **6.6** | Fiction — deferred by owner decision | naming, art direction | roles (§6.2) intentionally carry no lore commitment, so this can stay deferred without blocking |

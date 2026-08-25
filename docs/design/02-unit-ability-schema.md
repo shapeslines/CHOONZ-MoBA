@@ -57,8 +57,8 @@ Nothing is stored in seconds.
 |---|---|---|---|
 | `hp_max` | `fix` | HP | Must satisfy `HP_MAX` (`01-` §7). |
 | `hp_regen` | `fix` | HP **per tick** | Cook-time converted from HP/sec. |
-| `resource_max` | `fix` | resource | Mana/energy/rage — the *kind* is an owner decision (§10). |
-| `resource_regen` | `fix` | per tick | Cook-time converted. |
+| `energy_max` | `fix` | energy | **Ratified 2026-08-25: energy** — a small pool with fast regen. It caps *burst rate* rather than total output, so it gates ability chaining without creating out-of-mana dead time in a 12–18 minute match. |
+| `energy_regen` | `fix` | per tick | Cook-time converted from energy/sec. Fast regen means this is a large per-tick value relative to the pool — see §3.4. |
 | `move_speed` | `fix` | world units **per tick** | Cook-time converted from units/sec. |
 | `attack_damage` | `fix` | damage | Feeds stage 1 of the damage pipeline. |
 | `attack_speed` | `fix` | attacks **per second** | **Stays per-second** — it is consumed by the `01-` §6 Law-2 accumulator, which requires the per-second rate. This is the one deliberate exception. |
@@ -68,7 +68,7 @@ Nothing is stored in seconds.
 | `magic_resist` | `fix` | resist | Same clamp. |
 | `vision_radius` | `u16` | **grid cells** | Integer — M5.6 line-of-sight is integer by design. |
 
-**Three conventions worth stating once:**
+**Four conventions worth stating once:**
 
 1. **Ranges are compared squared.** `dist_sq <= range*range` in Q16.16 avoids `fix_sqrt` on the
    hottest path in the sim. Watch the magnitude: a range of 12 units squares to 144, far inside
@@ -81,6 +81,13 @@ Nothing is stored in seconds.
 3. **`attack_speed` is the exception** because Law 2's accumulator consumes the rate directly and
    is drift-free precisely *because* it does not pre-divide. Flag it in the cooker so nobody
    "fixes" it later.
+4. **Energy is a small pool with fast regen, and that ordering matters.** A pool of ~100 with
+   regen around 10/sec refills in ~10 seconds, so `energy_regen` per tick is roughly `0.333` — a
+   value where Q16.16's `1.5e-5` resolution is four orders of magnitude finer than the quantity,
+   so cook-time conversion loses nothing. Design consequence: **cost balance is about how many
+   abilities chain back-to-back, not about total abilities cast per match.** Two abilities that
+   each cost 40 % of the pool is a hard two-then-wait; two at 30 % is a comfortable three-chain.
+   That is the lever — tune costs as a fraction of `energy_max`, not as absolute numbers.
 
 ---
 
@@ -105,8 +112,9 @@ Four reasons this is the right call here specifically:
    determinism gate has to cover. A lookup is exact by construction.
 3. **Offline float is legal.** The cooker is not sim code and is not bound by the float ban, so
    the curve can be authored in ordinary floating-point maths and quantized once at bake time.
-4. **It is free.** At 18 levels × ~12 stats × 4 bytes ≈ **864 bytes per unit** — under 6 KB for a
-   Shape-B roster of six. There is no cost to trade against.
+4. **It is free.** At the ratified `MAX_LEVEL = 8` (§7), 8 levels × ~12 stats × 4 bytes ≈ **384
+   bytes per unit** — about **2.3 KB for the whole six-champion roster**. There is no cost to
+   trade against.
 
 The same treatment applies to per-rank ability values (damage, cooldown, cost): **bake the rank
 table, index it.**
@@ -162,6 +170,30 @@ KitSlot { ability_id: AssetId, slot: u8, unlock_level: u8, max_rank: u8 }
 Slots are an **ordered array** — order is hashed state, so it is stable across a replay. Slot
 count is a schema constant (`KIT_SLOT_COUNT`), not per unit; a unit with fewer abilities leaves
 slots empty rather than varying its record size.
+
+### 7.1 Ratified constants (2026-08-25)
+
+```c
+#define KIT_SLOT_COUNT   3    /* two basics + one ultimate, on top of the basic attack */
+#define MAX_LEVEL        8
+#define MAX_RANK_BASIC   3
+#define MAX_RANK_ULT     2
+```
+
+**The point budget closes exactly.** One rank point per level gives 8 points; total available
+ranks are `2 basics × 3 + 1 ultimate × 2 = 8`. A champion is therefore fully ranked at exactly
+level 8 with no leftover points and no unreachable rank — which removes a whole class of "did I
+spend these right?" balance noise, and makes the level curve trivially readable.
+
+**Why 3 slots and not 4.** Across a 4–6 champion roster this is 12–18 abilities instead of
+16–24 — roughly **25 % less ability content** to author, VFX, balance and bug-fix. At this scale
+content is the dominant cost (`04-` §5), and every ability is a permanent maintenance obligation.
+Three slots still gives each champion a real kit identity: an engage or poke, a signature, and an
+ultimate.
+
+**The unlock schedule is content**, not schema — which level the ultimate becomes available at,
+and whether basics rank freely, are tuning values in the kit table. The schema only fixes the
+budget above.
 
 **Interaction with `SIM_MAX_UNITS = 64` (finding F2).** The cap is on *commanded units per tick*,
 not on entities. Heroes are commanded; minions, projectiles and structures are AI-driven and do
@@ -252,11 +284,12 @@ fail loudly.
 | # | Item | Status | Blocks |
 |---|---|---|---|
 | 1 | **The role list.** Roles are owner-authored by rule; the schema cannot mint them. | ✅ **RATIFIED 2026-08-25** — `BRUISER` / `CARRY` / `BURST` / `SUPPORT` (`04-` §2) | — unblocked |
-| 2 | **The resource kind** — mana, energy, rage, or none. | open | §3 `resource_max`/`resource_regen`; ability cost semantics |
-| 3 | **`MAX_LEVEL`** and whether levels exist at all. | open — `04-` §2 assumes per-match levels with ability ranks | §4 table dimensions |
-| 4 | **`KIT_SLOT_COUNT`** — the Q/W/E/R convention or otherwise. | open | §7 record size, HUD layout (M7.0) |
+| 2 | **The resource kind** | ✅ **RATIFIED — energy** (small pool, fast regen). §3, §3.4 | — unblocked |
+| 3 | **`MAX_LEVEL`** | ✅ **RATIFIED — 8.** §7.1 | — unblocked |
+| 4 | **`KIT_SLOT_COUNT`** | ✅ **RATIFIED — 3** (two basics + ultimate). §7.1 | — unblocked |
 | 5 | **F1 — the ability authoring model.** | ✅ **resolved → fixed effect vocabulary** (`03-`) | — |
-| 6 | **The roster** — how many champions, and who they are. | **unblocked** — `04-` §2 sets the budget at 4–6; fiction is deferred and roles are functional, so authoring can proceed on ratification of item 1 | all content authoring |
+| 6 | **The roster** — how many champions, and who they are. | ✅ **unblocked** — budget 4–6 (`04-` §2); roles ratified; fiction deferred but roles are functional, so kits can be authored before names exist | — |
 
-Items 2–4 are small, cheap decisions that unblock a large amount of downstream work — they are now
-the cheapest remaining wins. Item 1 needs only a yes/edit on the `04-` §2 proposal.
+**Every schema-blocking decision is now closed.** The remaining open items are tuning and content
+questions, not shape questions: the ability unlock schedule (§7.1), whether critical strikes exist
+(`01-` §10), and the negative-resist curve (`01-` §4.2). None of them blocks authoring a champion.

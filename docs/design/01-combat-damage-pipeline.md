@@ -77,16 +77,20 @@ system in the schedule, matching the existing deferred-destruction model.
 
 ## 3. Damage types — closed enum, content members
 
-The **mechanism** is fixed by this spec; the **member list** is content and is owner-authored
-(open decision, see `00-` §6.4). Adding a type is a schema-level change — a new `resist_for`
-row, a new stat, a replay/hash consideration — never something an ability may invent.
+The **mechanism** is fixed by this spec; the **member list** is content and is owner-authored.
+Adding a type is a schema-level change — a new `resist_for` row, a new stat, a replay/hash
+consideration — never something an ability may invent.
+
+> **✅ RATIFIED 2026-08-25 — `physical` / `magic` / `true`.** Two resist stats give the genre's
+> fundamental counterplay axis (build resist against the threat you face); `true` is the
+> designer's escape hatch for effects that must land regardless of build.
 
 ```c
 typedef uint8_t DamageType;   // wire- and hash-stable; values never renumbered
-#define DMG_PHYSICAL  0u      // mitigated by  armor
-#define DMG_MAGIC     1u      // mitigated by  magic_resist
-#define DMG_TRUE      2u      // mitigated by  nothing
-#define DMG_TYPE_COUNT 3u     // <- placeholder set, pending the owner decision
+#define DMG_PHYSICAL   0u     // mitigated by  armor
+#define DMG_MAGIC      1u     // mitigated by  magic_resist
+#define DMG_TRUE       2u     // mitigated by  nothing
+#define DMG_TYPE_COUNT 3u
 ```
 
 Rules that hold whatever the member list becomes:
@@ -340,9 +344,9 @@ tick; self-check green."* Concretely, that means:
 
 ## 10. Open items this spec is waiting on
 
-| Item | Blocks | Owner decision in |
-|---|---|---|
-| Damage-type member list | §3 enum finalisation | `00-` §6.4 |
-| Whether critical strikes exist | §8.3 RNG draw policy | new |
-| Structure HP ceiling | §7 `HP_MAX` | follows the launch shape (`00-` §4) |
-| Negative-resist amplification curve | §4.2 (bounded 2.0× reflection is the recommended default) | new |
+| Item | Status |
+|---|---|
+| ~~Damage-type member list~~ | ✅ **RATIFIED** — `physical` / `magic` / `true` (§3) |
+| ~~Structure HP ceiling~~ | ✅ follows the ratified launch shape — `04-` §2, one arena with towers and a core |
+| Whether critical strikes exist | **open** — gates the §8.3 RNG draw policy. `03-` §5.5 records that if they arrive, the draw belongs in this pipeline, never in an effect op |
+| Negative-resist amplification curve | **open** — §4.2's bounded 2.0× reflection is the recommended default and is what the measured table in §4.3 assumes |

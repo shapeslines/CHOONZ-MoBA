@@ -170,8 +170,12 @@ inventing no content:
 3. ~~**The role list**~~ — ✅ **RATIFIED: `BRUISER` / `CARRY` / `BURST` / `SUPPORT`** (`04-` §2).
    Deliberately functional and carrying no lore commitment, which is what lets item 5 stay
    deferred without blocking anything.
-4. **The damage-type set** — still open. `01-` §3 specifies the mechanism and carries
-   `physical / magic / true` as a placeholder default.
+4. ~~**The damage-type set**~~ — ✅ **RATIFIED: `physical` / `magic` / `true`** (`01-` §3).
+
+**Also ratified 2026-08-25, closing the schema layer:** resource = **energy** (small pool, fast
+regen) · `KIT_SLOT_COUNT` = **3** (two basics + ultimate) · `MAX_LEVEL` = **8**, where the rank
+budget closes exactly at 8 points (`02-` §7.1). **No schema-blocking decision remains open** — what
+is left is tuning and content, not shape.
 5. ~~**Whether any fiction exists**~~ — ✅ **deferred by owner decision.** Item 3's role list is
    functional rather than fictional precisely so that this can stay deferred without blocking the
    schema, bot target priority, or the champion budget.
