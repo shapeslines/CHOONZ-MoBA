@@ -174,9 +174,13 @@ logic-hash break.
 
 ## 8. The ability definition
 
-The **core record is identical under both sides of open decision F1** (fixed effect vocabulary vs.
-the D-16 Lua VM). Only the `behaviour` field differs, so this half can be built before F1 is
-decided.
+The **core record is identical under both sides of decision F1** (fixed effect vocabulary vs. the
+D-16 Lua VM). Only the `behaviour` field differs.
+
+> **F1 RESOLVED 2026-08-25 → Option 1, the fixed effect vocabulary.** The instruction set is
+> specified in [`03-effect-vocabulary.md`](03-effect-vocabulary.md). D-16 is deferred rather than
+> overturned, and `03-` §2 keeps the migration a per-ability list swap. §8.1 below is retained as
+> the reasoning behind the call.
 
 ```
 AbilityDef
@@ -245,15 +249,14 @@ fail loudly.
 
 ## 10. Open items — owner-authored, and what each one blocks
 
-| # | Item | Blocks |
-|---|---|---|
-| 1 | **The role list.** Roles are owner-authored by rule; the schema cannot mint them. | §2.1 `role`, AI target priority (M5.5), the champion budget in `00-` §4 |
-| 2 | **The resource kind** — mana, energy, rage, or none. | §3 `resource_max`/`resource_regen`; ability cost semantics |
-| 3 | **`MAX_LEVEL`** and whether levels exist at all in the chosen launch shape. | §4 table dimensions |
-| 4 | **`KIT_SLOT_COUNT`** — the Q/W/E/R convention or otherwise. | §7 record size, HUD layout (M7.0) |
-| 5 | **F1 — the ability authoring model.** | §8.1 only; the rest of §8 is decided |
-| 6 | **The roster** — how many champions, and who they are. Depends on the launch shape and on whether any fiction exists (`00-` §6.5). | all content authoring |
+| # | Item | Status | Blocks |
+|---|---|---|---|
+| 1 | **The role list.** Roles are owner-authored by rule; the schema cannot mint them. | **proposal awaiting ratification** — `04-` §2 offers `BRUISER`/`CARRY`/`BURST`/`SUPPORT` | §2.1 `role`, AI target priority (M5.5), the champion budget |
+| 2 | **The resource kind** — mana, energy, rage, or none. | open | §3 `resource_max`/`resource_regen`; ability cost semantics |
+| 3 | **`MAX_LEVEL`** and whether levels exist at all. | open — `04-` §2 assumes per-match levels with ability ranks | §4 table dimensions |
+| 4 | **`KIT_SLOT_COUNT`** — the Q/W/E/R convention or otherwise. | open | §7 record size, HUD layout (M7.0) |
+| 5 | **F1 — the ability authoring model.** | ✅ **resolved → fixed effect vocabulary** (`03-`) | — |
+| 6 | **The roster** — how many champions, and who they are. | **unblocked** — `04-` §2 sets the budget at 4–6; fiction is deferred and roles are functional, so authoring can proceed on ratification of item 1 | all content authoring |
 
-Items 1–4 are small, cheap decisions that unblock a large amount of downstream work. Item 5 is the
-one genuine architectural fork. Item 6 depends on the `00-` §4 launch-shape decision and should not
-be attempted before it.
+Items 2–4 are small, cheap decisions that unblock a large amount of downstream work — they are now
+the cheapest remaining wins. Item 1 needs only a yes/edit on the `04-` §2 proposal.

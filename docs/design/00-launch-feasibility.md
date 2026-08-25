@@ -87,6 +87,13 @@ slice docs.
 
 These are mutually exclusive scoping choices, not a sequence. This is the owner decision.
 
+> **DECIDED 2026-08-25 — Shape B + C.** A small-format arena, shipped against bots, with human
+> PvP post-launch. The analysis below is retained as the reasoning behind that call; the concrete
+> product definition and the resulting roadmap delta now live in
+> [`04-launch-product.md`](04-launch-product.md), which supersedes this section as the active
+> plan. Headline: **76 remaining effort units (~5.5 weeks) against 203 risk-adjusted** — a ~63 %
+> reduction, with all six Phase-6 long-pole flags off the launch critical path.
+
 ### Shape A — full 5v5 MOBA
 
 The implied current default. Three lanes, jungle, ~15+ champions, matchmaking, server fleet.
@@ -131,7 +138,7 @@ Surfaced, not resolved — each is an owner call.
 
 | # | Finding | Where | Why it matters |
 |---|---|---|---|
-| **F1** | **Ability authoring model is specified two incompatible ways.** `ROADMAP.md` M5.3 says *"abilities as data, not code — a fixed effect vocabulary, **no scripting VM**"*. The vault decision index locks **D-16** (interpreted Lua 5.4 no-JIT sandbox VM) and **D-10** (script over native primitives, lifecycle hooks). | `ROADMAP.md` M5.3, `moba_engine_decision_index.json` | These are different products with different costs. D-16 is `reversibility: medium` and still unbuilt (P4), so the choice is genuinely open — but it must be made *before* M5.3, because M5.3 is the milestone that implements it. |
+| **F1** ✅ | **RESOLVED 2026-08-25 → the fixed effect vocabulary.** D-16 is deferred, not overturned; [`03-effect-vocabulary.md`](03-effect-vocabulary.md) §2 keeps the migration path open by construction. Original finding: **the ability authoring model was specified two incompatible ways.** `ROADMAP.md` M5.3 says *"abilities as data, not code — a fixed effect vocabulary, **no scripting VM**"*. The vault decision index locks **D-16** (interpreted Lua 5.4 no-JIT sandbox VM) and **D-10** (script over native primitives, lifecycle hooks). | `ROADMAP.md` M5.3, `moba_engine_decision_index.json` | These are different products with different costs. D-16 is `reversibility: medium` and still unbuilt (P4), so the choice is genuinely open — but it must be made *before* M5.3, because M5.3 is the milestone that implements it. |
 | **F2** | **`SIM_MAX_UNITS = 64`** caps commanded units per tick; widening it is a deliberate replay-format + logic-hash break. | `ROADMAP.md` M5.2 note (G23) | Fine for heroes. Verify against the chosen Shape's unit counts *before* M5.2, not after — it is cheap now and a format break later. |
 | **F3** | **`SIM_DT_FIXED = FIX_ONE/30 = 2184`**, which represents 0.0333252 s, not 0.0333333 s — **−0.0244 % per second**. | ADR-0001 + ADR-0002 | Any duration integrated as `x += rate * SIM_DT_FIXED` runs 0.024 % slow, so "seconds" and "ticks" disagree. Avoidable for free — see `01-` §6. |
 | **F4** | **Two working checkouts of the same GitHub repo** (`shapeslines/CHOONZ-MoBA`) exist side by side: `CHOONZ/CHOONZ-MoBA` (dirty — modified `docs/next-session.md`) and `CHOONZ/MOBA-proto` (clean), both at `ac4d2b4`. | filesystem | Divergent handoff docs across two checkouts is exactly the "handoff that claims an artifact that is not there" failure the fleet `AGENTS.md` warns about. Hygiene, not urgent. |
@@ -149,15 +156,22 @@ inventing no content:
 - `02-unit-ability-schema.md` — the concrete unit/ability table shape: exact fields, units,
   ranges, scaling, and the authoring contract.
 
-**Still owner-only** (nothing downstream can be authored until these land):
+**Added after the 2026-08-25 decisions:**
 
-1. **Launch shape** — A, B, C, or B+C (§4).
-2. **F1 — ability authoring model** — fixed effect vocabulary, or the D-16 Lua VM.
-3. **The role list** — the schema's `role` tag drives everything downstream and roles are
-   owner-authored by rule; the schema cannot mint them.
-4. **The damage-type set** — the pipeline treats types as a closed enum whose *members* are
-   content. `01-` §3 specifies the mechanism and carries `physical / magic / true` as a
-   placeholder default, explicitly marked as awaiting this decision.
-5. **Whether any fiction exists** — factions, tone, names. If it exists anywhere outside the
-   vault, point at it; if it does not, that is its own scoped piece of work and it gates naming,
-   art direction, and the champion identities in §4's champion budget.
+- `03-effect-vocabulary.md` — the M5.3 instruction set: 11 opcodes, selectors separated from
+  effects, static bounds in place of a VM fuel meter, cook-time validation, DoD.
+- `04-launch-product.md` — Shape B+C made concrete: the product table, the proposed role list,
+  and the milestone-by-milestone roadmap delta.
+
+**Decision log:**
+
+1. ~~**Launch shape**~~ — ✅ **Shape B + C** (small-format arena, vs-AI first). See `04-`.
+2. ~~**F1 — ability authoring model**~~ — ✅ **fixed effect vocabulary**. See `03-`.
+3. **The role list** — a proposal now exists in `04-` §2 (`BRUISER` / `CARRY` / `BURST` /
+   `SUPPORT`), deliberately functional and carrying no lore commitment. **Awaiting ratification** —
+   roles are owner-authored by rule and the schema may not mint them.
+4. **The damage-type set** — still open. `01-` §3 specifies the mechanism and carries
+   `physical / magic / true` as a placeholder default.
+5. ~~**Whether any fiction exists**~~ — ✅ **deferred by owner decision.** Item 3's role list is
+   functional rather than fictional precisely so that this can stay deferred without blocking the
+   schema, bot target priority, or the champion budget.
