@@ -100,7 +100,7 @@ Effort units use the `00-` §2 weights (S=1, M=3, L=8, XL=16).
 | M5.5 minion/tower AI | M = 3 | M = 3 | — towers required; minion waves optional |
 | M5.6 vision/fog | M = 3 | M = 3 | **keep** — it is gameplay, not just a netcode input; its server-filter half defers with Phase 6 |
 | **M6.0 – M6.7 netcode** | **61** | **0** | **deferred entirely** |
-| **NEW — hero bot AI** | — | **L = 8** | **added** — M5.5 explicitly defers hero AI |
+| **NEW — hero bot AI** | — | **L = 8** | **added** — M5.5 explicitly defers hero AI. Spec'd in [`05-bot-ai.md`](05-bot-ai.md). |
 | M7.0 – M7.4 slice | 15 | 15 | — |
 | **Total** | **142** | **76** | **−66 units (−46 %); −63 % vs the 203 risk-adjusted** |
 

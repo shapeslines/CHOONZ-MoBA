@@ -9,7 +9,8 @@
 | [`01-combat-damage-pipeline.md`](01-combat-damage-pipeline.md) | The single damage pipeline — stage order, Q16.16 mitigation math, the tick-quantization laws, magnitude budget, determinism rules, DoD. | **M5.4** (and M5.3's dependency) |
 | [`02-unit-ability-schema.md`](02-unit-ability-schema.md) | The unit/ability table shape: fields, units, ranges, level-table baking, states, kit, the cook-time contract. | **M5.3** |
 | [`03-effect-vocabulary.md`](03-effect-vocabulary.md) | The closed instruction set abilities are authored from — 11 opcodes, selectors separated from effects, static bounds instead of a VM fuel meter. | **M5.3** |
-| [`04-launch-product.md`](04-launch-product.md) | **The active plan.** Shape B+C made concrete: product table, proposed role list, and the milestone-by-milestone roadmap delta. | scoping |
+| [`04-launch-product.md`](04-launch-product.md) | **The active plan.** Shape B+C made concrete: product table, ratified role list, and the milestone-by-milestone roadmap delta. | scoping |
+| [`05-bot-ai.md`](05-bot-ai.md) | Hero bot AI — bots as a command source, perceiving through the vision query, scored actions, honest difficulty knobs, and the self-play balance harness. | **new** (`04-` §4) |
 
 **Read order:** `04-` for what is being built and by when · `01-`/`02-`/`03-` for how ·
 `00-` for why, and for the decision log.
