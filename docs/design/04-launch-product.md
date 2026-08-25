@@ -46,10 +46,10 @@ new work, not a discount. They are costed in §4 as a full `L`.
 | **Economy** | gold from kills and objectives; a small item set | Minion last-hitting is optional — it depends on whether minion waves ship (§4, M5.5). |
 | **Levelling** | per-match levels with ability ranks | Feeds `02-` §4's baked level table, which already assumes it. |
 
-### Roles — proposal for ratification (§6.2)
+### Roles — ✅ RATIFIED 2026-08-25
 
-Roles are owner-authored by rule; the schema may not mint them. Proposed minimal orthogonal set
-for 3v3 with 4–6 champions:
+Roles are owner-authored by rule; the schema may not mint them. **Owner-ratified minimal
+orthogonal set** for 3v3 with 4–6 champions:
 
 | Role | Function | Distinguished by |
 |---|---|---|
@@ -147,7 +147,7 @@ treat "is this fun against bots?" as a gate before M7.3 packaging — not after.
 | # | Item | Blocks | Note |
 |---|---|---|---|
 | **6.1** | Ratify the §2 product table — format, match length, win condition, economy | content authoring, M7.2 match rules | proposals with rationale; edit freely |
-| **6.2** | Ratify the §2 role list | `02-` §2.1, bot priority (M5.5), champion budget | owner-authored by rule — this is a proposal, not a decision |
+| ~~6.2~~ | ~~Ratify the §2 role list~~ | — | ✅ **RATIFIED 2026-08-25** — `BRUISER` / `CARRY` / `BURST` / `SUPPORT`. `02-` §2.1, bot target priority (M5.5) and the champion budget are unblocked. |
 | **6.3** | Distribution channel and price | M7.3 packaging | should land before M7.3 |
 | **6.4** | Art and audio budget and pipeline | any launch date | §5 — the largest unmeasured item |
 | **6.5** | `02-` §10 items 2–4: resource kind, `MAX_LEVEL`, `KIT_SLOT_COUNT` | `02-` §3, §4, §7 | small, cheap, high-leverage |

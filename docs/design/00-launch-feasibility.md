@@ -167,9 +167,9 @@ inventing no content:
 
 1. ~~**Launch shape**~~ — ✅ **Shape B + C** (small-format arena, vs-AI first). See `04-`.
 2. ~~**F1 — ability authoring model**~~ — ✅ **fixed effect vocabulary**. See `03-`.
-3. **The role list** — a proposal now exists in `04-` §2 (`BRUISER` / `CARRY` / `BURST` /
-   `SUPPORT`), deliberately functional and carrying no lore commitment. **Awaiting ratification** —
-   roles are owner-authored by rule and the schema may not mint them.
+3. ~~**The role list**~~ — ✅ **RATIFIED: `BRUISER` / `CARRY` / `BURST` / `SUPPORT`** (`04-` §2).
+   Deliberately functional and carrying no lore commitment, which is what lets item 5 stay
+   deferred without blocking anything.
 4. **The damage-type set** — still open. `01-` §3 specifies the mechanism and carries
    `physical / magic / true` as a placeholder default.
 5. ~~**Whether any fiction exists**~~ — ✅ **deferred by owner decision.** Item 3's role list is

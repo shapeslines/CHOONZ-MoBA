@@ -29,12 +29,15 @@
 
 ## Status
 
-**Decided 2026-08-25:** launch shape **B + C** (small-format arena, vs-AI first) · ability
-authoring via the **fixed effect vocabulary** (F1 → `03-`) · fiction **deferred**.
+**Decided 2026-08-25:** launch shape **B + C** (small-format 3v3 arena, vs-AI first) · ability
+authoring via the **fixed effect vocabulary** (F1 → `03-`) · roles **`BRUISER` / `CARRY` /
+`BURST` / `SUPPORT`** · fiction **deferred**.
 
-**Still open:** ratify the role list (`04-` §2) · the damage-type member list (`01-` §3) ·
-resource kind, `MAX_LEVEL`, `KIT_SLOT_COUNT` (`02-` §10) · distribution and the art/audio budget
-(`04-` §6).
+**Still open:** the damage-type member list (`01-` §3) · resource kind, `MAX_LEVEL`,
+`KIT_SLOT_COUNT` (`02-` §10) · distribution and the art/audio budget (`04-` §6).
+
+**Ready to build now:** `M5.3` and `M5.4` are spec-complete and depend on nothing in Phase 4 —
+they can start in parallel with the cooker rather than queueing behind it.
 
 These are design documents. No engine code, ADR, or roadmap entry was changed to add them —
 `ROADMAP.md` still describes the pre-decision plan, and `04-` §4 is the delta against it.

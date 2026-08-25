@@ -42,7 +42,7 @@ UnitDef
 |---|---|---|
 | `unit_id` | `AssetId` (u64) | ADR-0010 normalized-path FNV-1a/64. Cook-time collision diagnostics already exist from M4.0 — reuse them, do not add a second id scheme. |
 | `name_key` | `AssetId` | Points at a localization string, **never a display literal.** Costs nothing now; retrofitting is expensive. |
-| `role` | `u8` enum | **Owner-authored list — the schema may not mint roles** (§10). Role drives AI target priority, bot behaviour, and the champion-budget accounting in `00-` §4. |
+| `role` | `u8` enum | **Owner-ratified 2026-08-25:** `ROLE_BRUISER=0`, `ROLE_CARRY=1`, `ROLE_BURST=2`, `ROLE_SUPPORT=3` (`04-` §2). Values are hashed state — never renumber. The schema may not mint further roles; extending the list is an owner decision. Role drives AI target priority, bot behaviour, and the champion budget. |
 | `collision_radius` | `fix` | World units. Consumed by the M5.1 separation pass. |
 | `flags` | `u32` | Bitfield: `IS_HERO`, `IS_STRUCTURE`, `IS_MINION`, `TARGETABLE`, `BLOCKS_MOVEMENT`, `GRANTS_VISION`, `SELECTABLE`. Bit meanings are hashed state — never renumber. |
 
@@ -251,7 +251,7 @@ fail loudly.
 
 | # | Item | Status | Blocks |
 |---|---|---|---|
-| 1 | **The role list.** Roles are owner-authored by rule; the schema cannot mint them. | **proposal awaiting ratification** — `04-` §2 offers `BRUISER`/`CARRY`/`BURST`/`SUPPORT` | §2.1 `role`, AI target priority (M5.5), the champion budget |
+| 1 | **The role list.** Roles are owner-authored by rule; the schema cannot mint them. | ✅ **RATIFIED 2026-08-25** — `BRUISER` / `CARRY` / `BURST` / `SUPPORT` (`04-` §2) | — unblocked |
 | 2 | **The resource kind** — mana, energy, rage, or none. | open | §3 `resource_max`/`resource_regen`; ability cost semantics |
 | 3 | **`MAX_LEVEL`** and whether levels exist at all. | open — `04-` §2 assumes per-match levels with ability ranks | §4 table dimensions |
 | 4 | **`KIT_SLOT_COUNT`** — the Q/W/E/R convention or otherwise. | open | §7 record size, HUD layout (M7.0) |
