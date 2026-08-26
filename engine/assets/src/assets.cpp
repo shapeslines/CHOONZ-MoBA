@@ -1,5 +1,6 @@
 #include "assets/assets.h"
 
+#include "assets/mba.h"
 #include "assets/tga.h"
 #include "assets/wav.h"
 #include "core/assert.h"
@@ -448,6 +449,46 @@ static AssetHandle begin_file_load(AssetRegistry* registry, const char* path,
     if (found) return existing;
     *out_finished = false;
     return null_asset_handle();
+}
+
+AssetHandle asset_load(AssetRegistry* registry, const char* path,
+                       AssetLifetime lifetime) {
+    if (!registry || !registry->initialized || lifetime > ASSET_LIFETIME_GLOBAL)
+        return null_asset_handle();
+
+    char normalized[ASSET_PATH_MAX];
+    size_t normalized_length = 0u;
+    if (!asset_path_normalize(path, normalized, sizeof(normalized), &normalized_length))
+        return null_asset_handle();
+    const AssetId expected_id = asset_id_normalized_bytes(normalized, normalized_length);
+    if (expected_id == ASSET_ID_NULL) return null_asset_handle();
+
+    registry->io_arena->offset = registry->io_base_offset;
+    BoundedArenaAlloc bounded{registry->io_arena, registry->max_file_bytes};
+    Allocator file_allocator{bounded_arena_allocate, &bounded, ALLOC_ARENA};
+    PlatformFile file{};
+    AssetHandle result = null_asset_handle();
+    if (platform_file_read_rooted(registry->asset_root, normalized,
+                                  registry->max_file_bytes, file_allocator, &file) &&
+        file.size != 0u) {
+        MbaAssetView baked{};
+        if (mba_inspect(file.data, file.size, &baked) &&
+            baked.header.asset_id == expected_id) {
+            switch ((MbaAssetType)baked.header.type) {
+            case MBA_ASSET_TYPE_TEXTURE: {
+                const AssetTextureSource source{baked.texture.rgba8,
+                                                baked.texture.width,
+                                                baked.texture.height};
+                result = asset_register_texture(registry, normalized, lifetime, source);
+                break;
+            }
+            default:
+                break;
+            }
+        }
+    }
+    registry->io_arena->offset = registry->io_base_offset;
+    return result;
 }
 
 AssetHandle asset_load_texture_tga(AssetRegistry* registry, const char* path,

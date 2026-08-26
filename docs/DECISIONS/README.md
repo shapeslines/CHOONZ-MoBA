@@ -26,6 +26,7 @@ rather than editing it (note the supersession in both).
 | 0012 | [Vulkan 1.3 hard minimum: dynamicRendering + synchronization2](0012-vulkan-13-minimum-spec.md) | Accepted |
 | 0013 | [Sim RNG draw policy: fixed per-tick script](0013-sim-rng-draw-policy.md) | Accepted |
 | 0014 | [Command validation, stale targets, event backpressure](0014-command-validation-and-backpressure.md) | Accepted |
+| 0015 | [Unified baked asset container `.mba` version 1](0015-mba-v1-container.md) | Accepted |
 
 > Numbering note: `0011` was written first (the lockstep → server-authoritative
 > change made during the design phase); `0001–0010` are the foundational
