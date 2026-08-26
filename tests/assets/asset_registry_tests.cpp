@@ -470,7 +470,8 @@ TEST(assets, baked_tga_and_wav_match_direct_parser_values) {
     size_t baked_tga_bytes = 0u;
     size_t baked_wav_bytes = 0u;
     MbaTextureSource texture_source{direct_texture.rgba8,
-                                    direct_texture.width * direct_texture.height * 4u,
+                                    (size_t)direct_texture.width *
+                                        (size_t)direct_texture.height * 4u,
                                     direct_texture.width, direct_texture.height};
     MbaSoundSource sound_source{direct_sound.pcm, direct_sound.pcm_bytes,
                                 direct_sound.sample_rate, direct_sound.channels,
@@ -506,6 +507,22 @@ TEST(assets, baked_tga_and_wav_match_direct_parser_values) {
         CHECK(test_release_owned_directory(&owned));
         return;
     }
+    static const uint8_t io_sentinel_bytes[16] = {
+        0xa0u, 0xa1u, 0xa2u, 0xa3u, 0xa4u, 0xa5u, 0xa6u, 0xa7u,
+        0xa8u, 0xa9u, 0xaau, 0xabu, 0xacu, 0xadu, 0xaeu, 0xafu,
+    };
+    uint8_t* io_sentinel = (uint8_t*)arena_push(
+        &fixture.io, sizeof(io_sentinel_bytes), 1u);
+    CHECK(io_sentinel != nullptr);
+    if (!io_sentinel) {
+        asset_registry_shutdown(&fixture.registry, 0u);
+        CHECK(std::remove(tga_file_path) == 0);
+        CHECK(std::remove(wav_file_path) == 0);
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+    std::memcpy(io_sentinel, io_sentinel_bytes, sizeof(io_sentinel_bytes));
+    const size_t io_entry_offset = fixture.io.offset;
     AssetHandle texture = asset_load(&fixture.registry, tga_id,
                                      ASSET_LIFETIME_LEVEL);
     AssetHandle sound = asset_load(&fixture.registry, wav_id,
@@ -526,7 +543,9 @@ TEST(assets, baked_tga_and_wav_match_direct_parser_values) {
           sound_view.pcm_bytes == direct_sound.pcm_bytes &&
           std::memcmp(sound_view.pcm, direct_sound.pcm,
                       direct_sound.pcm_bytes) == 0);
-    CHECK(fixture.io.offset == fixture.registry.io_base_offset);
+    CHECK(fixture.io.offset == io_entry_offset &&
+          std::memcmp(io_sentinel, io_sentinel_bytes,
+                      sizeof(io_sentinel_bytes)) == 0);
     AssetHandle sound_again = asset_load(&fixture.registry, wav_id,
                                          ASSET_LIFETIME_GLOBAL);
     CHECK(sound_again.h == sound.h);
@@ -539,7 +558,9 @@ TEST(assets, baked_tga_and_wav_match_direct_parser_values) {
     CHECK(handle_is_null(missing.h));
     CHECK(fixture.level.offset == level_offset &&
           fixture.registry.live_count == live_count &&
-          fixture.io.offset == fixture.registry.io_base_offset);
+          fixture.io.offset == io_entry_offset &&
+          std::memcmp(io_sentinel, io_sentinel_bytes,
+                      sizeof(io_sentinel_bytes)) == 0);
 
     asset_registry_shutdown(&fixture.registry, 0u);
     CHECK(std::remove(tga_file_path) == 0);
@@ -623,6 +644,21 @@ TEST(assets, baked_runtime_failures_are_mutation_free) {
 
     RegistryFixture fixture;
     CHECK(init_fixture(&fixture, 8u, owned.path, catalog));
+    static const uint8_t io_sentinel_bytes[16] = {
+        0xb0u, 0xb1u, 0xb2u, 0xb3u, 0xb4u, 0xb5u, 0xb6u, 0xb7u,
+        0xb8u, 0xb9u, 0xbau, 0xbbu, 0xbcu, 0xbdu, 0xbeu, 0xbfu,
+    };
+    uint8_t* io_sentinel = (uint8_t*)arena_push(
+        &fixture.io, sizeof(io_sentinel_bytes), 1u);
+    CHECK(io_sentinel != nullptr);
+    if (!io_sentinel) {
+        asset_registry_shutdown(&fixture.registry, 0u);
+        for (uint32_t i = 0u; i < 6u; ++i) CHECK(std::remove(file_paths[i]) == 0);
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+    std::memcpy(io_sentinel, io_sentinel_bytes, sizeof(io_sentinel_bytes));
+    const size_t io_entry_offset = fixture.io.offset;
     const size_t level_base = fixture.level.offset;
     const size_t global_base = fixture.global.offset;
     const uint32_t live_base = fixture.registry.live_count;
@@ -636,7 +672,9 @@ TEST(assets, baked_runtime_failures_are_mutation_free) {
         CHECK(handle_is_null(asset_load(&fixture.registry, id,
                                         ASSET_LIFETIME_LEVEL).h));
         CHECK(fixture.level.offset == level_base && fixture.global.offset == global_base);
-        CHECK(fixture.io.offset == fixture.registry.io_base_offset);
+        CHECK(fixture.io.offset == io_entry_offset &&
+              std::memcmp(io_sentinel, io_sentinel_bytes,
+                          sizeof(io_sentinel_bytes)) == 0);
         CHECK(fixture.registry.live_count == live_base &&
               fixture.registry.by_id.count == map_base);
         CHECK(fixture.fake.creates == 0u && fixture.fake.destroys == 0u);
@@ -654,7 +692,9 @@ TEST(assets, baked_runtime_failures_are_mutation_free) {
                                     asset_id("renderer-fail.tga"),
                                     ASSET_LIFETIME_LEVEL).h));
     CHECK(fixture.level.offset == level_base && fixture.global.offset == global_base);
-    CHECK(fixture.io.offset == fixture.registry.io_base_offset);
+    CHECK(fixture.io.offset == io_entry_offset &&
+          std::memcmp(io_sentinel, io_sentinel_bytes,
+                      sizeof(io_sentinel_bytes)) == 0);
     CHECK(fixture.registry.live_count == live_base &&
           fixture.registry.by_id.count == map_base);
     CHECK(fixture.fake.creates == 0u && fixture.fake.destroys == 0u);

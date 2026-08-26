@@ -422,3 +422,106 @@ cleanup:
     CloseHandle(root_handle);
     return success;
 }
+
+bool platform_file_remove_rooted(const char* root, const char* relative_path) {
+    if (!root || !relative_path || relative_path[0] == '\0' ||
+        relative_path[0] == '/' || relative_path[0] == '\\') return false;
+
+    wchar_t wide_root[1024];
+    wchar_t wide_relative[1024];
+    wchar_t full_root[1024];
+    if (!utf8_to_wide(root, wide_root, 1024) ||
+        !utf8_to_wide(relative_path, wide_relative, 1024)) return false;
+    const DWORD full_root_length = GetFullPathNameW(wide_root, 1024, full_root, nullptr);
+    if (full_root_length == 0u || full_root_length >= 1024u) return false;
+
+    HANDLE root_handle = CreateFileW(
+        full_root, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (root_handle == INVALID_HANDLE_VALUE) return false;
+
+    HANDLE components[512];
+    uint32_t component_count = 0u;
+    bool success = false;
+    DWORD root_attributes = 0u;
+    wchar_t final_root[1024];
+    size_t final_root_length = 0u;
+    wchar_t current[1024]{};
+    const size_t root_chars = wcslen(full_root);
+    size_t current_length = 0u;
+    size_t cursor = 0u;
+    if (!win32_handle_attributes(root_handle, &root_attributes) ||
+        (root_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0u ||
+        (root_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u ||
+        !win32_final_path(root_handle, final_root, 1024u, &final_root_length))
+        goto cleanup;
+
+    if (root_chars + 2u > sizeof(current) / sizeof(current[0])) goto cleanup;
+    memcpy(current, full_root, (root_chars + 1u) * sizeof(wchar_t));
+    current_length = root_chars;
+    if (current_length != 0u && current[current_length - 1u] != L'\\' &&
+        current[current_length - 1u] != L'/') current[current_length++] = L'\\';
+
+    for (;;) {
+        const size_t segment_begin = cursor;
+        while (wide_relative[cursor] != L'\0' && wide_relative[cursor] != L'/') {
+            if (wide_relative[cursor] == L'\\' || wide_relative[cursor] == L':')
+                goto cleanup;
+            ++cursor;
+        }
+        const size_t segment_length = cursor - segment_begin;
+        if (segment_length == 0u ||
+            (segment_length == 1u && wide_relative[segment_begin] == L'.') ||
+            (segment_length == 2u && wide_relative[segment_begin] == L'.' &&
+             wide_relative[segment_begin + 1u] == L'.') ||
+            component_count >= sizeof(components) / sizeof(components[0]) ||
+            segment_length + current_length + 1u >
+                sizeof(current) / sizeof(current[0])) goto cleanup;
+
+        memcpy(current + current_length, wide_relative + segment_begin,
+               segment_length * sizeof(wchar_t));
+        current_length += segment_length;
+        current[current_length] = L'\0';
+        const bool final_component = wide_relative[cursor] == L'\0';
+        const DWORD access = final_component
+            ? DELETE | FILE_READ_ATTRIBUTES : FILE_READ_ATTRIBUTES;
+        HANDLE component = CreateFileW(
+            current, access, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (component == INVALID_HANDLE_VALUE) {
+            if (final_component && GetLastError() == ERROR_FILE_NOT_FOUND)
+                success = true;
+            goto cleanup;
+        }
+        components[component_count++] = component;
+
+        DWORD attributes = 0u;
+        wchar_t final_component_path[1024];
+        size_t final_component_length = 0u;
+        if (!win32_handle_attributes(component, &attributes) ||
+            (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u ||
+            (!final_component && (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0u) ||
+            (final_component && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0u) ||
+            !win32_final_path(component, final_component_path, 1024u,
+                              &final_component_length) ||
+            !win32_path_is_descendant(final_root, final_root_length,
+                                      final_component_path,
+                                      final_component_length)) goto cleanup;
+
+        if (final_component) {
+            BY_HANDLE_FILE_INFORMATION info{};
+            if (!GetFileInformationByHandle(component, &info) ||
+                info.nNumberOfLinks != 1u) goto cleanup;
+            success = win32_discard_open_file(component);
+            goto cleanup;
+        }
+        current[current_length++] = L'\\';
+        ++cursor;
+        if (wide_relative[cursor] == L'\0') goto cleanup;
+    }
+
+cleanup:
+    while (component_count != 0u) CloseHandle(components[--component_count]);
+    CloseHandle(root_handle);
+    return success;
+}

@@ -28,6 +28,7 @@ include(cmake/CompilerWarnings.cmake)   # moba_warnings
 include(cmake/EngineOptions.cmake)      # moba_options
 include(cmake/SimIsolation.cmake)       # moba_enforce_sim_target()
 include(cmake/CompileShaders.cmake)     # add_shader_library()
+include(cmake/AssetContent.cmake)       # configure-time asset path gate
 
 # --- Vulkan (ADR-0004: link HEADERS only; the loader is hand-loaded) ---
 # Soft by default (null backend when the SDK is absent — dev convenience); CI turns
@@ -65,6 +66,7 @@ list(SORT MOBA_CONTENT_SOURCE_FILES)
 set(MOBA_ASSET_MANIFEST_CONTENT "")
 foreach(asset_path IN LISTS MOBA_CONTENT_SOURCE_FILES)
     file(TO_CMAKE_PATH "${asset_path}" asset_path)
+    moba_require_canonical_asset_path("${asset_path}")
     string(APPEND MOBA_ASSET_MANIFEST_CONTENT "${asset_path}\n")
 endforeach()
 set(MOBA_ASSET_MANIFEST "${CMAKE_BINARY_DIR}/content/asset_manifest.txt")

@@ -1,6 +1,6 @@
 // M2.1 platform file I/O tests — read-into-allocator + atomic whole-file write
 // (ARCHITECTURE §4.1). Runs headlessly; files land in the CTest working dir and are
-// removed at the end of each case (remove() — the seam has no delete on purpose).
+// removed at the end of each case. Rooted marker removal has its own confined seam.
 #include "test.h"
 #include "core/mem.h"
 #include "core/sim_config.h"
@@ -325,6 +325,77 @@ TEST(platform, rooted_file_write_is_atomic_and_rejects_junction_escape) {
 
     CHECK(DeleteFileA(temporary) != 0);
     CHECK(DeleteFileA(destination) != 0);
+    CHECK(test_release_owned_directory(&root));
+    CHECK(test_release_owned_directory(&outside));
+}
+
+TEST(platform, rooted_file_remove_is_handle_bound_and_idempotent) {
+    OwnedTestDirectory root{};
+    OwnedTestDirectory outside{};
+    root.scope_custody = INVALID_HANDLE_VALUE;
+    root.directory_custody = INVALID_HANDLE_VALUE;
+    outside.scope_custody = INVALID_HANDLE_VALUE;
+    outside.directory_custody = INVALID_HANDLE_VALUE;
+    const bool root_owned = test_create_owned_directory("remove-root", &root);
+    CHECK(root_owned);
+    if (!root_owned) return;
+    const bool outside_owned = test_create_owned_directory("remove-outside", &outside);
+    CHECK(outside_owned);
+    if (!outside_owned) {
+        CHECK(test_release_owned_directory(&root));
+        return;
+    }
+
+    char inside_path[256];
+    char outside_path[256];
+    wchar_t junction[256];
+    wchar_t hard_link[256];
+    wchar_t outside_file_wide[256];
+    const int inside_chars = std::snprintf(
+        inside_path, sizeof(inside_path), "%s/marker.bin", root.path);
+    const int outside_chars = std::snprintf(
+        outside_path, sizeof(outside_path), "%s/payload.bin", outside.path);
+    const int junction_chars = swprintf_s(junction, L"%s\\escape", root.wide_path);
+    const int hard_link_chars = swprintf_s(
+        hard_link, L"%s\\outside-hardlink.bin", root.wide_path);
+    const int outside_wide_chars = swprintf_s(
+        outside_file_wide, L"%s\\payload.bin", outside.wide_path);
+    const bool paths_ready = inside_chars > 0 && outside_chars > 0 &&
+        junction_chars > 0 && hard_link_chars > 0 && outside_wide_chars > 0;
+    CHECK(paths_ready);
+    if (!paths_ready) {
+        CHECK(test_release_owned_directory(&root));
+        CHECK(test_release_owned_directory(&outside));
+        return;
+    }
+
+    const char* marker = "catalog-marker";
+    const char* sentinel = "outside-sentinel";
+    CHECK(platform_file_write(inside_path, marker, std::strlen(marker)));
+    CHECK(platform_file_write(outside_path, sentinel, std::strlen(sentinel)));
+    CHECK(platform_file_remove_rooted(root.path, "marker.bin"));
+    CHECK(GetFileAttributesA(inside_path) == INVALID_FILE_ATTRIBUTES);
+    CHECK(platform_file_remove_rooted(root.path, "marker.bin"));
+    CHECK(!platform_file_remove_rooted(root.path, "../payload.bin"));
+
+    const bool junction_created = test_create_junction(junction, outside.wide_path);
+    CHECK(junction_created);
+    if (junction_created) {
+        CHECK(!platform_file_remove_rooted(root.path, "escape/payload.bin"));
+        CHECK(GetFileAttributesA(outside_path) != INVALID_FILE_ATTRIBUTES);
+    }
+
+    const bool hard_link_created = CreateHardLinkW(
+        hard_link, outside_file_wide, nullptr) != 0;
+    CHECK(hard_link_created);
+    if (hard_link_created) {
+        CHECK(!platform_file_remove_rooted(root.path, "outside-hardlink.bin"));
+        CHECK(GetFileAttributesW(hard_link) != INVALID_FILE_ATTRIBUTES);
+        CHECK(GetFileAttributesA(outside_path) != INVALID_FILE_ATTRIBUTES);
+        CHECK(DeleteFileW(hard_link) != 0);
+    }
+    if (junction_created) CHECK(RemoveDirectoryW(junction) != 0);
+    CHECK(DeleteFileA(outside_path) != 0);
     CHECK(test_release_owned_directory(&root));
     CHECK(test_release_owned_directory(&outside));
 }

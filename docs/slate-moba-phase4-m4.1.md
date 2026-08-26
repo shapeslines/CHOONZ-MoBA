@@ -174,6 +174,17 @@ security and acceptance verdicts, and PR #54 is ready while merge remains owner-
   `25E85134E5226B7A8FD238C59AB6189B90A9CC14D8511059BD3FC7406F7B49C9`.
 - README, both architecture records, ROADMAP, journal, next-session, ADR index, and
   this slate now reflect the observed M4.1 implementation and local evidence.
+- Hosted checks on superseded candidate `51c228f` exposed two bounded test-harness
+  defects: CodeQL rejected one test-only unsigned multiplication before widening,
+  and hosted fresh-walk lacked the optional `Get-FileHash` cmdlet. The multiplication
+  now widens both operands before arithmetic; the cooker fixture uses the baseline
+  .NET SHA-256 API. Focused Debug/Release asset and cooker tests pass. That candidate
+  remains superseded; only the repair head may satisfy final gates.
+- The closure candidate retains the portable .NET SHA-256 helper and its `abc` known-vector
+  assertion; direct PowerShell 5.1 execution passes without an executable hash-cmdlet dependency.
+- Fresh-context security and acceptance reviews of the closure seams return PASS. The local
+  committed-head fresh-walk and exact-head hosted CI/CodeQL checks are still required before S7
+  can close; the candidate SHA is the single closure commit at this branch tip.
 - Pending on the closure head: fresh-context security, fresh-context acceptance,
   exact-head CI/CodeQL, and ready-state promotion. No merge is authorized by this
   slice.

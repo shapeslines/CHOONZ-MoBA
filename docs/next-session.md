@@ -1,9 +1,11 @@
 # MOBA-proto — next session
 
-## State @ M4.1 final local acceptance · 2026-08-13 · DESKTOP-BK4F0OA/Codex
+## State @ M4.1 closure candidate · 2026-08-25 · DESKTOP-BK4F0OA/Codex
 
 M4.0 is merged on `main` through PR #52. The isolated `codex/m4.1-cooker` branch and draft PR #54
-contain M4.1 only; the historical root checkout and prior worktrees were preserved.
+contain M4.1 only; the historical root checkout and prior worktrees were preserved. The exact
+`codex/m4.1-cooker` delta from `51c228f` is reconciled as one M4.1 closure candidate; its full
+commit SHA is the branch tip produced by the closure commit.
 
 Implementation and local acceptance are complete:
 
@@ -22,8 +24,10 @@ Implementation and local acceptance are complete:
 
 ## Verified locally
 
-- `/WX` Debug, RelWithDebInfo, Release: 48/48 CTests each. Debug-ASan: 48/48.
+- `/WX` Debug, RelWithDebInfo, Release: 49/49 CTests each. Debug-ASan: 49/49.
 - clang-cl 19.1.5 + active UBSan: 6/6.
+- Windows PowerShell 5.1 targeted `cooker_cli` passes, including the .NET SHA-256 `abc`
+  known-vector assertion; no executable hash-cmdlet dependency remains.
 - Independent Debug/Release clean cooks are byte-identical:
   - `uv_test.tga.mba`: `43C058906AFD340F3A9E33A40ABC5D88D62516E3D4621A2C3B9D5E33B2ADC90A`
   - `asset_ids.gen.h`: `518FA7857829A0F23B84589ABBAFA024052FD7C63EEF963DB3E93D47CAAAD43F`
@@ -34,16 +38,16 @@ Implementation and local acceptance are complete:
   RTX 4070 Ti proof loads baked texture ID `0x3d9bff0eddada061`, exits cleanly after 90 frames, and
   yields a visually inspected 1280×720 BMP, 2,764,854 bytes, SHA-256
   `25E85134E5226B7A8FD238C59AB6189B90A9CC14D8511059BD3FC7406F7B49C9`.
+- The closure-head fresh-walk, exact-head hosted checks, and ready-state promotion remain the
+  final gates for this candidate; merge is not authorized.
 
 ## First action
 
-1. Treat the final closure commit as the only candidate head and obtain fresh-context security and
-   acceptance verdicts against it.
-2. Repair any finding without widening M4.1, rerun the affected and full gates, and update the exact
-   candidate SHA.
-3. Require every exact-head PR #54 CI/CodeQL check, then mark the PR ready. Merge remains a separate
-   owner-approved action; verify tree identity and synchronize `main` after landing.
-4. From green `main`, plan M4.2 as a separate cooker-only PNG/DEFLATE + mip-generation slate.
+1. Use the single closure commit at this branch tip as the only candidate head; obtain fresh-context
+   security and acceptance verdicts against that exact SHA.
+2. Require every exact-head PR #54 CI/CodeQL check, then mark the PR ready. Merge remains a separate
+   owner-approved action; do not synchronize `main` in this slice.
+3. Leave M4.2 unopened until the owner lands this green head and starts a separate slate.
 
 ## M4.2 boundary
 

@@ -436,9 +436,45 @@ static bool write_if_changed(const char* root, const std::string& relative,
     return true;
 }
 
+static bool file_matches(const char* root, const std::string& relative,
+                         const uint8_t* bytes, size_t size) {
+    if ((!bytes && size) || !root) return false;
+    PlatformFile existing{};
+    if (!platform_file_read_rooted(root, relative.c_str(), size,
+                                   cooker_heap_allocator(), &existing))
+        return false;
+    const bool equal = existing.size == size &&
+        (size == 0u || std::memcmp(existing.data, bytes, size) == 0);
+    release_platform_file(&existing);
+    return equal;
+}
+
 static CookerResult publish(const CookerArgs& args,
                             const std::vector<CookedAsset>& assets,
                             const std::string& header) {
+    static const std::string header_path("assets/asset_ids.gen.h");
+    bool all_unchanged = file_matches(
+        args.generated_root, header_path, (const uint8_t*)header.data(),
+        header.size());
+    for (const CookedAsset& asset : assets) {
+        all_unchanged = file_matches(
+            args.out_root, asset.entry.baked_path, asset.bytes.data(),
+            asset.bytes.size()) && all_unchanged;
+    }
+    if (all_unchanged) {
+        std::printf("cooked assets=%zu written=0 unchanged=%zu\n",
+                    assets.size(), assets.size() + 1u);
+        return CookerResult::Ok;
+    }
+
+    // The generated header is the catalog commit marker. Invalidate any previous
+    // generation before the first baked-file mutation; only a complete publication
+    // installs a new marker. Removal is root-confined and handle-bound.
+    if (!platform_file_remove_rooted(args.generated_root, header_path.c_str())) {
+        std::fprintf(stderr, "cooker: cannot invalidate generated catalog\n");
+        return CookerResult::IoFailure;
+    }
+
     uint32_t written_count = 0u;
     uint32_t unchanged_count = 0u;
     for (const CookedAsset& asset : assets) {
@@ -453,7 +489,6 @@ static CookerResult publish(const CookerArgs& args,
         else ++unchanged_count;
     }
 
-    static const std::string header_path("assets/asset_ids.gen.h");
     bool header_written = false;
     if (!write_if_changed(args.generated_root, header_path,
                           (const uint8_t*)header.data(), header.size(),

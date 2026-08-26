@@ -21,6 +21,22 @@ function Write-Utf8([string]$Path, [string]$Text) {
     [IO.File]::WriteAllText($Path, $Text, [Text.UTF8Encoding]::new($false))
 }
 
+function Get-Sha256Hex([string]$Path) {
+    # CTest can run this script with a reduced PowerShell command surface, so use
+    # the .NET BCL directly instead of an optional hash cmdlet.
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        $hash = $algorithm.ComputeHash($stream)
+        return ([BitConverter]::ToString($hash)).Replace('-', '')
+    }
+    finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+        $algorithm.Dispose()
+    }
+}
+
 function Invoke-Cooker([string]$Exe, [string[]]$Arguments, [int]$Expected) {
     $savedPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -80,7 +96,7 @@ function Snapshot-Files($Roots) {
             $scope = if ($base -eq $Roots.Out) { 'baked/' } else { 'generated/' }
             $items += [pscustomobject]@{
                 Path = $scope + $relative
-                Hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+                Hash = Get-Sha256Hex $file.FullName
                 Length = $file.Length
                 Ticks = $file.LastWriteTimeUtc.Ticks
             }
@@ -134,6 +150,16 @@ try {
 
     [IO.Directory]::CreateDirectory((Join-Path $fixture '.git')) | Out-Null
     Initialize-FreshWalkLease $lease
+
+    # Exercise the portable digest path in the same shell that runs the CTest
+    # entrypoint. This keeps byte-publication comparisons tied to SHA-256 rather
+    # than merely proving that two output directories happen to match.
+    $hashFixture = Join-Path $fixture 'sha256-portable-fixture.bin'
+    [IO.File]::WriteAllBytes($hashFixture, [byte[]]@(0x61, 0x62, 0x63))
+    if ((Get-Sha256Hex $hashFixture) -ne
+        'BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD') {
+        Fail 'portable SHA-256 implementation returned an unexpected digest'
+    }
 
     $first = New-Roots $fixture 'first'
     $second = New-Roots $fixture 'second'
@@ -281,6 +307,38 @@ try {
     if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($blockingTemp)) -ne
         [Convert]::ToBase64String($sentinel)) {
         Fail 'temporary collision sentinel changed'
+    }
+
+    $stale = New-Roots $fixture 'stale-marker'
+    Populate-Sources $stale
+    $staleArgs = @('--source-root', $stale.Source, '--manifest', $stale.Manifest,
+                   '--out-root', $stale.Out, '--generated-root', $stale.Generated)
+    Invoke-Cooker $Cooker $staleArgs 0 | Out-Null
+    $staleHeader = Join-Path $stale.Generated 'assets\asset_ids.gen.h'
+    $staleTone = Join-Path $stale.Out 'tone.wav.mba'
+    $oldToneHash = Get-Sha256Hex $staleTone
+
+    $toneSource = Join-Path $stale.Source 'tone.wav'
+    [byte[]]$toneBytes = [IO.File]::ReadAllBytes($toneSource)
+    $toneBytes[$toneBytes.Length - 1] = $toneBytes[$toneBytes.Length - 1] -bxor 0xff
+    [IO.File]::WriteAllBytes($toneSource, $toneBytes)
+    $tgaSource = Join-Path $stale.Source 'uv_test.tga'
+    [byte[]]$tgaBytes = [IO.File]::ReadAllBytes($tgaSource)
+    $tgaBytes[$tgaBytes.Length - 1] = $tgaBytes[$tgaBytes.Length - 1] -bxor 0xff
+    [IO.File]::WriteAllBytes($tgaSource, $tgaBytes)
+
+    $staleBlockingTemp = Join-Path $stale.Out 'uv_test.tga.mba.tmp'
+    [IO.File]::WriteAllBytes($staleBlockingTemp, $sentinel)
+    Invoke-Cooker $Cooker $staleArgs 1 | Out-Null
+    if ((Get-Sha256Hex $staleTone) -eq $oldToneHash) {
+        Fail 'stale-marker fixture did not publish the first changed asset'
+    }
+    if (Test-Path -LiteralPath $staleHeader -PathType Leaf) {
+        Fail 'failed recook retained the previous catalog commit marker'
+    }
+    if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($staleBlockingTemp)) -ne
+        [Convert]::ToBase64String($sentinel)) {
+        Fail 'stale-marker temporary collision sentinel changed'
     }
 
     $marker = New-Roots $fixture 'marker-collision'

@@ -556,7 +556,10 @@ AssetHandle asset_load(AssetRegistry* registry, AssetId id,
     uint32_t slot = 0u;
     if (!next_slot_available(registry, &slot)) return null_asset_handle();
 
-    registry->io_arena->offset = registry->io_base_offset;
+    if (!valid_arena(registry->io_arena) ||
+        registry->io_arena->offset < registry->io_base_offset)
+        return null_asset_handle();
+    const size_t io_entry_offset = registry->io_arena->offset;
     BoundedArenaAlloc bounded{registry->io_arena, registry->max_file_bytes};
     Allocator file_allocator{bounded_arena_allocate, &bounded, ALLOC_ARENA};
     PlatformFile file{};
@@ -582,7 +585,7 @@ AssetHandle asset_load(AssetRegistry* registry, AssetId id,
             }
         }
     }
-    registry->io_arena->offset = registry->io_base_offset;
+    registry->io_arena->offset = io_entry_offset;
     return result;
 }
 

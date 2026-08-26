@@ -105,6 +105,9 @@ add_test(NAME asset_parsers_boundary
 add_test(NAME cooker_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_cooker_boundary.cmake")
+add_test(NAME asset_content_policy
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_asset_content_policy.cmake")
 add_test(NAME cooker_cli
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/assets/cooker_cli_tests.ps1"

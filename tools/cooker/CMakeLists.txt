@@ -14,9 +14,9 @@ set(MOBA_GENERATED_ASSET_HEADER
 
 set(_moba_content_sources "")
 set(_moba_baked_outputs "")
-set(_moba_prepare_script "file(MAKE_DIRECTORY [[${MOBA_BAKED_ROOT}]])\n")
-string(APPEND _moba_prepare_script
-    "file(MAKE_DIRECTORY [[${MOBA_GENERATED_ROOT}/assets]])\n")
+set(_moba_content_directories
+    "${MOBA_BAKED_ROOT}"
+    "${MOBA_GENERATED_ROOT}/assets")
 set(_moba_baked_parents "")
 foreach(asset_path IN LISTS MOBA_CONTENT_SOURCE_FILES)
     list(APPEND _moba_content_sources "${CMAKE_SOURCE_DIR}/assets/${asset_path}")
@@ -28,16 +28,15 @@ foreach(asset_path IN LISTS MOBA_CONTENT_SOURCE_FILES)
 endforeach()
 list(REMOVE_DUPLICATES _moba_baked_parents)
 foreach(asset_parent IN LISTS _moba_baked_parents)
-    string(APPEND _moba_prepare_script
-        "file(MAKE_DIRECTORY [[${MOBA_BAKED_ROOT}/${asset_parent}]])\n")
+    list(APPEND _moba_content_directories
+        "${MOBA_BAKED_ROOT}/${asset_parent}")
 endforeach()
-set(_moba_prepare_path "${CMAKE_BINARY_DIR}/content/prepare-$<CONFIG>.cmake")
-file(GENERATE OUTPUT "${_moba_prepare_path}" CONTENT "${_moba_prepare_script}")
+list(REMOVE_DUPLICATES _moba_content_directories)
 
 add_custom_command(
     OUTPUT "${MOBA_GENERATED_ASSET_HEADER}"
     BYPRODUCTS ${_moba_baked_outputs}
-    COMMAND "${CMAKE_COMMAND}" -P "${_moba_prepare_path}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory ${_moba_content_directories}
     COMMAND $<TARGET_FILE:moba_cooker>
             --source-root "${CMAKE_SOURCE_DIR}/assets"
             --manifest "${MOBA_ASSET_MANIFEST}"

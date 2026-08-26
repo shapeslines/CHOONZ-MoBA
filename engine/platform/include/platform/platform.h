@@ -79,6 +79,10 @@ bool platform_file_write(const char* path, const void* data, size_t size);
 // replaced; a pre-existing predictable `.tmp` still fails closed.
 bool platform_file_write_rooted(const char* root, const char* relative_path,
                                 const void* data, size_t size);
+// Root-confined removal for a regular, single-link file. The root and every
+// component are handle-bound without following reparses; deletion is applied to
+// the verified final handle. A missing final file is already removed and succeeds.
+bool platform_file_remove_rooted(const char* root, const char* relative_path);
 
 // ---- Diagnostics ----
 void platform_log  (const char* fmt, ...);
