@@ -18,8 +18,8 @@ publication, and the baked-only runtime; M4.2 remains unopened.
 uses the .NET BCL for SHA-256 and asserts the `abc` known vector, so the CTest shell does not
 depend on an optional hash cmdlet. Existing CodeQL-safe arithmetic widening, stale-marker
 invalidation, handle-bound rooted cleanup, canonical CMake content paths, and focused boundary
-tests are retained. The single closure commit at the branch tip is the candidate to review and
-push; merge remains owner-gated.
+tests are retained. Closure commit `49fcca3` (`fix: close M4.1 cooker validation gaps`) is the
+only code candidate; the evidence record is docs-only and merge remains owner-gated.
 
 ### Verification
 
@@ -31,12 +31,14 @@ push; merge remains owner-gated.
 - Independent Debug/Release cooks are byte-identical: `uv_test.tga.mba` is
   `43C058906AFD340F3A9E33A40ABC5D88D62516E3D4621A2C3B9D5E33B2ADC90A`; generated
   `asset_ids.gen.h` is `518FA7857829A0F23B84589ABBAFA024052FD7C63EEF963DB3E93D47CAAAD43F`.
-- Fresh-context read-only security audit and M4.1 acceptance review of the closure seams are PASS;
-  the committed-head fresh-walk and exact-head hosted checks remain promotion gates.
+- Fresh-context read-only security audit and M4.1 acceptance review of the closure seams are PASS.
+  The committed candidate's fresh-walk passes 49/49, reports `SANDBOX_SMOKE=PASS`, completes 90
+  validation-clean frames, and performs guarded cleanup. Exact-head hosted checks remain the
+  promotion gate.
 
 ### Next
 
-Run the committed candidate's fresh-walk, push only that SHA to PR #54, require all exact-head
+Push only closure commit `49fcca3` (plus the docs-only evidence record), require all exact-head
 Windows/clang/fresh-walk/CodeQL/workflow checks, and mark the PR ready only when green. Do not merge,
 rebase onto later main, or start PNG/DEFLATE, mip generation, glTF, packs, compression, incremental
 cooking, hot reload, gameplay, networking, or other M4.2+ work.

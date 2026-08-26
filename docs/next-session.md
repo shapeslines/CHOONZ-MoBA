@@ -4,8 +4,9 @@
 
 M4.0 is merged on `main` through PR #52. The isolated `codex/m4.1-cooker` branch and draft PR #54
 contain M4.1 only; the historical root checkout and prior worktrees were preserved. The exact
-`codex/m4.1-cooker` delta from `51c228f` is reconciled as one M4.1 closure candidate; its full
-commit SHA is the branch tip produced by the closure commit.
+`codex/m4.1-cooker` delta from `51c228f` is reconciled as one M4.1 closure candidate at
+`49fcca3` (`fix: close M4.1 cooker validation gaps`). The follow-up evidence record is docs-only;
+the code candidate remains exactly `49fcca3`.
 
 Implementation and local acceptance are complete:
 
@@ -34,19 +35,20 @@ Implementation and local acceptance are complete:
 - Debug/Release oracle remains 10,000 ticks, 923 commands, final `0x637628abff59c823`, stream
   `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`; controlled divergence remains exactly tick 4321,
   `position_x`, entity 7.
-- Fresh-walk passes 48/48 and a 90-frame validation-clean screenshot run. Separate RelWithDebInfo
+- Fresh-walk from the committed candidate passes 49/49, reports `SANDBOX_SMOKE=PASS`, and completes
+  a 90-frame validation-clean screenshot run. Separate RelWithDebInfo
   RTX 4070 Ti proof loads baked texture ID `0x3d9bff0eddada061`, exits cleanly after 90 frames, and
   yields a visually inspected 1280×720 BMP, 2,764,854 bytes, SHA-256
   `25E85134E5226B7A8FD238C59AB6189B90A9CC14D8511059BD3FC7406F7B49C9`.
-- The closure-head fresh-walk, exact-head hosted checks, and ready-state promotion remain the
-  final gates for this candidate; merge is not authorized.
+- Fresh-context read-only security and acceptance reviews return PASS. Exact-head hosted checks and
+  ready-state promotion remain the final gates for this candidate; merge is not authorized.
 
 ## First action
 
-1. Use the single closure commit at this branch tip as the only candidate head; obtain fresh-context
-   security and acceptance verdicts against that exact SHA.
-2. Require every exact-head PR #54 CI/CodeQL check, then mark the PR ready. Merge remains a separate
-   owner-approved action; do not synchronize `main` in this slice.
+1. Push the verified closure candidate `49fcca3` and require every exact-head PR #54 CI/CodeQL
+   check against the resulting branch tip.
+2. Mark the PR ready only when those checks are green. Merge remains a separate owner-approved
+   action; do not synchronize or rebase `main` in this slice.
 3. Leave M4.2 unopened until the owner lands this green head and starts a separate slate.
 
 ## M4.2 boundary

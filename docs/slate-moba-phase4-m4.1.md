@@ -157,8 +157,10 @@ the intended dependency/source boundaries.
 Done-condition: the final exact head passes the complete local/hosted matrix, fresh
 security and acceptance verdicts, and PR #54 is ready while merge remains owner-gated.
 
+- Closure code commit `49fcca3` is `fix: close M4.1 cooker validation gaps`; the only subsequent
+  change is this docs-only evidence record.
 - `/WX` Debug, RelWithDebInfo, and Release builds pass; all three configurations pass
-  48/48 CTest entries. Debug-ASan also builds and passes 48/48.
+  49/49 CTest entries. Debug-ASan also builds and passes 49/49.
 - clang-cl 19.1.5 proves UBSan active with its deliberate overflow tripwire and passes
   6/6 deterministic compiler/isolation tests.
 - Direct Debug and Release probes preserve 10,000 ticks, 923 commands, final
@@ -166,8 +168,8 @@ security and acceptance verdicts, and PR #54 is ready while merge remains owner-
   `0xab96814425ba80a4`; both exact-divergence suites report tick 4321,
   `position_x`, entity 7. No `engine/sim` or replay-codec source changed.
 - Two new independent Debug/Release cooks publish the same two hashes recorded in
-  S5. The fresh walk builds from a clean clone, passes 48/48, classifies its 90-frame
-  hardware run PASS, and securely removes the leased clone.
+  S5. The fresh walk builds from a clean clone, passes 49/49, reports `SANDBOX_SMOKE=PASS`,
+  completes its 90-frame hardware run, and securely removes the leased clone.
 - A separate RelWithDebInfo RTX 4070 Ti run is Vulkan 1.3/validation-on, loads the
   baked 64x64 catalog texture, reports no warning/error, exits cleanly at 90 frames,
   and writes a visually inspected 1280x720 screenshot: 2,764,854 bytes, SHA-256
@@ -183,11 +185,10 @@ security and acceptance verdicts, and PR #54 is ready while merge remains owner-
 - The closure candidate retains the portable .NET SHA-256 helper and its `abc` known-vector
   assertion; direct PowerShell 5.1 execution passes without an executable hash-cmdlet dependency.
 - Fresh-context security and acceptance reviews of the closure seams return PASS. The local
-  committed-head fresh-walk and exact-head hosted CI/CodeQL checks are still required before S7
-  can close; the candidate SHA is the single closure commit at this branch tip.
-- Pending on the closure head: fresh-context security, fresh-context acceptance,
-  exact-head CI/CodeQL, and ready-state promotion. No merge is authorized by this
-  slice.
+  committed-head fresh-walk is green; only exact-head hosted CI/CodeQL checks and ready-state
+  promotion remain before S7 can close. The code candidate SHA is `49fcca3`.
+- Pending on the closure head: exact-head CI/CodeQL and ready-state promotion. No merge is
+  authorized by this slice.
 
 ## Locked M4.1 decisions
 
