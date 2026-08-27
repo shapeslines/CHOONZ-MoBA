@@ -1,3 +1,5 @@
+> **FLEET STATUS · ALIVE** (2026-08-17) — C++ MOBA prototype, custom engine — PUBLIC. Authority: [FLEET-MAP](https://github.com/shapeslines/GromCodebase/blob/main/docs/fleet/FLEET-MAP.md) · decision: vault 2026-08-17 provenance ratification.
+
 # MOBA (working title)
 
 A multiplayer online battle arena built **from scratch in C++**, on a custom
@@ -77,12 +79,27 @@ See `docs/DECISIONS/` for the build contracts (ADR-0004/0006/0008/0009).
 ## Testing
 
 Tests use a small self-registering harness (`tests/test.h`: `TEST()`/`CHECK`, no
-exceptions/STL) and run under CTest:
+exceptions/STL) and run under CTest.
+
+**Canonical local CI gate (any shell)** -- this is the same /WX gate used by the
+pre-push hook, and it discovers the Visual Studio environment itself:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/local-ci.ps1 -Configuration Debug
+```
+
+The runner always reconfigures the `ci` preset before building and testing. It
+writes a non-secret, ignored evidence report at
+`out/local-ci-<Configuration>.json` with the revision, tool versions, stage
+timings, and outcome; copy its console summary into the PR when relevant.
+
+**Developer-shell alternative** -- for an ad hoc manual run from a shell where
+`cl`, `cmake`, and `ninja` are already on `PATH`:
 
 ```bat
-cmake --preset ci                                   :: /WX build dir
+cmake --preset ci
 cmake --build build-ci --config Debug
-ctest --test-dir build-ci -C Debug --output-on-failure
+ctest --test-dir build-ci -C Debug --output-on-failure --no-tests=error
 ```
 
 Optional second-toolchain gate (installed clang-cl plus Visual Studio build tools):
@@ -124,8 +141,8 @@ cmake --build build-asan --config Debug
 ctest --test-dir build-asan -C Debug --output-on-failure
 ```
 
-A **pre-push hook** runs the same `/WX` build + `ctest` and blocks the push on red.
-Activate it once per clone (it shells out to `vcvars` so it works from any shell):
+A **pre-push hook** invokes the canonical local CI runner and blocks the push on
+red. Activate it once per clone:
 
 ```bat
 git config core.hooksPath tools/hooks

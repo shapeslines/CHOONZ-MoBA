@@ -239,6 +239,14 @@ add_test(NAME ci_workflow_contract
             -File "${CMAKE_CURRENT_SOURCE_DIR}/ci_workflow_contract.ps1"
             -Workflow "${CMAKE_SOURCE_DIR}/.github/workflows/ci.yml")
 
+add_test(NAME local_ci_runner_contract
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/local_ci_runner_contract.ps1"
+            -Runner "${CMAKE_SOURCE_DIR}/tools/local-ci.ps1"
+            -Gate "${CMAKE_SOURCE_DIR}/tools/hooks/ctest-gate.bat"
+            -Readme "${CMAKE_SOURCE_DIR}/README.md"
+            -PullRequestTemplate "${CMAKE_SOURCE_DIR}/.github/PULL_REQUEST_TEMPLATE.md")
+
 add_test(NAME shader_source_contract
     COMMAND ${CMAKE_COMMAND}
             -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
