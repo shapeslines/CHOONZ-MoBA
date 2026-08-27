@@ -134,6 +134,13 @@ AssetHandle asset_register_texture(AssetRegistry* registry, const char* path,
 AssetHandle asset_register_sound(AssetRegistry* registry, const char* path,
                                  AssetLifetime lifetime, AssetSoundSource source);
 
+// Unified M4.1 baked path. `path` is the canonical relative .mba path beneath
+// the configured asset root. The container's magic, version, type, size, and
+// asset id are validated before this single type-tag dispatch reaches the
+// registry; malformed or incompatible containers are hard-rejected.
+AssetHandle asset_load(AssetRegistry* registry, const char* path,
+                       AssetLifetime lifetime);
+
 // Loose-file M4.0 path. Files are bounded before and during the platform read,
 // decoded in the dedicated I/O arena, copied into the selected lifetime arena,
 // then the I/O arena is rewound. Failures leave the registry/lifetime unchanged.

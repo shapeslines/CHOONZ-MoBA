@@ -17,7 +17,7 @@
 ## House patterns instanced
 - **determinism-contract** — the one house pattern MOBA-proto instances, and it instances it globally: Q16.16 fixed-point everywhere in `eng_sim`, a platform-owned 30 Hz fixed step (ADR-0001), arena-backed generational identity plus sparse-set SoA state, ascending-entity ordered views, append-order typed events, one explicit system schedule, `pcg32` inside `SimWorld` (hashed + replayed), a per-tick canonical FNV-1a hash with run-twice self-check, sim/presentation boundary CTests, and direct `eng_sim → core + math + serialize` isolation. The **sim / present seam** is concrete: fixed snapshots flow one way into `eng_game`, `fixed→float` happens there exactly once, and nothing downstream can feed back into the sim.
 
-*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0014):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
+*Repo-own patterns (engine-internal, not the 9 house patterns; see `docs/ARCHITECTURE.md` + ADRs 0001–0015):* arena-first ownership · 32-bit generational handle indirection · the platform seam (`platform.h`) · the renderer seam (`renderer.h`) · parse-in-tools / load-binary assets · two-channel error handling (asserts vs result codes).
 
 ## Alignment with locked decisions
 - **DATA-1 (Supabase only)** — N/A. No database; all game state is ephemeral in-memory `SimWorld`; persistent player data is explicitly deferred to Phase 8+.
@@ -28,4 +28,4 @@
 - None — off the data spine.
 
 ---
-*This map records alignment status only — it does not resolve open forks (those ride as Phase-0 ledger entries in the relevant execution-roadmaps). The in-repo ADR index (`docs/DECISIONS/README.md`) is current through ADR-0014.*
+*This map records alignment status only — it does not resolve open forks (those ride as Phase-0 ledger entries in the relevant execution-roadmaps). The in-repo ADR index (`docs/DECISIONS/README.md`) is current through ADR-0015.*

@@ -1,6 +1,7 @@
 #include "test.h"
 
 #include "assets/assets.h"
+#include "assets/mba.h"
 #include "platform/platform.h"
 #include "win32_test_directory.h"
 
@@ -413,5 +414,86 @@ TEST(assets, loose_tga_and_wav_files_load_transactionally) {
     asset_registry_shutdown(&fixture.registry, 0u);
     CHECK(std::remove(tga_file_path) == 0);
     CHECK(std::remove(wav_file_path) == 0);
+    CHECK(test_release_owned_directory(&owned));
+}
+
+TEST(assets, baked_mba_loads_through_the_single_type_tag_path) {
+    OwnedTestDirectory owned{};
+    owned.scope_custody = INVALID_HANDLE_VALUE;
+    owned.directory_custody = INVALID_HANDLE_VALUE;
+    const bool directory_owned = test_create_owned_directory("mba", &owned);
+    CHECK(directory_owned);
+    if (!directory_owned) return;
+
+    char valid_path[256];
+    char bad_magic_path[256];
+    char bad_version_path[256];
+    const int valid_chars = std::snprintf(valid_path, sizeof(valid_path), "%s/fixture.mba",
+                                          owned.path);
+    const int magic_chars = std::snprintf(bad_magic_path, sizeof(bad_magic_path),
+                                          "%s/bad_magic.mba", owned.path);
+    const int version_chars = std::snprintf(bad_version_path, sizeof(bad_version_path),
+                                            "%s/bad_version.mba", owned.path);
+    const bool paths_ready = valid_chars > 0 && (size_t)valid_chars < sizeof(valid_path) &&
+        magic_chars > 0 && (size_t)magic_chars < sizeof(bad_magic_path) &&
+        version_chars > 0 && (size_t)version_chars < sizeof(bad_version_path);
+    CHECK(paths_ready);
+    if (!paths_ready) {
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+
+    const uint8_t pixels[] = {0x30u, 0x20u, 0x10u, 0xFFu};
+    const MbaTextureSource source{pixels, sizeof(pixels), 1u, 1u};
+    uint8_t baked[64]{};
+    size_t baked_bytes = 0u;
+    CHECK(mba_encode_texture(baked, sizeof(baked), asset_id("fixture.mba"), &source,
+                             &baked_bytes));
+    uint8_t bad_magic[64];
+    uint8_t bad_version[64];
+    std::memcpy(bad_magic, baked, baked_bytes);
+    std::memcpy(bad_version, baked, baked_bytes);
+    bad_magic[0] ^= 0x01u;
+    bad_version[4] = (uint8_t)(MBA_VERSION + 1u);
+
+    const bool valid_written = platform_file_write(valid_path, baked, baked_bytes);
+    const bool magic_written = platform_file_write(bad_magic_path, bad_magic, baked_bytes);
+    const bool version_written = platform_file_write(bad_version_path, bad_version, baked_bytes);
+    CHECK(valid_written && magic_written && version_written);
+    if (!valid_written || !magic_written || !version_written) {
+        if (valid_written) CHECK(std::remove(valid_path) == 0);
+        if (magic_written) CHECK(std::remove(bad_magic_path) == 0);
+        if (version_written) CHECK(std::remove(bad_version_path) == 0);
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+
+    RegistryFixture fixture;
+    const bool initialized = init_fixture(&fixture, 2u, owned.path);
+    CHECK(initialized);
+    if (initialized) {
+        const size_t level_before = fixture.level.offset;
+        CHECK(handle_is_null(asset_load(&fixture.registry, "bad_magic.mba",
+                                        ASSET_LIFETIME_LEVEL).h));
+        CHECK(handle_is_null(asset_load(&fixture.registry, "bad_version.mba",
+                                        ASSET_LIFETIME_LEVEL).h));
+        CHECK(fixture.registry.live_count == 0u && fixture.fake.creates == 0u &&
+              fixture.level.offset == level_before &&
+              fixture.io.offset == fixture.registry.io_base_offset);
+
+        const AssetHandle texture = asset_load(&fixture.registry, "fixture.mba",
+                                               ASSET_LIFETIME_LEVEL);
+        CHECK(!handle_is_null(texture.h));
+        AssetTextureView view{};
+        CHECK(asset_get_texture(&fixture.registry, texture, &view));
+        CHECK(view.id == asset_id("fixture.mba") && view.width == 1u && view.height == 1u &&
+              std::memcmp(view.rgba8, pixels, sizeof(pixels)) == 0);
+        CHECK(fixture.fake.creates == 1u);
+        asset_registry_shutdown(&fixture.registry, 0u);
+    }
+
+    CHECK(std::remove(valid_path) == 0);
+    CHECK(std::remove(bad_magic_path) == 0);
+    CHECK(std::remove(bad_version_path) == 0);
     CHECK(test_release_owned_directory(&owned));
 }

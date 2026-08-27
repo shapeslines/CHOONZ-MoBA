@@ -21,7 +21,9 @@ endforeach()
 
 file(READ "${SOURCE_DIR}/engine/assets/src/assets.cpp" asset_runtime)
 if(NOT asset_runtime MATCHES "platform_file_read_rooted" OR
-   asset_runtime MATCHES "platform_file_size[ \t\r\n]*\\(")
+   asset_runtime MATCHES "platform_file_size[ \t\r\n]*\\(" OR
+   NOT asset_runtime MATCHES "AssetHandle asset_load[ \t\r\n]*\\(" OR
+   NOT asset_runtime MATCHES "mba_inspect")
     message(FATAL_ERROR "asset loads must use the single-handle rooted read seam")
 endif()
 
