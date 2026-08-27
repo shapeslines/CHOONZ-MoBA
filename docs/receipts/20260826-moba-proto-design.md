@@ -135,3 +135,20 @@ rules, full fog-of-war behavior, final typed `.mba` encoding, GUI editor scope,
 and transport reliability details remain HELD as non-blocking decisions. Any
 base drift, product-scope change, engine replacement request, or ownership
 conflict requires owner/Architect escalation.
+
+## Wrap evidence — 2026-08-27
+
+The requested M5.0 implementation was not started because the design PR is
+still not confirmed accepted or landed. The follow-on owner report used only
+the root mailbox helper and returned:
+
+| Frame | Timestamp returned by helper | Frame ID |
+|---|---|---|
+| posture | `2026-08-27T08:24:26Z` | UNAVAILABLE; helper returned no separate ID |
+| start | `2026-08-27T08:24:26Z` | UNAVAILABLE; helper returned no separate ID |
+| report | `2026-08-27T04:21:33Z` | `wid-20260827-moba-m5-map-a1b2c3` |
+
+The report verdict is `OWNER_REQUIRED`: restore approved GitHub CLI/network
+access, create/review/land the design PR against
+`codex/m4.1-cooker-restart`, and then authorize the M5.0 map slate. No map
+branch, worktree, engine code, or renderer file was changed.
