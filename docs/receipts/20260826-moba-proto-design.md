@@ -28,7 +28,7 @@ receipt only; it does not authorize engine implementation or PR merge.
 | Design worktree | `C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-design-20260826` |
 | PR target | `codex/m4.1-cooker-restart` |
 | Packet commit | `b8020c822abaff3cfb370a991c3daf73e4681979` |
-| Pull request | NOT CREATED; OWNER_REQUIRED network/auth gate |
+| Pull request | [PR #60](https://github.com/shapeslines/CHOONZ-MoBA/pull/60) open; owner acceptance/landing required |
 
 ## Mailbox lifecycle evidence
 
@@ -52,9 +52,9 @@ was unavailable; this did not create a duty for this lane.
 - `docs/arc-moba-proto-design-manifest.json`
 - `docs/receipts/20260826-moba-proto-design.md`
 
-The intended diff from the accepted design base contains only these three new
-docs artifacts. No existing source, phase, build, asset, CMake, shader, or
-generated file is in the write fence.
+The design packet itself contains only these three new docs artifacts. Wrap
+bookkeeping also updates `docs/next-session.md`; no engine, phase, build,
+asset, CMake, shader, or generated file is in the write fence.
 
 ## Approved contract
 
@@ -116,17 +116,11 @@ future lane may overlap a mutable fence without an explicit dependency edge.
 
 ## Owner-required delivery gate
 
-The docs-only packet is committed and pushed, but the requested PR was not
-created. `gh auth status` reports the configured GitHub CLI token as invalid,
-and the non-interactive PR creation attempt failed to connect to
-`https://api.github.com/graphql`.
-
-Required pickup: restore approved GitHub CLI authentication and network access,
-then create a PR from `lane/moba-proto-design/20260826` at packet commit
-`b8020c822abaff3cfb370a991c3daf73e4681979` against
-`codex/m4.1-cooker-restart`. Do not merge the PR from this lane. The mailbox
-report is WID `wid-20260826-moba-proto-design-b8020c` at
-`2026-08-27T03:56:04Z`.
+The docs-only packet is committed, pushed, and available as [PR #60](https://github.com/shapeslines/CHOONZ-MoBA/pull/60)
+against `codex/m4.1-cooker-restart`. Owner review and landing remain required
+before the M5.0 map implementation may start. Do not merge the PR from this
+lane. The original mailbox report is WID
+`wid-20260826-moba-proto-design-b8020c` at `2026-08-27T03:56:04Z`.
 
 ## Held gates
 
@@ -138,9 +132,9 @@ conflict requires owner/Architect escalation.
 
 ## Wrap evidence — 2026-08-27
 
-The requested M5.0 implementation was not started because the design PR is
-still not confirmed accepted or landed. The follow-on owner report used only
-the root mailbox helper and returned:
+The requested M5.0 implementation was not started because PR #60 is not yet
+confirmed accepted or landed. The follow-on owner report used only the root
+mailbox helper and returned:
 
 | Frame | Timestamp returned by helper | Frame ID |
 |---|---|---|
@@ -148,11 +142,16 @@ the root mailbox helper and returned:
 | start | `2026-08-27T08:24:26Z` | UNAVAILABLE; helper returned no separate ID |
 | report | `2026-08-27T04:21:33Z` | `wid-20260827-moba-m5-map-a1b2c3` |
 
-The report verdict is `OWNER_REQUIRED`: restore approved GitHub CLI/network
-access, create/review/land the design PR against
+The report verdict is `OWNER_REQUIRED`: review/land PR #60 against
 `codex/m4.1-cooker-restart`, and then authorize the M5.0 map slate. No map
 branch, worktree, engine code, or renderer file was changed.
 
-The CHOONZ wrap commit is `438c82c`. Pattern extraction was landed separately
-in the isolated `obsidian-vault` twin at commit `87ac7e2c` on
+The final design branch tip is `9a26aed902a3848bd5c48fb6dd2c8be46aa1da14`.
+The pattern extraction was landed separately on
+`docs/moba-proto-patterns-20260827` at `87ac7e2cd97dddbe5415dff1cf85fc04820b4162`
+and is available as [obsidian-vault PR #164](https://github.com/shapeslines/obsidian-vault/pull/164).
+
+The substantive CHOONZ wrap handoff is `438c82c`; the final receipt/PR-state
+closure is `9a26aed902a3848bd5c48fb6dd2c8be46aa1da14`. Pattern extraction was
+landed separately in the isolated `obsidian-vault` twin at commit `87ac7e2c` on
 `docs/moba-proto-patterns-20260827`; neither branch was self-merged.
