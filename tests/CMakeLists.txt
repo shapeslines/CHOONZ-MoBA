@@ -24,6 +24,7 @@ add_executable(engine_tests
     containers/container_tests.cpp
     assets/asset_id_tests.cpp
     assets/asset_registry_tests.cpp
+    assets/mba_tests.cpp
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
     sim/component_pool_tests.cpp
@@ -94,9 +95,13 @@ add_test(NAME math        COMMAND engine_tests --suite math)
 add_test(NAME containers  COMMAND engine_tests --suite containers)
 add_test(NAME asset_id    COMMAND engine_tests --suite asset_id)
 add_test(NAME assets      COMMAND engine_tests --suite assets)
+add_test(NAME mba         COMMAND engine_tests --suite mba)
 add_test(NAME assets_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_assets_boundary.cmake")
+add_test(NAME asset_parsers_boundary
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_asset_parsers_boundary.cmake")
 add_test(NAME core_invariant_tripwire
     COMMAND ${CMAKE_COMMAND}
             -DTRIPWIRE_EXE=$<TARGET_FILE:core_invariant_tripwire>
@@ -234,8 +239,22 @@ add_test(NAME ci_workflow_contract
             -File "${CMAKE_CURRENT_SOURCE_DIR}/ci_workflow_contract.ps1"
             -Workflow "${CMAKE_SOURCE_DIR}/.github/workflows/ci.yml")
 
+add_test(NAME local_ci_runner_contract
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/local_ci_runner_contract.ps1"
+            -Runner "${CMAKE_SOURCE_DIR}/tools/local-ci.ps1"
+            -Gate "${CMAKE_SOURCE_DIR}/tools/hooks/ctest-gate.bat"
+            -Readme "${CMAKE_SOURCE_DIR}/README.md"
+            -PullRequestTemplate "${CMAKE_SOURCE_DIR}/.github/PULL_REQUEST_TEMPLATE.md")
+
 add_test(NAME shader_source_contract
     COMMAND ${CMAKE_COMMAND}
             -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/shader/check_shader_source_contract.cmake")
+
+add_test(NAME cooker_cli
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/assets/cooker_cli_tests.ps1"
+            -Exe $<TARGET_FILE:cooker>
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")

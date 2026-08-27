@@ -59,6 +59,7 @@ add_subdirectory(engine/core)
 add_subdirectory(engine/math)
 add_subdirectory(engine/serialize)
 add_subdirectory(engine/platform)
+add_subdirectory(engine/asset_parsers)
 add_subdirectory(engine/assets)
 add_subdirectory(engine/sim)
 add_subdirectory(engine/render)
@@ -69,7 +70,7 @@ enable_testing()                        # register CTest tests (M1.4); must be t
 add_subdirectory(tools/sandbox)         # M0.3: window + message loop
 add_subdirectory(tools/visualize)       # BMP dumps of the fixed-point math vs libm
 add_subdirectory(tools/replay)          # M3.0: deterministic replay record/inspect/verify
+add_subdirectory(tools/cooker)          # M4.1: offline TGA-to-.mba baker
 add_subdirectory(tests)                 # M1.4: self-registering harness + CTest suites
-# Net and the cooker arrive in their later phases.
 
-message(STATUS "moba spine configured — modules: eng_core eng_math eng_serialize eng_platform eng_assets eng_sim eng_render eng_game")
+message(STATUS "moba spine configured — modules: eng_core eng_math eng_serialize eng_platform eng_asset_parsers eng_assets eng_sim eng_render eng_game")

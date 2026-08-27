@@ -92,7 +92,7 @@ initialization. `eng_sim` itself resolves only to `eng_core`, `eng_math`, and `e
 | Render | `eng_render` | Raw Vulkan backend behind the thin renderer seam; bring-up, frames-in-flight, own device-memory allocator, pipelines, instanced forward draw | no | **yes (only here)** |
 | Sim | `eng_sim` | arena-backed sparse-set SoA world, ordered views, typed events, explicit systems/tick schedule, canonical hash/diff, replay codec | no | no |
 | Net | `eng_net` | Server loop driving sim_tick, per-client baseline/delta snapshots + interest management, client prediction/reconciliation, lag-comp history ring, own UDP reliability, command codec, replay, divergence detection | via platform seam | no |
-| Assets | `eng_assets` | normalized stable IDs, arena-backed registry/lifetimes, bounded direct TGA/WAV loaders; cooker formats arrive in M4.1+ | via platform seam | no (Vulkan-free upload/destroy callback) |
+| Assets | `eng_assets` + `eng_asset_parsers` | registry/lifetimes + bounded direct loaders; POD TGA/identity/`.mba` codec shared with the cooker | via platform seam | no (Vulkan-free upload/destroy callback) |
 | Serialize | `eng_serialize` | Bounded, sticky, allocation-free LE byte readers/writers shared by net + replay + asset codecs | no | no |
 | Game/present | `eng_game` | Arena-backed previous/current snapshots, read-only extraction, identity-aware interpolation, the sole fixed→float conversion, and `DrawItem` construction | no | no (uses `eng_render_common`) |
 
@@ -220,7 +220,7 @@ typedef struct { Handle h; } AssetHandle;
   1. **Programmer bugs / broken invariants → assert.** `ASSERT(x)` is debug-only (logs, `__debugbreak`, then `abort`); it compiles to nothing in release. `ENSURE(x)` (a.k.a. `ASSERT_ALWAYS`) stays in release for "the universe is corrupt, do not continue" invariants. `STATIC_ASSERT` is free — use liberally.
   2. **Expected/recoverable failures → result codes / `{value, error}` structs.** `RESULT_OK`, `RESULT_OUT_OF_MEMORY`, `RESULT_NOT_FOUND`, `RESULT_IO_ERROR`, `RESULT_PARSE_ERROR`. The caller checks. There is no third path.
 - **OOM policy:** overrunning a *fixed* arena/pool/stack is a hard `ENSURE` (budgets are sized up front; an overrun is a design bug). Only the **page backend** and the **general heap** surface OOM as a recoverable `RESULT_OUT_OF_MEMORY`.
-- **STL hazard rule (binding):** with `_HAS_EXCEPTIONS=0`, any static lib linked into **both** `eng_core_group` (engine) **and** a tools/tests target must be compiled with **identical** `_HAS_EXCEPTIONS`/`/EH` settings and must **not** expose STL types across its headers, or ODR violations corrupt the build. Therefore: **STL is forbidden in all engine code and in `tests/`** (we use our own harness, §10). STL is permitted only in `tools/` (offline cookers), which never link into the engine. The shared `eng_assets` parser code exposes only POD C-style interfaces and is built `_HAS_EXCEPTIONS=0` everywhere.
+- **STL hazard rule (binding):** with `_HAS_EXCEPTIONS=0`, any static lib linked into **both** `eng_core_group` (engine) **and** a tools/tests target must be compiled with **identical** `_HAS_EXCEPTIONS`/`/EH` settings and must **not** expose STL types across its headers, or ODR violations corrupt the build. Therefore: **STL is forbidden in all engine code and in `tests/`** (we use our own harness, §10). STL is permitted only in `tools/` (offline cookers), which never links into the engine. The shared `eng_asset_parsers` library exposes only POD C-style interfaces and is built `_HAS_EXCEPTIONS=0` everywhere.
 
 ### 2.5 Naming, file & comment conventions
 
@@ -286,13 +286,14 @@ moba-game/
 │  ├─ serialize/ include/serialize/*.h src/*.cpp  # LE byte readers/writers
 │  ├─ platform/  include/platform/*.h  src/win32/*.cpp   # the OS seam + impl
 │  ├─ render/    include/render/*.h    src/vk/*.cpp       # raw Vulkan
-│  ├─ assets/    include/assets/*.h    src/*.cpp          # stable IDs, direct TGA/WAV, registry
+│  ├─ asset_parsers/ include/assets/*.h src/*.cpp          # POD identity/TGA/.mba shared boundary
+│  ├─ assets/    include/assets/*.h    src/*.cpp           # registry, direct WAV, runtime load
 │  ├─ sim/       include/sim/*.h       src/*.cpp          # config derivative + deterministic sim/ECS
 │  └─ net/       include/net/*.h       src/*.cpp          # server-auth + UDP
 ├─ game/         src/main_win32.cpp  src/game_*.cpp  src/present/*.cpp
 ├─ tools/
 │  ├─ sandbox/   # day-one bring-up: window + clear
-│  └─ cooker/    # M4.1 offline asset baker (POD parser seam; MAY use STL)
+│  └─ cooker/    # M4.1 offline TGA→.mba baker (POD parser seam; MAY use STL)
 ├─ shaders/      # *.vert/.frag/.comp (LF, committed)
 ├─ assets/       # source PNG/glTF/WAV/TTF (Git LFS candidate later)
 ├─ tests/        # engine_tests exe (own harness, links eng_core_group; NO STL, NO gtest)
@@ -1127,13 +1128,15 @@ paths. Loose raw `.spv` remains renderer-owned under ADR-0008.
 One outer header for every asset type; a typed POD payload, little-endian, naturally aligned, designed so GPU upload points directly at a loaded offset with no per-element fixup.
 
 ```c
-#define MBA_MAGIC 0x41424D6Du
-#define MBA_VERSION 3
-typedef enum { ASSET_NONE, ASSET_TEXTURE, ASSET_MESH, ASSET_SOUND, ASSET_FONT } AssetType;
-typedef struct { uint32_t magic, version, type, payload_bytes; uint64_t asset_id; uint32_t flags, _pad; } MbaHeader;
+#define MBA_MAGIC 0x0041424Du // literal bytes: 'M' 'B' 'A' '\0'
+#define MBA_VERSION 1
+typedef enum { MBA_ASSET_TYPE_NONE, MBA_ASSET_TYPE_TEXTURE, MBA_ASSET_TYPE_MESH,
+               MBA_ASSET_TYPE_SOUND, MBA_ASSET_TYPE_FONT } MbaAssetType;
+typedef struct { uint32_t magic, version, type, payload_bytes; uint64_t asset_id;
+                 uint32_t flags, reserved; } MbaHeader;
 ```
 
-Every load is: read header → validate magic/version (mismatch hard-rejects → re-cook) → switch(type) → the payload is already in the engine's exact layout. The cooker output must be **byte-deterministic** (it feeds the deterministic sim's reproducibility). The cooker is brute-force (re-cook all) until cook times hurt; incremental cooking is deferred.
+Every load is: read header → validate magic/version/flags/size (mismatch hard-rejects → re-cook) → switch(type) → the payload is already in the engine's exact layout. M4.1 currently accepts a single RGBA8 texture payload; later type tags remain reject-by-default until their own milestone owns them. The cooker output is **byte-deterministic** (it feeds deterministic reproducibility). The cooker is brute-force until cook times hurt; incremental cooking is deferred. See ADR-0015 for the fixed v1 layout.
 
 ### 11.3 Runtime registry & lifetime
 
