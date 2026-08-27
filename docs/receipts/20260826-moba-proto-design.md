@@ -146,12 +146,14 @@ The report verdict is `OWNER_REQUIRED`: review/land PR #60 against
 `codex/m4.1-cooker-restart`, and then authorize the M5.0 map slate. No map
 branch, worktree, engine code, or renderer file was changed.
 
-The final design branch tip is `9a26aed902a3848bd5c48fb6dd2c8be46aa1da14`.
+The design branch reached `692335814885a7210f26803e23008cab307cb9e1` before
+this final receipt refresh; the final wrap report records the resulting branch
+tip.
 The pattern extraction was landed separately on
 `docs/moba-proto-patterns-20260827` at `87ac7e2cd97dddbe5415dff1cf85fc04820b4162`
 and is available as [obsidian-vault PR #164](https://github.com/shapeslines/obsidian-vault/pull/164).
 
-The substantive CHOONZ wrap handoff is `438c82c`; the final receipt/PR-state
+The substantive CHOONZ wrap handoff is `438c82c`; the prior receipt/PR-state
 closure is `9a26aed902a3848bd5c48fb6dd2c8be46aa1da14`. Pattern extraction was
 landed separately in the isolated `obsidian-vault` twin at commit `87ac7e2c` on
 `docs/moba-proto-patterns-20260827`; neither branch was self-merged.
