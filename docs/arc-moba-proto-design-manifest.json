@@ -1,0 +1,438 @@
+{
+  "schema_version": "1.0",
+  "source": {
+    "plan": "docs/slate-moba-proto-design.md",
+    "phase_pointer": "M4.1 one-lane MOBA design packet"
+  },
+  "phase": {
+    "id": "moba-proto-design-2026-08-26",
+    "goal": "Define an implementation-ready, custom-engine one-lane MOBA slice without changing engine or generated files",
+    "in_scope": [
+      "Git base and source authority reconciliation",
+      "Two-team one-lane gameplay and data contracts",
+      "Fixed-tick simulation, command, event, replay, and snapshot contracts",
+      "M4.1 cooker boundary and future typed-content seam",
+      "Dependency DAG, future write fences, acceptance tests, and hardware gates",
+      "Design receipt and independent verification handoff"
+    ],
+    "out_of_scope": [
+      "Authoritative simulation implementation",
+      "Networking or transport implementation",
+      "Renderer, UI, editor, or asset pipeline implementation",
+      "Changes to engine, game, tools, tests, assets, CMake, or generated output",
+      "Product balance decisions beyond the approved fixture",
+      "Owner-gated merge, deployment, or external engine selection"
+    ],
+    "dependencies": [
+      "GromAtlas PR 139 at fc56c2932053a7d4b06fcf229c35642605a18cc0",
+      "CHOONZ-MoBA origin/main at e4b3369b36267dcef9fdbcebe2f67b227959d3bd",
+      "CHOONZ-MoBA M4.1 active commit at 6571ee40adfd7e99a49564a7c0d21d4702ee80c8",
+      "M3.4 fixed-tick, replay, hash, and validation contracts",
+      "M4.0 asset registry and recorded acceptance evidence"
+    ],
+    "done_condition": "The three new docs artifacts describe the accepted M4.1 base, all required custom-engine contracts, one-claim future slices with exact fences, observable acceptance tests, and held decisions; the docs-only diff and manifest checks pass",
+    "owner_decisions": [
+      "Retain the custom C++/raw Vulkan engine",
+      "Use M4.1 commit 6571ee40 as the design base",
+      "Use a roadmap-baseline one-lane map",
+      "Use the minimal fixed gameplay vocabulary",
+      "Implement local deterministic simulation first and keep network contracts ready"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "base-reconciliation",
+      "goal": "Record the exact Git authority and preserve unrelated worktrees",
+      "context": "The primary checkout is dirty and diverged while the active M4.1 cooker worktree is the clean accepted descendant of origin/main",
+      "inputs": [
+        "GromAtlas PR 139 source worktree",
+        "CHOONZ-MoBA origin/main",
+        "CHOONZ-MoBA active M4.1 worktree",
+        "Invocation base and worktree requirements"
+      ],
+      "output_contract": "The slate and receipt name the source commit, accepted base, merge-base, active branch, design branch, worktree paths, and preservation rule",
+      "output_artifacts": [
+        {
+          "id": "base-evidence",
+          "description": "Exact source and CHOONZ-MoBA Git authority record",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "The design worktree starts at 6571ee40, its merge-base with origin/main is e4b3369, and the primary and active owner worktrees remain unmodified",
+      "out_of_scope": [
+        "Rebasing or merging the M4.1 branch",
+        "Repairing dirty or prunable worktrees",
+        "Changing origin refs"
+      ],
+      "model_tier": "Sol",
+      "depends_on": [],
+      "fence": {
+        "read_paths": [
+          "Git refs and worktree metadata",
+          "GromAtlas PR 139 packet",
+          "CHOONZ-MoBA AGENTS.md"
+        ],
+        "write_paths": [
+          "docs/slate-moba-proto-design.md",
+          "docs/arc-moba-proto-design-manifest.json",
+          "docs/receipts/20260826-moba-proto-design.md"
+        ],
+        "allowed_tools": [
+          "git",
+          "apply_patch"
+        ],
+        "effects": [
+          "docs-only artifact writes"
+        ]
+      },
+      "source_pointers": [
+        "INVOCATION-MOBA-PROTO-DESIGN.md hardened boot",
+        "CHOONZ-MoBA AGENTS.md evidence before action"
+      ],
+      "failure_states": [
+        {
+          "id": "moba-base-ambiguous",
+          "trigger": "The accepted base, active branch, or merge-base no longer matches the approved evidence",
+          "expected_evidence": [
+            "Conflicting ref names and commit IDs",
+            "Current worktree status"
+          ],
+          "disposition": "escalate"
+        },
+        {
+          "id": "dirty-owner-worktree",
+          "trigger": "The active M4.1 owner worktree changes during the lane",
+          "expected_evidence": [
+            "Before and after status output",
+            "First conflicting path"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Fresh Git status and exact-head review from the design worktree",
+        "expected_evidence": [
+          "Design branch parent is 6571ee40",
+          "Merge-base is e4b3369",
+          "Unrelated worktrees are unchanged"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "contract-design",
+      "goal": "Define the gameplay, data, state, command, event, replay, snapshot, cooker, and presentation seams",
+      "context": "The existing engine already owns fixed time, fixed-point simulation, ECS handles, replay/hash, asset loading, and presentation projection; the packet must extend those seams without moving authority",
+      "inputs": [
+        "Current architecture and ADRs",
+        "M3.4 simulation/replay/hash contracts",
+        "M4.1 .mba and asset loader contracts",
+        "Approved one-lane fixture decisions"
+      ],
+      "output_contract": "The slate contains explicit field-ordered schemas, units, owners, deterministic tick order, data flow, and failure behavior with no implementation dependency outside the custom engine",
+      "output_artifacts": [
+        {
+          "id": "engine-honest-contracts",
+          "description": "Buildable custom-engine design contract",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "The slate names MatchDef, TeamDef, SpawnDef, MapGrid, LaneDef, HeroDef, ActionDef, EffectDef, Command, CommandReject, SimEvent, snapshots, replay, cooker, and presentation ownership",
+      "out_of_scope": [
+        "Adding public headers or C++ implementations",
+        "Changing the M4.1 binary format",
+        "Choosing held balance or map-art values"
+      ],
+      "model_tier": "Sol",
+      "depends_on": [
+        "base-reconciliation"
+      ],
+      "fence": {
+        "read_paths": [
+          "engine/core",
+          "engine/math",
+          "engine/sim",
+          "engine/assets",
+          "engine/game",
+          "engine/render",
+          "docs/ARCHITECTURE.md",
+          "docs/ROADMAP.md",
+          "docs/DECISIONS"
+        ],
+        "write_paths": [
+          "docs/slate-moba-proto-design.md"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "git"
+        ],
+        "effects": [
+          "docs-only artifact writes"
+        ]
+      },
+      "source_pointers": [
+        "INVOCATION-MOBA-PROTO-DESIGN.md design packet requirements",
+        "docs/ARCHITECTURE.md module and determinism contracts",
+        "docs/ROADMAP.md M5 through M7 sequence"
+      ],
+      "failure_states": [
+        {
+          "id": "foreign-engine-assumption",
+          "trigger": "A contract requires replacing or bypassing the custom C++/Vulkan engine",
+          "expected_evidence": [
+            "The offending dependency or proposed seam",
+            "The existing engine seam it would bypass"
+          ],
+          "disposition": "escalate"
+        },
+        {
+          "id": "contract-inconsistency",
+          "trigger": "A field, unit, owner, or version differs between schema, flow, and acceptance sections",
+          "expected_evidence": [
+            "Conflicting field names or units",
+            "Affected section headings"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Fresh-context contract walk checking every schema against the authority map and acceptance list",
+        "expected_evidence": [
+          "All required schemas are present",
+          "Every authoritative value has one owner",
+          "Renderer and presentation cannot mutate SimWorld"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "slice-dag-and-fences",
+      "goal": "Break the design into one-claim implementation slices with dependency and writer fences",
+      "context": "Map, commands, content, combat, objectives, authority, and presentation have different ownership and some share engine/sim",
+      "inputs": [
+        "Contract design",
+        "Current CMake/module graph",
+        "M5 through M7 roadmap ordering"
+      ],
+      "output_contract": "The slate gives each slice a single claim, prerequisites, M4.1 dependency flag, future write fence, and serial/parallel rule",
+      "output_artifacts": [
+        {
+          "id": "implementation-dag",
+          "description": "Future implementation sequence and ownership fences",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "The minimum local vertical path is ordered from map/navigation through commands, content, combat, and lane/objective closure, with replication and presentation as consumers",
+      "out_of_scope": [
+        "Minting implementation lanes",
+        "Writing engine or test files",
+        "Parallel claims over the same simulation fence"
+      ],
+      "model_tier": "Terra",
+      "depends_on": [
+        "contract-design"
+      ],
+      "fence": {
+        "read_paths": [
+          "engine/CMakeLists.txt",
+          "engine/*/CMakeLists.txt",
+          "tests",
+          "docs/ROADMAP.md"
+        ],
+        "write_paths": [
+          "docs/slate-moba-proto-design.md"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "git"
+        ],
+        "effects": [
+          "docs-only artifact writes"
+        ]
+      },
+      "source_pointers": [
+        "docs/ROADMAP.md M5.0 through M7.2",
+        "docs/ARCHITECTURE.md module graph"
+      ],
+      "failure_states": [
+        {
+          "id": "overlapping-writer",
+          "trigger": "Two future slices claim the same mutable subsystem without an explicit serial dependency",
+          "expected_evidence": [
+            "Conflicting fence paths",
+            "Missing dependency edge"
+          ],
+          "disposition": "escalate"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Independent DAG and fence review",
+        "expected_evidence": [
+          "Every slice has one claim",
+          "Every slice states whether it builds on M4.1",
+          "No concurrent simulation writer is implied"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "acceptance-and-gates",
+      "goal": "Define observable design checks, future executable scenarios, and honest hardware gates",
+      "context": "This lane writes no code, so it must specify future executable acceptance without claiming fresh implementation results",
+      "inputs": [
+        "Design contracts and slice DAG",
+        "Recorded M3.4/M4.0 acceptance evidence",
+        "Repository validation guidance"
+      ],
+      "output_contract": "The slate lists docs-only checks, deterministic/replay/content/network scenarios, and the future CMake/CTest/offline-SPIR-V/hardware gate",
+      "output_artifacts": [
+        {
+          "id": "acceptance-matrix",
+          "description": "Observable acceptance and hardware gate contract",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "The acceptance section distinguishes executed docs checks from future code tests and does not claim a fresh M4.1 CMake/CTest or hardware run",
+      "out_of_scope": [
+        "Running or modifying implementation tests",
+        "Claiming unavailable hardware or CI evidence",
+        "Changing the established simulation oracle without implementation evidence"
+      ],
+      "model_tier": "Terra",
+      "depends_on": [
+        "contract-design",
+        "slice-dag-and-fences"
+      ],
+      "fence": {
+        "read_paths": [
+          "AGENTS.md",
+          "docs/testing-hardware.md",
+          "docs/slate-moba-phase3-m3.4.md",
+          "docs/slate-moba-phase4-m4.0.md",
+          "tests"
+        ],
+        "write_paths": [
+          "docs/slate-moba-proto-design.md",
+          "docs/receipts/20260826-moba-proto-design.md"
+        ],
+        "allowed_tools": [
+          "apply_patch",
+          "git",
+          "node"
+        ],
+        "effects": [
+          "docs-only artifact writes",
+          "read-only validation"
+        ]
+      },
+      "source_pointers": [
+        "AGENTS.md validation commands",
+        "docs/testing-hardware.md hardware matrix",
+        "docs/slate-moba-phase3-m3.4.md recorded determinism gates"
+      ],
+      "failure_states": [
+        {
+          "id": "unsupported-acceptance-claim",
+          "trigger": "The packet reports a build, test, hardware, or PR result that was not directly observed",
+          "expected_evidence": [
+            "Missing command output or receipt row",
+            "Claimed result"
+          ],
+          "disposition": "blocked"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Independent acceptance review of command/check evidence and future scenario coverage",
+        "expected_evidence": [
+          "git diff --check result",
+          "Manifest validation result",
+          "Explicit unavailable/future gate rows"
+        ],
+        "independent": true
+      }
+    },
+    {
+      "id": "receipt-close",
+      "goal": "Close the durable design receipt with branch, commit, PR, checks, and unresolved gates",
+      "context": "The lane must hand off a reviewable docs-only PR and never self-merge",
+      "inputs": [
+        "All prior design artifacts",
+        "Git commit and push evidence",
+        "PR URL and check results"
+      ],
+      "output_contract": "The receipt names the actual branch, final head, PR target/URL, artifact paths, checks, preserved worktrees, and remaining held decisions",
+      "output_artifacts": [
+        {
+          "id": "design-receipt",
+          "description": "Provenance-complete MOBA design lane receipt",
+          "disposition": "consumed"
+        }
+      ],
+      "done_check": "The pushed PR is docs-only relative to the accepted M4.1 base, the receipt is updated with actual delivery evidence, and no merge was performed",
+      "out_of_scope": [
+        "Merging or approving the PR",
+        "Promoting to a vault or non-Git system",
+        "Opening implementation lanes automatically"
+      ],
+      "model_tier": "Terra",
+      "depends_on": [
+        "base-reconciliation",
+        "contract-design",
+        "slice-dag-and-fences",
+        "acceptance-and-gates"
+      ],
+      "fence": {
+        "read_paths": [
+          "Git status, diff, log, and remote refs",
+          "The three design artifacts"
+        ],
+        "write_paths": [
+          "docs/receipts/20260826-moba-proto-design.md"
+        ],
+        "allowed_tools": [
+          "git",
+          "apply_patch",
+          "gh"
+        ],
+        "effects": [
+          "docs-only closure update",
+          "branch push",
+          "pull request creation"
+        ]
+      },
+      "source_pointers": [
+        "INVOCATION-MOBA-PROTO-DESIGN.md done-check",
+        "CODEX-LANE-LAUNCH-SHEET.md MOBA-D return contract"
+      ],
+      "failure_states": [
+        {
+          "id": "docs-fence-breach",
+          "trigger": "The proposed commit or PR contains a path outside the three new docs artifacts",
+          "expected_evidence": [
+            "Full changed-path list",
+            "Diff against 6571ee40"
+          ],
+          "disposition": "blocked"
+        },
+        {
+          "id": "pr-target-unavailable",
+          "trigger": "The active M4.1 remote branch cannot be used as the docs-only PR base",
+          "expected_evidence": [
+            "Remote ref lookup",
+            "GitHub error"
+          ],
+          "disposition": "escalate"
+        }
+      ],
+      "verification_handoff": {
+        "method": "Fresh-context review of the pushed branch, PR metadata, and final receipt",
+        "expected_evidence": [
+          "Actual head commit",
+          "PR URL targeting codex/m4.1-cooker-restart",
+          "No merge event"
+        ],
+        "independent": true
+      }
+    }
+  ]
+}
