@@ -1,72 +1,34 @@
 # CHOONZ-MoBA — next session
 
-## State @ `ac4d2b4` · 2026-08-18 · main
+## State @ `6923358` · 2026-08-27 · DESKTOP-BK4F0OA / moba-proto-design
 
-Phase 3 M3.0–M3.4 and the interphase security consolidation are merged on `main`. PR #51 exact head
-`e516b46` landed as `a2565ca`, which is the synchronized base for the isolated
-`codex/m4.0-assets` worktree. PR #52 (M4.0: direct assets and lifetime registry) is MERGED
-(2026-08-13); the dirty historical root checkout was
-not modified. PR #53 (reconcile-47-50) is also merged; PR #54 (M4.1 offline cooker + `.mba`
-runtime) is open.
+The M4.1 one-lane design packet is complete and pushed on
+`lane/moba-proto-design/20260826`. Design PR #60 is open against
+`codex/m4.1-cooker-restart`; owner acceptance and landing remain the gate.
+No M5.0 implementation branch, worktree, or engine mutation was started.
 
-**Anomaly for owner glance:** PR #55 (`fix: bind destructive file operations to handles (+ final
-acceptance docs)`, head `pr-51`) re-presents the already-squashed PR #51 head. Do not merge without
-owner review — likely superseded history.
+## Shipped
 
-Implementation is complete; the final security repair is locally accepted and awaits its exact-head
-commit/check identity:
+- `b8020c8` design slate, ARC manifest, and durable receipt.
+- `144a1ae` receipt closure and pushed docs-only design tip.
+- `438c82c` wrap handoff and owner-gate receipt update.
+- `9a26aed` final wrap/receipt evidence closure.
+- `6923358` design PR #60 and final owner-gate state correction.
 
-- `eng_assets` owns portable normalized-path FNV-1a/64 `AssetId`, a fixed-capacity arena-backed
-  generational SoA registry, stable path lookup with collision rejection, level bulk-unload, and a
-  small refcounted global lifetime. Win32 aliases and device stems are rejected before hashing.
-- Direct TGA supports type 2/type 10, 24/32-bit true-color and both vertical origins; direct WAV
-  accepts the strict RIFF PCM subset (1–2 channels, 8/16/24/32-bit). Validation completes before
-  durable allocation or registry mutation.
-- Loose loads size/read one handle-bound file below a handle-bound non-reparse asset root and reject
-  reparse and hard-link aliases. Registry initialization rejects overlapping backing/control ranges;
-  initialization and failed loads preserve all caller arenas and registry state.
-- The renderer still owns GPU memory. `eng_assets` has no Vulkan/render/sim dependency and receives
-  only a Vulkan-free upload/destroy callback. The sandbox loads `uv_test.tga` through the registry
-  and tears down materials/assets before the renderer.
-- Raw loose `.spv` remains renderer-owned under ADR-0008. No `.mba`, cooker, PNG, glTF, hot reload,
-  gameplay, networking, or simulation behavior entered M4.0.
+## Signals
 
-## Verified locally
+- **state/flags:** Accepted M4.1 base is `6571ee40adfd7e99a49564a7c0d21d4702ee80c8`; the primary checkout and active M4.1 worktree were preserved. M5.0 remains a post-acceptance implementation gate.
+- **communicated:** Root mailbox posture/start at `2026-08-27T08:24:26Z`; map-slate owner report WID `wid-20260827-moba-m5-map-a1b2c3` at `2026-08-27T04:21:33Z`; pattern note pushed on `docs/moba-proto-patterns-20260827` at `87ac7e2c`.
+- **raised for /custodian:** 0 markers; this repo has no `docs/custodian-queue.md`, and no downstream source document was edited.
+- **FOR /brain:** distill → `40 Library/brain/choonz-moba.md` ← `choonz-moba@6923358`: exact-base worktree isolation, design-before-code gates, fail-closed external access, explicit deterministic contracts, and short-path Windows worktree fallback.
+- **DEFERRED / unresolved:** Owner must review and land PR #60 against `codex/m4.1-cooker-restart`, then authorize M5.0 map work. The ARC compiler was unavailable; implementation CMake/CTest and hardware gates were not run.
 
-- CI-preset `/WX` Debug, RelWithDebInfo, and Release builds: 97/97 targets in each configuration;
-  CTest: 43/43 in each configuration.
-- Debug-ASan: 97/97 targets and 43/43 tests.
-- clang-cl 19.1.5 plus UBSan: runtime capability tripwire and 6/6 deterministic/isolation tests.
-- Debug and Release oracle: 10,000 ticks, 923 commands, final `0x637628abff59c823`, stream
-  `0x6f381609f7e59f0c`, logic `0xab96814425ba80a4`.
-- RTX 4070 Ti Vulkan 1.3, validation enabled: 90 clean frames, asset-managed 64×64 texture id
-  `0x3d9bff0eddada061`, 64 objects, one scene draw, and a visually inspected 1280×720 screenshot.
-- All eight GitHub CI/CodeQL checks passed on earlier head `acc60b4`. The final reviewed security
-  repair head must pass the same exact-head gate before PR #52 becomes ready.
-- Exact head `82c4213` passed local acceptance but stayed draft after full security review found a
-  fixed-path pre-delete in one asset test. The shared fixture now atomically creates its scope and
-  child, binds their identities through handle-based cleanup, and proves both names cannot be
-  replaced while live. Focused rereview and Debug 43/43 pass; its successor head is the only landing
-  candidate.
+## Next — FIRST action
 
-## First action — DONE 2026-08-13
+1. Verify PR #60 is accepted and landed at the intended base; only then create `lane/moba-m5.0-map/20260827` in the planned GITHUB-ROOT worktree.
 
-PR #52 (M4.0) was marked ready after exact-head gates and merged 2026-08-13. The M4.1 slate was
-opened separately as PR #54 (open). Historical first-action items retained for the record:
+## Queue
 
-1. ~~Commit and push the final M4.0 security/evidence closure and require all exact-head GitHub checks.~~
-2. ~~Obtain fresh exact-head security and acceptance verdicts; mark PR #52 ready only when local and
-   hosted evidence agree.~~
-3. ~~Owner squash-merge authorization is recorded. Merge only the recorded exact green head, verify
-   the merged tree, and synchronize `main`.~~
-4. ~~Open a separate M4.1 slate from that green `main`; do not stack cooker work on PR #52.~~
-   (Opened as PR #54.)
-
-## M4.1 boundary
-
-M4.1 is the offline cooker plus one versioned little-endian `.mba` container. Keep the shared parser
-surface POD-only, emit byte-identical output from repeated full cooks, add build-time AssetId
-collision diagnostics/generated constants, and make the runtime reject bad magic/version/type/size
-before allocation. The first vertical proof is TGA → `.mba` texture → the existing registry/upload
-seam. No PNG inflate, glTF, incremental dependency graph, pack file, compression, hot reload,
-gameplay, or networking belongs in that slate.
+- Implement the approved M5.0 `MapGrid` and `.gamedata`/`.mapdesc` codec slice only after the owner gate.
+- Keep `.mba` v1, `engine/render`, the dirty primary checkout, and the active M4.1 worktree untouched.
+- Run the native build/test matrix, commit explicitly, push, and report the final branch, commit, PR, receipt, checks, and remaining gates.
