@@ -2,7 +2,7 @@
 type: lane-receipt
 title: "MOBA-PROTO design lane receipt"
 id: 2026-08-26-moba-proto-design-receipt
-status: pending-closure
+status: owner-required
 lane_id: moba-proto-design
 workflow_pattern: workflow.lean-lane-mint/v1
 operating_pattern: RAIL
@@ -27,8 +27,8 @@ receipt only; it does not authorize engine implementation or PR merge.
 | Design branch | `lane/moba-proto-design/20260826` |
 | Design worktree | `C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-design-20260826` |
 | PR target | `codex/m4.1-cooker-restart` |
-| Final head commit | PENDING COMMIT AND PR CLOSURE |
-| Pull request | PENDING PUSH AND PR CREATION |
+| Packet commit | `b8020c822abaff3cfb370a991c3daf73e4681979` |
+| Pull request | NOT CREATED; OWNER_REQUIRED network/auth gate |
 
 ## Mailbox lifecycle evidence
 
@@ -39,6 +39,7 @@ with repo stream `choonz-moba`.
 |---|---|---|
 | posture | `2026-08-27T03:50:37Z` | UNAVAILABLE; helper returned no separate ID |
 | start | `2026-08-27T03:50:38Z` | UNAVAILABLE; helper returned no separate ID |
+| report | `2026-08-27T03:56:04Z` | `wid-20260826-moba-proto-design-b8020c` |
 
 The inbox had no targeted frames, conflicts, requests, or reports for
 `moba-proto-design`. Mailbox status reported an unrelated incomplete registry
@@ -82,7 +83,9 @@ generated file is in the write fence.
 | ARC compiler availability | UNAVAILABLE | No ARC compiler/checker is present in the target checkout or permitted local GitHub workspaces |
 | Documentation/schema checks | PASS (direct) | Required contract markers, task fields, dependency integrity, and forbidden-engine scan passed |
 | `git diff --cached --check` | PASS | Staged whitespace check exits zero |
-| Final commit path fence | PENDING COMMIT | Recheck against final `HEAD` before push |
+| Final commit path fence | PASS | `b8020c822abaff3cfb370a991c3daf73e4681979` contains only the three artifacts |
+| Branch push | PASS | `origin/lane/moba-proto-design/20260826` updated successfully |
+| GitHub PR creation | OWNER_REQUIRED | GitHub GraphQL endpoint unreachable; configured CLI token is invalid |
 | CMake/CTest implementation matrix | NOT RUN | Design-only lane; fresh implementation gates required later |
 | Hardware validation | NOT RUN | Existing M3.4/M4.0 evidence is cited; no fresh M4.1 claim |
 
@@ -110,6 +113,20 @@ The implementation order is:
 
 The active M4.1 owner remains the writer for its cooker implementation. No
 future lane may overlap a mutable fence without an explicit dependency edge.
+
+## Owner-required delivery gate
+
+The docs-only packet is committed and pushed, but the requested PR was not
+created. `gh auth status` reports the configured GitHub CLI token as invalid,
+and the non-interactive PR creation attempt failed to connect to
+`https://api.github.com/graphql`.
+
+Required pickup: restore approved GitHub CLI authentication and network access,
+then create a PR from `lane/moba-proto-design/20260826` at packet commit
+`b8020c822abaff3cfb370a991c3daf73e4681979` against
+`codex/m4.1-cooker-restart`. Do not merge the PR from this lane. The mailbox
+report is WID `wid-20260826-moba-proto-design-b8020c` at
+`2026-08-27T03:56:04Z`.
 
 ## Held gates
 
