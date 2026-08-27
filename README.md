@@ -1,3 +1,5 @@
+> **FLEET STATUS · ALIVE** (2026-08-17) — C++ MOBA prototype, custom engine — PUBLIC. Authority: [FLEET-MAP](https://github.com/shapeslines/GromCodebase/blob/main/docs/fleet/FLEET-MAP.md) · decision: vault 2026-08-17 provenance ratification.
+
 # MOBA (working title)
 
 A multiplayer online battle arena built **from scratch in C++**, on a custom
