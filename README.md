@@ -166,3 +166,5 @@ game/ tools/   the game exe, sandbox, replay, and visualization tools
 assets/ tests/
 docs/          ARCHITECTURE.md, ROADMAP.md, DECISIONS/ (ADRs)
 ```
+
+Discovery map: [FLEET-INDEX.md](https://github.com/shapeslines/GromCodebase/blob/main/docs/fleet/FLEET-INDEX.md) (question → surface → one move). Do not fork GAP-REGISTER or FLEET-INDEX in this repo.
