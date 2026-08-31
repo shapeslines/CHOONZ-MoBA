@@ -6,8 +6,8 @@
 //                                 readback — session-independent visual proof)
 //   sandbox --orbit               auto-rotates the camera (screenshot verification)
 //   sandbox --sim-self-check      runs the headless 10,000-tick eng_sim oracle
-// Loads assets/uv_test.tga through the promoted M4.0 parser and creates typed
-// mesh/texture/material resources for the instanced cube field.
+// Loads the CMake-cooked uv_test.mba through the M4.1 baked asset path and creates
+// typed mesh/texture/material resources for the instanced cube field.
 // M2.3: an orbit camera (arrows rotate, wheel zooms) feeds view/proj into the
 // renderer's per-frame set=0 UBO through the seam.
 #include "platform/platform.h"
@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 
     PlatformWindowDesc desc;
-    desc.title = "MOBA - sandbox (Phase 4 M4.0 assets; F1 overlay)";
+    desc.title = "MOBA - sandbox (Phase 4 M4.1 baked assets; F1 overlay)";
     desc.width = 1280; desc.height = 720;
     desc.resizable = true; desc.fullscreen = false;
 
@@ -210,8 +210,9 @@ int main(int argc, char** argv) {
         mesh = renderer_create_mesh(rnd, &mesh_desc);
     }
 
-    // M4.0 loose TGA -> AssetRegistry -> renderer upload callback. The registry owns
-    // the texture handle and level lifetime; the sandbox owns only its material.
+    // M4.1 CMake-cooked .mba -> asset_load -> AssetRegistry -> renderer upload callback.
+    // The registry owns the texture handle and level lifetime; the sandbox owns only
+    // its material.
     if (rnd) {
         AssetRegistryConfig asset_config = asset_registry_config_default(MOBA_ASSET_DIR);
         asset_config.capacity = 64u;
@@ -230,8 +231,8 @@ int main(int argc, char** argv) {
             asset_registry_init(&asset_registry, &asset_persistent_arena,
                                 &asset_level_arena, &asset_global_arena,
                                 &asset_io_arena, asset_renderer, asset_config)) {
-            AssetHandle texture_asset = asset_load_texture_tga(
-                &asset_registry, "uv_test.tga", ASSET_LIFETIME_LEVEL);
+            AssetHandle texture_asset = asset_load(
+                &asset_registry, "uv_test.mba", ASSET_LIFETIME_LEVEL);
             AssetTextureView texture_view{};
             if (asset_get_texture(&asset_registry, texture_asset, &texture_view)) {
                 texture = texture_view.gpu;
