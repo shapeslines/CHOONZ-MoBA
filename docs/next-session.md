@@ -60,3 +60,9 @@ collision diagnostics/generated constants, and make the runtime reject bad magic
 before allocation. The first vertical proof is TGA → `.mba` texture → the existing registry/upload
 seam. No PNG inflate, glTF, incremental dependency graph, pack file, compression, hot reload,
 gameplay, or networking belongs in that slate.
+
+---
+## ⚑ Fleet audit flag — 2026-08-18 (tier-0 pass; uncommitted rider)
+Full report: `GITHUB-ROOT/_SCRATCH/fleet-audit-2026-08-18/REPORT.md`
+- Behind 2 docs-only commits (08-18 re-scribe PR #56) — pull. Twin clone MOBA-proto (same remote+HEAD) hosts 2 prunable Temp worktrees; consolidate when M4.x lands.
+- Grades B/B/B/A/A/B → B+ · Triage: CONTINUE (close PR #52 exact-head gate).
