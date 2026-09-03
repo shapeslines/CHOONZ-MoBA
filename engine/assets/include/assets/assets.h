@@ -12,6 +12,7 @@ typedef enum AssetType {
     ASSET_TYPE_NONE = 0,
     ASSET_TYPE_TEXTURE,
     ASSET_TYPE_SOUND,
+    ASSET_TYPE_RECORD,   // ADR-0016 typed content record (hero, objective, economy, map)
 } AssetType;
 
 typedef enum AssetState {
@@ -79,6 +80,23 @@ typedef struct AssetSoundView {
     uint32_t       frame_count;
 } AssetSoundView;
 
+// A typed content record kept verbatim in the lifetime arena; `kind` is the
+// MbaAssetType tag and the bytes are the validated record body (content.h codecs).
+typedef struct AssetRecordView {
+    AssetId        id;
+    const uint8_t* bytes;
+    uint32_t       bytes_count;
+    uint32_t       kind;
+    uint32_t       schema_version;
+} AssetRecordView;
+
+typedef struct AssetRecordSource {
+    const uint8_t* bytes;
+    uint32_t       bytes_count;
+    uint32_t       kind;
+    uint32_t       schema_version;
+} AssetRecordSource;
+
 // Fixed-capacity SoA registry. Paths and CPU payloads live in the selected lifetime
 // arena; all identity/index state lives in the persistent arena. `state` reserves
 // ASSET_STATE_LOADING for the later async path even though M4.0 loads synchronously.
@@ -133,6 +151,8 @@ AssetHandle asset_register_texture(AssetRegistry* registry, const char* path,
                                    AssetLifetime lifetime, AssetTextureSource source);
 AssetHandle asset_register_sound(AssetRegistry* registry, const char* path,
                                  AssetLifetime lifetime, AssetSoundSource source);
+AssetHandle asset_register_record(AssetRegistry* registry, const char* path,
+                                  AssetLifetime lifetime, AssetRecordSource source);
 
 // Unified M4.1 baked path. `path` is the canonical relative .mba path beneath
 // the configured asset root. The container's magic, version, type, size, and
@@ -156,6 +176,8 @@ bool asset_get_texture(const AssetRegistry* registry, AssetHandle handle,
                        AssetTextureView* out);
 bool asset_get_sound(const AssetRegistry* registry, AssetHandle handle,
                      AssetSoundView* out);
+bool asset_get_record(const AssetRegistry* registry, AssetHandle handle,
+                      AssetRecordView* out);
 uint32_t asset_global_refcount(const AssetRegistry* registry, AssetHandle handle);
 
 // Global references release individually. Level assets release as one deterministic

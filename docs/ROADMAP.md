@@ -668,6 +668,10 @@ configuration. Exact-head hosted checks and owner landing remain the closing gat
 ---
 
 ### M4.1 — The cooker + unified `.mba` container  · L
+**Execution note (2026-09-03):** typed content record payloads (`HeroDef` with nested actions/effects,
+`ObjectiveDef`, `EconomyRule`, opaque `MAP`) landed as `content-typed-payloads` under ADR-0016 on the same
+container version (`docs/slate-moba-phase5-content-payloads.md`); `cooker --kind` bakes authored
+`key = value` text. ADR-0010 generated id constants remain a named follow-on.
 **Goal:** move all heavy parsing offline into a separate tool; one runtime loader, one format.
 **Deliverables:** `cooker.exe` (separate target, links the shared `asset_parsers` lib — **POD C
 interface only**, identical exception flags per ADR-0009); `MbaHeader` (magic+version+type+id) + typed

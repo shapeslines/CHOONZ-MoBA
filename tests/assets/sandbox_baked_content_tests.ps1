@@ -5,6 +5,9 @@ param(
     [Parameter(Mandatory = $true)][string]$Cooker,
     [Parameter(Mandatory = $true)][string]$Source,
     [Parameter(Mandatory = $true)][string]$Baked,
+    [Parameter(Mandatory = $true)][string]$RecordSource,
+    [Parameter(Mandatory = $true)][string]$RecordBaked,
+    [Parameter(Mandatory = $true)][string]$RecordGolden,
     [Parameter(Mandatory = $true)][string]$WorkDir
 )
 
@@ -29,6 +32,8 @@ Require (Test-Path -LiteralPath $Source) 'Sandbox TGA source is missing.'
 & $Cmake --build $BuildDir --config $Configuration --target content
 Require ($LASTEXITCODE -eq 0) 'CMake content target failed.'
 Require (Test-Path -LiteralPath $Baked) 'CMake content target did not produce uv_test.mba.'
+Require (Test-Path -LiteralPath $RecordBaked) 'CMake content target did not produce hero_test.mba.'
+Require (Test-Path -LiteralPath $RecordGolden) 'Checked-in hero_test.mba golden is missing.'
 
 $resolvedWork = [System.IO.Path]::GetFullPath($WorkDir)
 $caseName = 'sandbox-baked-content-' + [System.Guid]::NewGuid().ToString('N')
@@ -54,6 +59,16 @@ try {
              $cooked[2] -eq [byte][char]'A' -and $cooked[3] -eq 0) 'CMake-produced output lacks .mba magic.'
     Require-EqualBytes $firstBytes $secondBytes 'Repeated sandbox texture bakes are not byte-identical.'
     Require-EqualBytes $cooked $firstBytes 'CMake content output differs from the deterministic sandbox texture bake.'
+
+    # ADR-0016: the cooked hero record equals a fresh bake and the independent Python golden.
+    $recordFirst = Join-Path $caseDir 'hero_first.mba'
+    & $Cooker --kind hero --input $RecordSource --asset 'hero_test.mba' --output $recordFirst
+    Require ($LASTEXITCODE -eq 0) 'The sandbox hero record bake failed.'
+    [byte[]]$recordCooked = [System.IO.File]::ReadAllBytes($RecordBaked)
+    [byte[]]$recordFirstBytes = [System.IO.File]::ReadAllBytes($recordFirst)
+    [byte[]]$recordGolden = [System.IO.File]::ReadAllBytes($RecordGolden)
+    Require-EqualBytes $recordCooked $recordFirstBytes 'CMake hero record differs from the deterministic bake.'
+    Require-EqualBytes $recordCooked $recordGolden 'CMake hero record differs from the independent Python golden.'
 
     Write-Output 'sandbox baked content: CMake output matches deterministic cooker bytes'
 }
