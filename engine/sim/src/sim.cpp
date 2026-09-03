@@ -151,6 +151,11 @@ bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, 
             return slot >= 0 && static_cast<uint32_t>(slot) < unit_count &&
                    command->value_x == mm::fix_from_int(slot);
         }
+        case SIM_COMMAND_CAST:
+            // value_x/value_y are read according to the action's target_mode, which
+            // lives in the def table; this predicate can only bound the action slot.
+            return command->amount >= 0 &&
+                   command->amount < static_cast<int32_t>(SIM_MAX_ACTION_SLOTS);
         default:
             return false;
     }
@@ -235,6 +240,19 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
                 world->unit_entities[target_slot].h == HANDLE_NULL) return false;
             ++damage_count;
         }
+        if (command.kind == SIM_COMMAND_CAST) {
+            EntityId actor = world->unit_entities[command.unit_index];
+            uint16_t def_index = 0u;
+            if (!hero_pool_def_index(&world->heroes, actor, &def_index)) return false;
+            const SimHeroDef* def = sim_hero_def_table_get(&world->hero_defs, def_index);
+            if (!def) return false;
+            bool slot_exists = false;
+            for (uint16_t action_index = 0u; action_index < def->action_count; ++action_index) {
+                if (def->actions[action_index].slot == static_cast<uint8_t>(command.amount))
+                    slot_exists = true;
+            }
+            if (!slot_exists) return false;
+        }
     }
     return damage_count <= world->damage_events.capacity;
 }
@@ -253,6 +271,12 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
     ENSURE(moved);
     bool acted = sys_hero_actions(world);
     if (!acted) return false;
+    bool flew = sys_projectiles(world);
+    if (!flew) return false;
+    // Section 4 puts sys_status after sys_movement, so a slow applied on tick N
+    // first reduces movement on tick N+1. That is the schedule, not a bug.
+    bool statuses = sys_status(world);
+    if (!statuses) return false;
     bool published = damage_event_queue_publish(&world->damage_events);
     ENSURE(published);
     if (world->config.sim_event_capacity > 0u) {

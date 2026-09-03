@@ -191,6 +191,31 @@ bool command_to_sim(const SimWorld* world, const Command* command, SimCommand* o
             sim.amount = COMMAND_BASIC_ATTACK_PLACEHOLDER_AMOUNT;
             break;
         }
+        case COMMAND_KIND_USE_ACTION: {
+            // M5.2: the action slot comes from the def table, so the wire never
+            // carries a meaning the simulation has to guess.
+            uint16_t def_index = 0u;
+            if (!hero_pool_def_index(&world->heroes, command->actor, &def_index)) return false;
+            const SimHeroDef* def = sim_hero_def_table_get(&world->hero_defs, def_index);
+            if (!def) return false;
+            const SimActionDef* action = nullptr;
+            for (uint16_t i = 0u; i < def->action_count; ++i) {
+                if (def->actions[i].action_id == command->action_id) action = &def->actions[i];
+            }
+            if (!action) return false;
+            sim.kind = SIM_COMMAND_CAST;
+            sim.amount = static_cast<int32_t>(action->slot);
+            if (action->target_mode == SIM_TARGET_ENTITY) {
+                uint32_t target_slot = 0u;
+                if (!command_actor_slot(world, command->target, &target_slot)) return false;
+                sim.value_x = mm::fix_from_int(static_cast<int32_t>(target_slot));
+                sim.value_y = 0;
+            } else {
+                sim.value_x = command->point_x_q16;
+                sim.value_y = command->point_y_q16;
+            }
+            break;
+        }
         default:
             return false;
     }

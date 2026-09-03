@@ -124,7 +124,7 @@ The `docs/ROADMAP.md` and `docs/JOURNAL.md` occurrences are past-tense narrative
 - [x] **S2** `combat.h/.cpp` `resolve_effect`; basic attack through it; cooldown and
   resource payment; `SIM_COMMAND_ATTACK` through canonicality, validation,
   `sys_apply_commands`, and `command_to_sim`; `sys_cooldown_tick` extended.
-- [ ] **S3** `sys_hero_actions`, `sys_projectiles`, `sys_status`, `sys_effects_resolve`;
+- [x] **S3** `sys_hero_actions`, `sys_projectiles`, `sys_status`, `sys_effects_resolve`;
   `SIM_COMMAND_CAST`; the three effects; slow feeding `sys_movement`; `sim_tick` on the
   section 4 schedule.
 - [ ] **S4** Hash + mirrored diff appended after the map block; `SimStateField` entries;
@@ -199,7 +199,34 @@ ticks.
   sim_oracle ticks=10000 commands=923 final=0xff4e1ca0c779455b stream=0x218da333e6834496 logic=0xcef8548df2b2a518
   ```
 
-### S3-S4
+### S3 - CAST and the three effects
+
+`SIM_COMMAND_CAST = 4` (canonicality bounds only the action slot; `value_x`/`value_y`
+are read through the def table's `target_mode`), `command_to_sim` resolves
+`USE_ACTION`'s `action_id` to a slot through the def table, and
+`sim_validate_commands` atomically rejects a packet whose CAST slot is not in the
+actor's def. `sys_hero_actions` gained the cast branch (cooldown, resource, and
+range are no-ops when they fail); `sys_projectiles` advances in ascending entity
+order with an exact integer step (`fix_isqrt64` of a Q32.32 square is Q16.16) and
+re-enters `resolve_effect` on impact; `sys_status` decrements and expires rows,
+emitting `SIM_EVENT_STATUS_EXPIRED`; `sys_movement` scales the integrated delta by
+an `area_slow` scalar. `sim_tick` now runs the full section 4 schedule.
+
+Recorded behaviour: `sys_status` runs after `sys_movement` and
+`sys_effects_resolve` commits the status row after `sys_status` has already run, so
+a slow applied on tick N keeps its full duration that tick and first reduces
+movement on tick N+1.
+
+- `engine_tests --suite sim_hero_combat`: **19 tests, 405 checks, 0 failed**.
+- Debug CTest: **100% tests passed, 51/51** (33.8 s).
+- `sim_oracle_probe --sim-self-check` (Debug), still unchanged - the placeholder
+  world configures no hero, so every new system is a no-op there:
+
+  ```
+  sim_oracle ticks=10000 commands=923 final=0xff4e1ca0c779455b stream=0x218da333e6834496 logic=0xcef8548df2b2a518
+  ```
+
+### S4
 
 _Pending (Agent B)._
 

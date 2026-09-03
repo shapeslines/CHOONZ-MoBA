@@ -658,3 +658,194 @@ TEST(sim_hero_combat, basic_attack_translation_only_fires_for_a_hero_actor) {
     CHECK(translated.unit_index == 0u);
     CHECK(translated.amount == 1);
 }
+
+// ------------------------------------------------------------------ S3 effects
+
+static SimCommand cast_command(uint16_t actor_slot, int32_t action_slot,
+                               mm::fix value_x = 0, mm::fix value_y = 0) {
+    SimCommand command{};
+    command.kind = SIM_COMMAND_CAST;
+    command.unit_index = actor_slot;
+    command.amount = action_slot;
+    command.value_x = value_x;
+    command.value_y = value_y;
+    return command;
+}
+
+TEST(sim_hero_combat, cast_command_canonicality_bounds_only_the_action_slot) {
+    SimCommand cast = cast_command(0u, 2, mm::fix_from_int(3), mm::fix_from_int(-4));
+    CHECK(sim_command_is_canonical(&cast, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    SimCommand bad = cast;
+    bad.amount = static_cast<int32_t>(SIM_MAX_ACTION_SLOTS);
+    CHECK(!sim_command_is_canonical(&bad, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    bad = cast;
+    bad.amount = -1;
+    CHECK(!sim_command_is_canonical(&bad, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+}
+
+TEST(sim_hero_combat, projectile_damage_flies_then_re_enters_the_pipeline) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(6)));
+    SimWorld& world = fixture.world;
+
+    // Slot 0: entity-targeted projectile damage, range 10, speed 30, magnitude 20.
+    SimCommand cast = cast_command(0u, 0, mm::fix_from_int(1));
+    SimCommandBuffer buffer{&cast, 1u};
+    CHECK(sim_validate_commands(&world, &buffer));
+    CHECK(sim_tick(&world, &buffer));
+
+    // The projectile exists and no damage has landed yet.
+    CHECK(world.projectiles.membership.count == 1u);
+    CHECK(health_of(&world, fixture.target) == 100);
+    HeroView hero{};
+    CHECK(hero_pool_get(&world.heroes, fixture.hero, &hero));
+    CHECK(*hero.resource == 40);                       // 50 - resource_cost 10
+    CHECK(hero.action_cooldown[0] == 4u);              // 5, minus this tick
+
+    uint32_t flight = 0u;
+    while (world.projectiles.membership.count > 0u && flight < 64u) {
+        CHECK(sim_tick(&world, nullptr));
+        ++flight;
+    }
+    CHECK(flight > 0u);
+    CHECK(world.projectiles.membership.count == 0u);
+    CHECK(health_of(&world, fixture.target) == 80);
+    CHECK(world.entities.free_count == 1u);            // the projectile entity recycled
+}
+
+TEST(sim_hero_combat, self_heal_rides_the_envelope_and_clamps_at_maximum) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    HealthView hero_health{};
+    CHECK(health_pool_get(&world.health, fixture.hero, &hero_health));
+    *hero_health.current = 50;
+
+    SimCommand cast = cast_command(0u, 1);             // slot 1: self heal, magnitude 15
+    SimCommandBuffer buffer{&cast, 1u};
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(health_of(&world, fixture.hero) == 65);
+    HeroView hero{};
+    CHECK(hero_pool_get(&world.heroes, fixture.hero, &hero));
+    CHECK(*hero.resource == 45);                       // 50 - resource_cost 5
+
+    // Not enough resource is a no-op, not a rejected tick.
+    *hero.resource = 2;
+    for (uint32_t i = 0u; i < 8u; ++i) CHECK(sim_tick(&world, nullptr));
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(health_of(&world, fixture.hero) == 65);
+    CHECK(*hero.resource == 2);
+
+    // A heal never exceeds maximum.
+    *hero.resource = 50;
+    *hero_health.current = 95;
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(health_of(&world, fixture.hero) == 100);
+}
+
+TEST(sim_hero_combat, area_slow_applies_a_status_that_reaches_movement_next_tick) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    VelocityView velocity{};
+    CHECK(velocity_pool_get(&world.velocities, fixture.target, &velocity));
+    *velocity.velocity_x = mm::fix_from_int(4);
+    TransformView target_transform{};
+    CHECK(transform_pool_get(&world.transforms, fixture.target, &target_transform));
+    mm::fix full_step = mm::fix_mul(mm::fix_from_int(4), SIM_DT_FIXED);
+    mm::fix start_x = *target_transform.position_x;
+
+    // Slot 2: area slow, radius 3, scalar 0.5, duration 4, cast at the target point.
+    SimCommand cast = cast_command(0u, 2, mm::fix_from_int(2), 0);
+    SimCommandBuffer buffer{&cast, 1u};
+    CHECK(sim_tick(&world, &buffer));
+
+    // sys_status runs after sys_movement, so this tick still integrated at full
+    // speed and the slow first bites on the next tick. Intended, per section 4.
+    CHECK(*target_transform.position_x == start_x + full_step);
+    CHECK(status_pool_has(&world.statuses, fixture.target));
+    StatusView status{};
+    CHECK(status_pool_get(&world.statuses, fixture.target, &status));
+    CHECK(*status.effect_type == SIM_EFFECT_AREA_SLOW);
+    // sys_effects_resolve commits the row after sys_status has already run, so the
+    // full duration is intact on the tick it was applied.
+    CHECK(*status.remaining_ticks == 4u);
+    CHECK(*status.scalar == FIX_ONE / 2);
+
+    mm::fix before = *target_transform.position_x;
+    CHECK(sim_tick(&world, nullptr));
+    CHECK(*target_transform.position_x == before + mm::fix_mul(full_step, FIX_ONE / 2));
+    CHECK(*status.remaining_ticks == 3u);
+
+    // Four slowed ticks, then the row expires on schedule and is gone.
+    CHECK(sim_tick(&world, nullptr));
+    CHECK(sim_tick(&world, nullptr));
+    CHECK(status_pool_has(&world.statuses, fixture.target));
+    CHECK(sim_tick(&world, nullptr));
+    CHECK(!status_pool_has(&world.statuses, fixture.target));
+    before = *target_transform.position_x;
+    CHECK(sim_tick(&world, nullptr));
+    CHECK(*target_transform.position_x == before + full_step);
+}
+
+TEST(sim_hero_combat, use_action_translates_to_cast_through_the_def_table) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    Command command{};
+    command.command_kind = COMMAND_KIND_USE_ACTION;
+    command.actor = fixture.hero;
+    command.action_id = 0xA1ULL;                       // slot 0, entity-targeted
+    command.target = fixture.target;
+    SimCommand translated{};
+    CHECK(command_to_sim(&world, &command, &translated));
+    CHECK(translated.kind == SIM_COMMAND_CAST);
+    CHECK(translated.unit_index == 0u);
+    CHECK(translated.amount == 0);
+    CHECK(translated.value_x == mm::fix_from_int(1));
+
+    command.action_id = 0xA3ULL;                       // slot 2, area-targeted
+    command.target = EntityId{HANDLE_NULL};
+    command.point_x_q16 = mm::fix_from_int(3);
+    command.point_y_q16 = mm::fix_from_int(-2);
+    CHECK(command_to_sim(&world, &command, &translated));
+    CHECK(translated.amount == 2);
+    CHECK(translated.value_x == mm::fix_from_int(3));
+    CHECK(translated.value_y == mm::fix_from_int(-2));
+
+    command.action_id = 0xDEADULL;                     // no such action in the def
+    CHECK(!command_to_sim(&world, &command, &translated));
+
+    // A unit with no hero row still has no USE_ACTION seam.
+    command.actor = fixture.target;
+    command.action_id = 0xA1ULL;
+    CHECK(!command_to_sim(&world, &command, &translated));
+}
+
+TEST(sim_hero_combat, unknown_cast_slot_is_an_atomic_packet_reject) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    SimCommand cast = cast_command(0u, 5);             // canonical, but not in the def
+    SimCommandBuffer buffer{&cast, 1u};
+    CHECK(sim_command_is_canonical(&cast, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    CHECK(!sim_validate_commands(&world, &buffer));
+    uint64_t before = sim_hash_state(&world);
+    CHECK(!sim_tick(&world, &buffer));
+    CHECK(sim_hash_state(&world) == before);
+    CHECK(world.tick == 0u);
+
+    // The same command from a unit with no hero row is rejected too.
+    SimCommand from_non_hero = cast_command(1u, 0);
+    SimCommandBuffer non_hero{&from_non_hero, 1u};
+    CHECK(!sim_validate_commands(&world, &non_hero));
+}

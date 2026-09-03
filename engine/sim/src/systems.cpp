@@ -32,6 +32,26 @@ bool sys_apply_commands(SimWorld* world, const SimCommandBuffer* commands) {
                 world->unit_entities[static_cast<uint32_t>(mm::fix_to_int(command.value_x))];
             *hero.pending_point_x = 0;
             *hero.pending_point_y = 0;
+        } else if (command.kind == SIM_COMMAND_CAST) {
+            HeroView hero{};
+            bool found = hero_pool_get(&world->heroes, target, &hero);
+            ENSURE(found);
+            const SimHeroDef* def =
+                sim_hero_def_table_get(&world->hero_defs, *hero.def_index);
+            ENSURE(def != nullptr);
+            *hero.pending_kind = SIM_HERO_PENDING_CAST;
+            *hero.pending_slot = static_cast<uint8_t>(command.amount);
+            *hero.pending_target = EntityId{HANDLE_NULL};
+            *hero.pending_point_x = command.value_x;
+            *hero.pending_point_y = command.value_y;
+            for (uint16_t action_index = 0u; action_index < def->action_count; ++action_index) {
+                if (def->actions[action_index].slot != *hero.pending_slot) continue;
+                if (def->actions[action_index].target_mode != SIM_TARGET_ENTITY) continue;
+                uint32_t slot = static_cast<uint32_t>(mm::fix_to_int(command.value_x));
+                if (slot < SIM_MAX_UNITS) *hero.pending_target = world->unit_entities[slot];
+                *hero.pending_point_x = 0;
+                *hero.pending_point_y = 0;
+            }
         } else {
             DamageEvent event{EntityId{HANDLE_NULL}, target, command.amount};
             bool appended = damage_event_queue_append(&world->damage_events, &event);
@@ -58,6 +78,15 @@ bool sys_movement(SimWorld* world) {
         if (!velocity_pool_get(&world->velocities, entity, &velocity)) continue;
         mm::fix dx = mm::fix_mul(*velocity.velocity_x, SIM_DT_FIXED);
         mm::fix dy = mm::fix_mul(*velocity.velocity_y, SIM_DT_FIXED);
+        // M5.2 area_slow scales the integrated delta. An empty StatusPool leaves the
+        // integration byte-identical to every milestone before this one.
+        StatusView status{};
+        if (world->config.status_capacity > 0u &&
+            status_pool_get(&world->statuses, entity, &status) &&
+            *status.effect_type == SIM_EFFECT_AREA_SLOW) {
+            dx = mm::fix_mul(dx, *status.scalar);
+            dy = mm::fix_mul(dy, *status.scalar);
+        }
         *transform.position_x = fix_add_wrap(*transform.position_x, dx);
         *transform.position_y = fix_add_wrap(*transform.position_y, dy);
     }

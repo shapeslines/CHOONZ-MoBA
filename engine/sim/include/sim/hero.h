@@ -25,6 +25,8 @@ static const uint8_t SIM_MAX_DAMAGE_TYPE = 2;            // physical, magic, pur
 // The magnitude matches the M5.1 intake placeholder so the two seams agree.
 static const int32_t SIM_BASIC_ATTACK_MAGNITUDE = 1;
 static const uint32_t SIM_BASIC_ATTACK_COOLDOWN_TICKS = 10;
+// A projectile that never reaches its target must still be bounded state.
+static const uint16_t SIM_PROJECTILE_MAX_LIFETIME_TICKS = 300;
 
 typedef enum SimEffectType : uint8_t {
     SIM_EFFECT_NONE = 0,

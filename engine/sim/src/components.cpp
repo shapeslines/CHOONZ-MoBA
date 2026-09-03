@@ -363,6 +363,14 @@ bool hero_pool_get(HeroPool* pool, EntityId entity, HeroView* view) {
     return true;
 }
 
+bool hero_pool_def_index(const HeroPool* pool, EntityId entity, uint16_t* out_def_index) {
+    if (!pool || !pool->def_index || !out_def_index) return false;
+    uint32_t dense = component_pool_dense_index(&pool->membership, entity);
+    if (dense == COMPONENT_POOL_INVALID_DENSE) return false;
+    *out_def_index = pool->def_index[dense];
+    return true;
+}
+
 size_t projectile_pool_memory_required(uint32_t entity_capacity, uint32_t capacity) {
     if (!valid_pool_shape(entity_capacity, capacity)) return 0u;
     size_t total = component_pool_memory_required(entity_capacity, capacity);

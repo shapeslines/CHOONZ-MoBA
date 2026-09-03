@@ -124,6 +124,8 @@ bool hero_pool_add(HeroPool* pool, EntityId entity, uint16_t def_index, int32_t 
 bool hero_pool_remove(HeroPool* pool, EntityId entity);
 bool hero_pool_has(const HeroPool* pool, EntityId entity);
 bool hero_pool_get(HeroPool* pool, EntityId entity, HeroView* view);
+// Read-only def lookup for const seams such as sim_validate_commands.
+bool hero_pool_def_index(const HeroPool* pool, EntityId entity, uint16_t* out_def_index);
 
 typedef struct ProjectileView {
     EntityId* source;
