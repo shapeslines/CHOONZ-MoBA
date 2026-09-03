@@ -8,6 +8,7 @@
 #include "sim/components.h"
 #include "sim/entity.h"
 #include "sim/events.h"
+#include "sim/hero.h"
 #include "sim/map.h"
 #include "sim/sim_config.h"
 
@@ -47,11 +48,21 @@ typedef struct SimCommandBuffer {
 
 // map: M5.0 grid capacity. All-zero is the empty map (the placeholder world has
 // none); gameplay slices size it from the authored .mapdesc.
+// hero_*/projectile_*/status_*/sim_event_capacity: M5.2 hero-combat capacity. Each
+// is ZERO in sim_world_config_default(), and a zero capacity means the feature is
+// absent entirely - no arena bytes (add_required rejects a zero-size request, so a
+// zero-capacity pool is skipped the way an empty map is), no pool, every query
+// reports absent. Gameplay slices size them from the authored hero content.
 typedef struct SimWorldConfig {
     uint32_t max_entities;
     uint32_t initial_unit_count;
     uint32_t damage_event_capacity;
     MapConfig map;
+    uint16_t hero_def_capacity;
+    uint16_t hero_capacity;
+    uint16_t projectile_capacity;
+    uint16_t status_capacity;
+    uint32_t sim_event_capacity;
 } SimWorldConfig;
 
 typedef struct SimWorld {
@@ -67,6 +78,11 @@ typedef struct SimWorld {
     EntityId* pending_destroy;
     uint32_t pending_destroy_count;
     MapGrid map;
+    SimHeroDefTable hero_defs;
+    HeroPool heroes;
+    ProjectilePool projectiles;
+    StatusPool statuses;
+    SimEventQueue sim_events;
 } SimWorld;
 
 SimWorldConfig sim_world_config_default(void);
@@ -76,6 +92,11 @@ size_t sim_world_memory_required(SimWorldConfig config);
 // budget returns false without changing the world or the arena offset.
 bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig config);
 bool sim_destroy_deferred(SimWorld* world, EntityId entity);
+
+// Installs one validated hero def before the first tick. The table is immutable
+// while ticking: a mid-match def change is a schema break, not a hash bump.
+// Rejection leaves the table and the world unchanged.
+bool sim_install_hero_def(SimWorld* world, const SimHeroDef* def, uint16_t* out_index);
 bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, uint32_t unit_count);
 bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* commands);
 bool sim_tick(SimWorld* world, const SimCommandBuffer* commands);

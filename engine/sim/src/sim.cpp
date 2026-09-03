@@ -7,7 +7,18 @@ static bool sim_config_valid(SimWorldConfig config) {
     return config.max_entities > 0u && config.max_entities <= HANDLE_INDEX_MASK + 1u &&
            config.initial_unit_count <= SIM_MAX_UNITS &&
            config.initial_unit_count <= config.max_entities &&
-           config.damage_event_capacity > 0u && map_config_valid(config.map);
+           config.damage_event_capacity > 0u && map_config_valid(config.map) &&
+           config.hero_def_capacity <= config.max_entities &&
+           config.hero_capacity <= config.max_entities &&
+           config.projectile_capacity <= config.max_entities &&
+           config.status_capacity <= config.max_entities &&
+           config.sim_event_capacity <= config.max_entities &&
+           // A hero pool without a def table, or projectiles/status/heroes without an
+           // event queue, is a configuration mistake rather than a valid empty state.
+           (config.hero_capacity == 0u || config.hero_def_capacity > 0u) &&
+           (config.hero_capacity == 0u || config.sim_event_capacity > 0u) &&
+           (config.projectile_capacity == 0u || config.hero_capacity > 0u) &&
+           (config.status_capacity == 0u || config.hero_capacity > 0u);
 }
 
 static bool add_required(size_t* total, size_t required) {
@@ -17,8 +28,12 @@ static bool add_required(size_t* total, size_t required) {
 }
 
 SimWorldConfig sim_world_config_default(void) {
+    // Every M5.2 hero-combat capacity is zero here on purpose: the placeholder
+    // world, every existing fixture, and the recorded oracle keep their exact
+    // arena layout and canonical state until a caller opts in.
     return SimWorldConfig{
-        SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY, MapConfig{}};
+        SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY,
+        MapConfig{}, 0u, 0u, 0u, 0u, 0u};
 }
 
 size_t sim_world_memory_required(SimWorldConfig config) {
@@ -35,6 +50,24 @@ size_t sim_world_memory_required(SimWorldConfig config) {
                                   config.damage_event_capacity))) return 0u;
     if (!map_config_is_empty(config.map) &&
         !add_required(&total, map_memory_required(config.map))) return 0u;
+
+    // Zero capacity is skipped outright: add_required rejects a zero-size request,
+    // so a disabled pool must never reach it.
+    if (config.hero_def_capacity > 0u &&
+        !add_required(&total, sim_hero_def_table_memory_required(config.hero_def_capacity)))
+        return 0u;
+    if (config.hero_capacity > 0u &&
+        !add_required(&total, hero_pool_memory_required(config.max_entities,
+                                                        config.hero_capacity))) return 0u;
+    if (config.projectile_capacity > 0u &&
+        !add_required(&total, projectile_pool_memory_required(
+                                  config.max_entities, config.projectile_capacity))) return 0u;
+    if (config.status_capacity > 0u &&
+        !add_required(&total, status_pool_memory_required(config.max_entities,
+                                                          config.status_capacity))) return 0u;
+    if (config.sim_event_capacity > 0u &&
+        !add_required(&total, sim_event_queue_memory_required(config.sim_event_capacity)))
+        return 0u;
 
     size_t destroy_bytes = sizeof(EntityId) * static_cast<size_t>(config.max_entities);
     if (destroy_bytes > SIZE_MAX - (alignof(EntityId) - 1u) ||
@@ -60,6 +93,21 @@ bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig confi
         !damage_event_queue_init(&staged.damage_events, arena,
                                  config.damage_event_capacity) ||
         !map_init(&staged.map, arena, config.map)) {
+        temp_end(temp);
+        return false;
+    }
+    if ((config.hero_def_capacity > 0u &&
+         !sim_hero_def_table_init(&staged.hero_defs, arena, config.hero_def_capacity)) ||
+        (config.hero_capacity > 0u &&
+         !hero_pool_init(&staged.heroes, arena, config.max_entities, config.hero_capacity)) ||
+        (config.projectile_capacity > 0u &&
+         !projectile_pool_init(&staged.projectiles, arena, config.max_entities,
+                               config.projectile_capacity)) ||
+        (config.status_capacity > 0u &&
+         !status_pool_init(&staged.statuses, arena, config.max_entities,
+                           config.status_capacity)) ||
+        (config.sim_event_capacity > 0u &&
+         !sim_event_queue_init(&staged.sim_events, arena, config.sim_event_capacity))) {
         temp_end(temp);
         return false;
     }
@@ -99,6 +147,11 @@ bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, 
     }
 }
 
+bool sim_install_hero_def(SimWorld* world, const SimHeroDef* def, uint16_t* out_index) {
+    if (!world || world->config.hero_def_capacity == 0u) return false;
+    return sim_hero_def_table_install(&world->hero_defs, def, out_index);
+}
+
 bool sim_destroy_deferred(SimWorld* world, EntityId entity) {
     if (!world || !sim_config_valid(world->config) || !world->pending_destroy ||
         !entity_manager_is_alive(&world->entities, entity) ||
@@ -121,8 +174,18 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
         world->damage_events.capacity != world->config.damage_event_capacity ||
         world->damage_events.counts[world->damage_events.read_index] != 0u ||
         world->damage_events.counts[world->damage_events.write_index] != 0u ||
-        !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
+        !world->pending_destroy || world->pending_destroy_count > world->config.max_entities ||
+        !sim_hero_def_table_valid(&world->hero_defs) ||
+        world->hero_defs.capacity != world->config.hero_def_capacity ||
+        world->heroes.membership.capacity != world->config.hero_capacity ||
+        world->projectiles.membership.capacity != world->config.projectile_capacity ||
+        world->statuses.membership.capacity != world->config.status_capacity)
         return false;
+    if (world->config.sim_event_capacity > 0u &&
+        (!sim_event_queue_is_valid(&world->sim_events) ||
+         world->sim_events.capacity != world->config.sim_event_capacity ||
+         world->sim_events.counts[world->sim_events.read_index] != 0u ||
+         world->sim_events.counts[world->sim_events.write_index] != 0u)) return false;
 
     // Validate the complete unit-slot schedule before any command or integration
     // mutation. Cleared slots are legal; mapped slots must resolve every required

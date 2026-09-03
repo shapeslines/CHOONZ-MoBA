@@ -6,6 +6,7 @@ add_library(eng_sim STATIC
     src/components.cpp
     src/entity.cpp
     src/events.cpp
+    src/hero.cpp
     src/map.cpp
     src/oracle.cpp
     src/replay.cpp

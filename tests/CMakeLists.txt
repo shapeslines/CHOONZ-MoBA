@@ -32,6 +32,7 @@ add_executable(engine_tests
     sim/components_tests.cpp
     sim/deferred_destroy_tests.cpp
     sim/entity_tests.cpp
+    sim/hero_combat_tests.cpp
     sim/events_tests.cpp
     sim/map_tests.cpp
     sim/sim_config_tests.cpp
@@ -116,6 +117,7 @@ add_test(NAME sim_command COMMAND engine_tests --suite sim_command)  # M5.1 comm
 add_test(NAME sim_destroy COMMAND engine_tests --suite sim_destroy)
 add_test(NAME sim_entity  COMMAND engine_tests --suite sim_entity)
 add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
+add_test(NAME sim_hero_combat COMMAND engine_tests --suite sim_hero_combat)  # M5.2 hero combat
 add_test(NAME sim_map     COMMAND engine_tests --suite sim_map)      # M5.0 map grid + .mapdesc
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
