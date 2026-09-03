@@ -20,6 +20,8 @@ repo. Read it, then `docs/next-session.md`, then `docs/groundwork.md`. Everythin
   - The 10,000-tick oracle is bit-identical in every configuration: final `0x637628abff59c823`,
     stream `0x6f381609f7e59f0c`, `SIM_LOGIC_HASH 0xab96814425ba80a4`; the controlled mutation reports
     exactly `tick=4321 field=position_x entity=7`. A slate must record any deliberate logic-hash bump.
+    (PR #67 / M5.0 bumps these to final `0xff4e1ca0c779455b`, stream `0x218da333e6834496`,
+    logic `0xcef8548df2b2a518`; the values above are pre-M5.0 until that lane merges.)
   - RNG is `pcg32` inside `SimWorld`, advanced unconditionally once per tick (ADR-0007, ADR-0013).
   - `.mba` v1 is the only baked container and is texture-only until a slate widens it (ADR-0015);
     loose `.spv` stays renderer-owned (ADR-0008).

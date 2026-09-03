@@ -8,6 +8,44 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 16 — 2026-09-02 — Phase 5 M5.0 map grid, CI runner handoff, vault reconcile
+
+**Scope:** execute the first Phase 5 slice (`m5-map-navigation`), prepare CI for the fleet's
+self-hosted Windows runner, and reconcile the two vault project notes.
+
+**Outcome:** PR #67 (`lane/moba-m5.0-map/20260902`) lands `engine/sim/map.h/.cpp`: `MapGrid` SoA,
+Q16.16 cell↔world with floor semantics, fixed neighbour order, fail-closed lanes, spawn lookup, the
+`.mapdesc` codec, and the map hashed into canonical state with one recorded `SIM_LOGIC_HASH` bump
+(`0xab96814425ba80a4` → `0xcef8548df2b2a518`; new oracle final `0xff4e1ca0c779455b`, stream
+`0x218da333e6834496`, identical Debug/Release; mutation still `tick=4321 field=position_x entity=7`).
+PR #66 (`lane/moba-ci-runner/20260902`) routes `ci.yml` through the `CI_RUNNER` variable with a hosted
+fallback, verifies a pre-baked toolchain on self-hosted, adds `.github/runner-ci-request.json` and
+`docs/ci-runner-handoff.md`, and fixes `tools/local-ci.ps1` (benign native stderr no longer fatal).
+Vault: `moba.md` = engine record, `game-design.md` = area hub with `depends_on` edges
+(`05 Exchange/records/2026-09-02-moba-game-design-reconcile.md`; `project-doctor.py --check` PASS).
+
+### What changed
+
+- Sim: `SimWorldConfig.map` (all-zero = empty map, the default); `SimWorld.map`; `content` target
+  stages `assets/maps/*.mapdesc`; golden cross-checked against an independent Python encoder.
+- Hash: map block after Health; 14 `SimStateField` map entries; mirrored `diff_map`.
+- Pins: `sim_determinism_tests`, `tests/CMakeLists` regexes, `check_sim_binary_parity`,
+  `check-clang-cl-determinism.ps1`, README, PR template.
+
+### Verification
+
+- `/WX` Debug / RelWithDebInfo / Release 49/49 each; clang-cl 19 + UBSan PASS; `debug-asan` 49/49 on
+  the MSVC 14.44 toolset (plain `vcvars64` picks 14.38, which lacks the ASan runtime); `sim_map`
+  12 tests / 20,342 checks.
+- GitHub Actions is billing-locked; merges follow `docs/ci-runner-handoff.md`.
+
+### Next
+
+Owner merges #65, #66, #67 (local green + admin bypass, or runner activation). Then claim M5.1
+`m5-command-replay` per `docs/plans/m5.1-command-replay.md`; refresh `AGENTS.md` §1 oracle values.
+
+---
+
 ## Session 15 — 2026-09-02 — M4.1 close-out and PM baseline
 
 **Scope:** land the last two M4.1 DoD pieces, make the repo self-explaining for the next agent, and
