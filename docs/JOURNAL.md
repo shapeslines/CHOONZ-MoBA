@@ -8,6 +8,43 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 18 — 2026-09-03 — typed content record payloads (ADR-0016)
+
+**Scope:** execute `content-typed-payloads` so heroes, objectives, economy rules, and maps are
+authored offline, cooked byte-identically, and loaded through the single `asset_load` path.
+
+**Outcome:** PR #70 (`lane/moba-content-payloads/20260903`) lands ADR-0016: `.mba` stays at
+container v1 and gains record tags `HERO=5, OBJECTIVE=6, ECONOMY=7, MAP=8` with a 16-byte record
+header; `mba_inspect` decodes and validates record bodies before publishing a view, so the registry
+never sees a bad record. `engine/asset_parsers/content.h/.cpp` carry the proto-design §3.3 records
+(`HeroDef` with nested `ActionDef`/`EffectDef`, `ObjectiveDef`, `EconomyRule`) with `eng::serialize`
+codecs; `MAP` bodies stay opaque `.mapdesc` bytes because the asset modules may not include `sim/`.
+The registry stores records verbatim (`ASSET_TYPE_RECORD`, `asset_get_record`); the cooker gains
+`--kind` and a `key = value` authored text format; an independent Python encoder produces the goldens
+and the C++ encoder, the cooker, and the CMake `content` target all match it byte for byte; the
+sandbox loads `hero_test.mba` and prints the record line. No sim change; oracle unchanged.
+
+### What changed
+
+- ADR-0016 written; ADR-0015 carries the partial-supersession note; index updated.
+- `eng_asset_parsers` links `eng::serialize`; `mba.cpp`'s hand-rolled LE helpers replaced wholesale.
+- ROADMAP M4.1 execution note; ADR-0010 generated id constants named as a follow-on slice.
+
+### Verification
+
+- Debug CTest 49/49 (new `content` suite, registry record test, extended `cooker_cli` and
+  `sandbox_baked_content`); RelWithDebInfo + Release; `debug-asan` (MSVC 14.44); clang-cl/UBSan;
+  Vulkan smoke on the RTX 4070 Ti with validation on: 90 clean frames, `SANDBOX_SMOKE=PASS`, record
+  line `kind=5 schema=1 bytes=172`. Oracle unchanged.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 → #70. Then the map, command, and content contracts are all in
+tree and `m5-hero-combat` becomes claimable (needs its plan file first); ADR-0010 generated constants
+is the small follow-on.
+
+---
+
 ## Session 17 — 2026-09-03 — M5.1 command intake, clean M5.0 lane, typed-payload plan
 
 **Scope:** replace the tainted M5.0 lane, execute M5.1 `m5-command-replay`, and write the
