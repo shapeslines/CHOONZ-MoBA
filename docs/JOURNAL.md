@@ -8,6 +8,60 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 15 — 2026-09-02 — M4.1 close-out and PM baseline
+
+**Scope:** land the last two M4.1 DoD pieces, make the repo self-explaining for the next agent, and
+translate the vault's theoretical roadmap into claimable repo plans.
+
+**Outcome:** PR #63 squash-merged as `4f66af1` (CMake `content` target bakes `uv_test.tga`; sandbox
+loads `uv_test.mba` through `asset_load`), closing M4.1. PR #64 (legacy-root rescue) closed as
+superseded. Docs-only lane `lane/moba-pm-baseline/20260902` adds `CLAUDE.md` → `AGENTS.md` shim,
+reshapes `AGENTS.md` (boundaries, verification matrix, objects map, session protocol), fills
+`groundwork.md` and `WORK-FRONTLOG.md`, replaces the pin, adds `docs/README.md`,
+`docs/custodian-queue.md`, `docs/plans/` (bridge table, M4.1 close-out, M5.0 map-navigation, M5.1
+command-replay), the M5.0 ARC manifest, the M4.1 slate, and this entry. Vault `moba.md` and the
+`_Projects.md` row were patched to the real state.
+
+### What changed
+
+- ROADMAP: M4.0/M4.1 marked complete; Phase 4 banner → "Phase 5 open, M4.2–M4.4 on demand"; M5.0
+  carries an execution note that the bake path is `.mapdesc` + typed payloads, not the M4.2 parser.
+- `docs/sessions/` retired in favour of slates + `session-archive/`.
+- GAP-011 (vanished in-tree `MOBA-proto` clone) raised to GromCodebase via mailbox; marker in the
+  custodian queue.
+
+### Verification
+
+- Canonical local CI on `4f66af1` and the docs-surface lint / next-session audit results are recorded
+  in the lane PR body and `docs/receipts/20260902-pm-baseline.md`.
+
+### Next
+
+Claim `m5-map-navigation` per `docs/plans/m5.0-map-navigation.md` on
+`lane/moba-m5.0-map/<yyyymmdd>`; M5.1 may run in parallel with disjoint files.
+
+---
+
+## Session 14 — 2026-08-27 — Phase 4 M4.1 cooker, `.mba` v1, and the design packet
+
+**Scope:** the offline cooker and unified container (M4.1 core) plus the one-lane MOBA design packet.
+Reconstructed 2026-09-02 from PR #57 and PR #60; no journal entry was written at the time.
+
+**Outcome:** PR #57 (`codex/m4.1-cooker-restart`, accepted base `6571ee4`) moved TGA parsing,
+`asset_id`, and a new `.mba` v1 codec into POD-C `engine/asset_parsers/`, added `tools/cooker/`
+(brute-force TGA → `.mba`, `/EHsc` STL-private per ADR-0009), the unified `asset_load`, ADR-0015, and
+the `mba` / `cooker_cli` tests. PR #60 (`lane/moba-proto-design/20260826`, docs-only) landed
+`docs/slate-moba-proto-design.md` (schemas, 11-step tick, seven-slice DAG, nine acceptance tests),
+its ARC manifest, and receipt. PR #58/#59 added the FLEET STATUS line and the portable local-CI
+evidence gate; PR #61/#62 reshaped the pin under ADR-0025.
+
+### What was left open
+
+The `content` target and runtime consumption of a baked `.mba` (closed by PR #63 in Session 15);
+the M4.1 slate and this entry.
+
+---
+
 ## Session 13 — 2026-08-13 — Phase 4 M4.0 direct asset foundation
 
 **Scope:** establish stable asset identity and lifetimes, promote the bootstrap TGA path into the
