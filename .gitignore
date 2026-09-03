@@ -92,3 +92,6 @@ vk_pipeline_cache.bin
 .env
 .env.*
 !.env.example
+
+# Session-local advisor trajectory logs (never commit)
+.advisor/
