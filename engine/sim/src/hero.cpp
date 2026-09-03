@@ -1,6 +1,7 @@
 #include "sim/hero.h"
 
-#include <cstring>
+#include "sim/combat.h"
+#include "sim/systems.h"
 
 // ---------------------------------------------------------------- schema validation
 
@@ -130,5 +131,76 @@ bool sim_hero_def_table_install(SimHeroDefTable* table, const SimHeroDef* def,
     table->defs[index] = *def;
     table->count = static_cast<uint16_t>(index + 1u);
     if (out_index) *out_index = index;
+    return true;
+}
+
+// ---------------------------------------------------------------- sys_hero_actions
+
+// Two passes over the same code: pass one measures the event slots every pending
+// action would consume, pass two commits. Neither pass changes anything the other
+// reads, so a queue that cannot hold the tick fails the source operation before a
+// single byte of state moves (ADR-0014, proto-design section 5 event-overflow).
+static bool hero_action_run(SimWorld* world, EntityId entity, bool commit,
+                            uint32_t* damage_needed, uint32_t* sim_needed) {
+    HeroView hero{};
+    if (!hero_pool_get(&world->heroes, entity, &hero)) return false;
+    if (*hero.pending_kind == SIM_HERO_PENDING_NONE) return true;
+
+    const SimHeroDef* def = sim_hero_def_table_get(&world->hero_defs, *hero.def_index);
+    if (!def) return true;
+
+    if (*hero.pending_kind == SIM_HERO_PENDING_ATTACK) {
+        // Cooldown and range are not tick failures: M5.1 defined
+        // COMMAND_REJECT_COOLDOWN / COMMAND_REJECT_RANGE for command_intake_run, in
+        // front of this seam, so a stale intent is a no-op here.
+        if (*hero.basic_attack_cooldown != 0u) return true;
+        EntityId target = *hero.pending_target;
+        if (!entity_manager_is_alive(&world->entities, target) ||
+            !health_pool_has(&world->health, target)) return true;
+        int64_t distance_squared = 0;
+        if (!sim_distance_squared(world, entity, target, &distance_squared)) return true;
+        if (distance_squared > sim_range_squared(def->attack_range)) return true;
+
+        SimEffectDef effect = sim_basic_attack_effect();
+        if (!commit) return resolve_effect_measure(world, entity, target, &effect, 0, 0,
+                                                   damage_needed, sim_needed);
+        if (!resolve_effect(world, entity, target, &effect, 0, 0)) return false;
+        *hero.basic_attack_cooldown = SIM_BASIC_ATTACK_COOLDOWN_TICKS;
+        return true;
+    }
+    return true;
+}
+
+bool sys_hero_actions(SimWorld* world) {
+    if (!world) return false;
+    if (world->config.hero_capacity == 0u) return true;
+    ComponentPoolOrderedView ordered{};
+    if (!component_pool_ordered_view(&world->heroes.membership, &ordered)) return false;
+
+    uint32_t damage_needed = 0u;
+    uint32_t sim_needed = 0u;
+    for (uint32_t i = 0u; i < ordered.count; ++i) {
+        if (!hero_action_run(world, ordered.entities[i], false, &damage_needed, &sim_needed))
+            return false;
+    }
+    if (damage_needed > damage_event_queue_write_room(&world->damage_events)) return false;
+    if (sim_needed > 0u && sim_needed > sim_event_queue_write_room(&world->sim_events))
+        return false;
+
+    for (uint32_t i = 0u; i < ordered.count; ++i) {
+        if (!hero_action_run(world, ordered.entities[i], true, nullptr, nullptr)) return false;
+    }
+
+    // Tick-local intent is authoritative only between sys_apply_commands and here,
+    // so it is cleared unconditionally and in the same ordered walk.
+    for (uint32_t i = 0u; i < ordered.count; ++i) {
+        HeroView hero{};
+        if (!hero_pool_get(&world->heroes, ordered.entities[i], &hero)) return false;
+        *hero.pending_kind = SIM_HERO_PENDING_NONE;
+        *hero.pending_slot = 0u;
+        *hero.pending_target = EntityId{HANDLE_NULL};
+        *hero.pending_point_x = 0;
+        *hero.pending_point_y = 0;
+    }
     return true;
 }

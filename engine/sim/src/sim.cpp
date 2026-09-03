@@ -142,6 +142,15 @@ bool sim_command_is_canonical(const SimCommand* command, uint32_t player_count, 
             return command->amount == 0;
         case SIM_COMMAND_DAMAGE:
             return command->value_x == 0 && command->value_y == 0 && command->amount >= 0;
+        case SIM_COMMAND_ATTACK: {
+            // Self-contained by construction: this predicate never sees the world,
+            // so anything needing the def table or a live handle belongs in
+            // sim_validate_commands instead.
+            if (command->value_y != 0 || command->amount != 0) return false;
+            int32_t slot = mm::fix_to_int(command->value_x);
+            return slot >= 0 && static_cast<uint32_t>(slot) < unit_count &&
+                   command->value_x == mm::fix_from_int(slot);
+        }
         default:
             return false;
     }
@@ -181,11 +190,14 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
         world->projectiles.membership.capacity != world->config.projectile_capacity ||
         world->statuses.membership.capacity != world->config.status_capacity)
         return false;
+    // Only the read phase must be drained between ticks. sys_effects_resolve runs
+    // after publish, so a death it reports rides the write phase into the next
+    // tick's read phase - explicit phases are exactly what makes that a schedule
+    // decision rather than a storage change.
     if (world->config.sim_event_capacity > 0u &&
         (!sim_event_queue_is_valid(&world->sim_events) ||
          world->sim_events.capacity != world->config.sim_event_capacity ||
-         world->sim_events.counts[world->sim_events.read_index] != 0u ||
-         world->sim_events.counts[world->sim_events.write_index] != 0u)) return false;
+         world->sim_events.counts[world->sim_events.read_index] != 0u)) return false;
 
     // Validate the complete unit-slot schedule before any command or integration
     // mutation. Cleared slots are legal; mapped slots must resolve every required
@@ -216,6 +228,13 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
         if (!sim_command_is_canonical(&command, SIM_MAX_PLAYERS, SIM_MAX_UNITS) ||
             world->unit_entities[command.unit_index].h == HANDLE_NULL) return false;
         if (command.kind == SIM_COMMAND_DAMAGE) ++damage_count;
+        if (command.kind == SIM_COMMAND_ATTACK) {
+            EntityId actor = world->unit_entities[command.unit_index];
+            uint32_t target_slot = static_cast<uint32_t>(mm::fix_to_int(command.value_x));
+            if (!hero_pool_has(&world->heroes, actor) || target_slot >= SIM_MAX_UNITS ||
+                world->unit_entities[target_slot].h == HANDLE_NULL) return false;
+            ++damage_count;
+        }
     }
     return damage_count <= world->damage_events.capacity;
 }
@@ -232,12 +251,24 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
     ENSURE(applied);
     bool moved = sys_movement(world);
     ENSURE(moved);
+    bool acted = sys_hero_actions(world);
+    if (!acted) return false;
     bool published = damage_event_queue_publish(&world->damage_events);
     ENSURE(published);
+    if (world->config.sim_event_capacity > 0u) {
+        bool published_events = sim_event_queue_publish(&world->sim_events);
+        ENSURE(published_events);
+    }
     bool resolved = sys_combat_resolve(world);
     ENSURE(resolved);
+    bool effects = sys_effects_resolve(world);
+    if (!effects) return false;
     bool consumed = damage_event_queue_consume(&world->damage_events);
     ENSURE(consumed);
+    if (world->config.sim_event_capacity > 0u) {
+        bool consumed_events = sim_event_queue_consume(&world->sim_events);
+        ENSURE(consumed_events);
+    }
     bool cooled_down = sys_cooldown_tick(world);
     ENSURE(cooled_down);
     sys_rng_advance(world);

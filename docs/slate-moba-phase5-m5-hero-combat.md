@@ -121,7 +121,7 @@ The `docs/ROADMAP.md` and `docs/JOURNAL.md` occurrences are past-tense narrative
   `SimEvent` / `SimEventQueue`; config fields, `sim_world_memory_required`, `sim_init`
   wiring, all zero-capacity by default; `sim_install_hero_def`. Hash untouched, every
   existing test count unchanged.
-- [ ] **S2** `combat.h/.cpp` `resolve_effect`; basic attack through it; cooldown and
+- [x] **S2** `combat.h/.cpp` `resolve_effect`; basic attack through it; cooldown and
   resource payment; `SIM_COMMAND_ATTACK` through canonicality, validation,
   `sys_apply_commands`, and `command_to_sim`; `sys_cooldown_tick` extended.
 - [ ] **S3** `sys_hero_actions`, `sys_projectiles`, `sys_status`, `sys_effects_resolve`;
@@ -175,7 +175,31 @@ fields, all zero in `sim_world_config_default()`, skipped in
   sim_oracle ticks=10000 commands=923 final=0xff4e1ca0c779455b stream=0x218da333e6834496 logic=0xcef8548df2b2a518
   ```
 
-### S2-S4
+### S2 - unified pipeline, basic attack, cooldown and resource
+
+`combat.h`/`combat.cpp` carry `resolve_effect` (validate -> base magnitude ->
+modifiers -> mitigation -> append) plus a mutation-free `resolve_effect_measure`
+walk over the identical code, so `sys_hero_actions` pre-flights a whole action and
+an event-queue overflow fails the source operation before any state moves.
+`sys_combat_resolve` moved into `combat.cpp` beside `sys_effects_resolve`: the two
+committers of health now sit in one readable file. `SIM_COMMAND_ATTACK = 3` runs
+through `sim_command_is_canonical` (self-contained: exact `fix_from_int(slot)`,
+zero `value_y`/`amount`), `sim_validate_commands` (actor has a `HeroPool` row,
+target slot is mapped), `sys_apply_commands` (records `pending_*` intent only), and
+`command_to_sim` (hero actors only; a non-hero unit keeps the M5.1 `DAMAGE`
+placeholder). `sys_cooldown_tick` is the sole decrementer of the basic-attack and
+per-slot action cooldowns. Cooldown and range failures are no-ops, never rejected
+ticks.
+
+- `engine_tests --suite sim_hero_combat`: **13 tests, 326 checks, 0 failed**.
+- Debug CTest: **100% tests passed, 51/51** (31.7 s).
+- `sim_oracle_probe --sim-self-check` (Debug), still unchanged:
+
+  ```
+  sim_oracle ticks=10000 commands=923 final=0xff4e1ca0c779455b stream=0x218da333e6834496 logic=0xcef8548df2b2a518
+  ```
+
+### S3-S4
 
 _Pending (Agent B)._
 

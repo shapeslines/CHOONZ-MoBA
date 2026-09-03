@@ -1,4 +1,6 @@
 #include "test.h"
+#include "sim/combat.h"
+#include "sim/command.h"
 #include "sim/sim.h"
 #include "sim/sim_hash.h"
 #include "sim/systems.h"
@@ -462,4 +464,197 @@ TEST(sim_hero_combat, hero_capacity_does_not_move_an_otherwise_identical_world) 
     CHECK(plain.rng.state == fancy.rng.state);
     CHECK(sim_hash_state(&plain) != 0u);
     CHECK(sim_hash_state(&fancy) != 0u);
+}
+
+// ------------------------------------------------------------------ S2 pipeline
+
+// Builds a two-unit world with a hero in slot 0 and a plain target in slot 1.
+struct HeroFixture {
+    SimWorld world;
+    EntityId hero;
+    EntityId target;
+    uint16_t def_index;
+};
+
+static bool build_fixture(HeroFixture* fixture, uint8_t* storage, size_t storage_bytes,
+                          SimWorldConfig config, mm::fix target_x) {
+    Arena arena;
+    arena_init_fixed(&arena, storage, storage_bytes);
+    config.initial_unit_count = 2u;
+    if (!sim_init(&fixture->world, &arena, 17u, config)) return false;
+    SimHeroDef def = fixture_hero_def();
+    if (!sim_install_hero_def(&fixture->world, &def, &fixture->def_index)) return false;
+
+    fixture->hero = fixture->world.unit_entities[0];
+    fixture->target = fixture->world.unit_entities[1];
+    TransformView hero_transform{};
+    TransformView target_transform{};
+    if (!transform_pool_get(&fixture->world.transforms, fixture->hero, &hero_transform) ||
+        !transform_pool_get(&fixture->world.transforms, fixture->target, &target_transform))
+        return false;
+    *hero_transform.position_x = 0;
+    *hero_transform.position_y = 0;
+    *target_transform.position_x = target_x;
+    *target_transform.position_y = 0;
+    return hero_pool_add(&fixture->world.heroes, fixture->hero, fixture->def_index, 50);
+}
+
+static SimCommand attack_command(uint16_t actor_slot, int32_t target_slot) {
+    SimCommand command{};
+    command.kind = SIM_COMMAND_ATTACK;
+    command.unit_index = actor_slot;
+    command.value_x = mm::fix_from_int(target_slot);
+    return command;
+}
+
+static int32_t health_of(SimWorld* world, EntityId entity) {
+    HealthView view{};
+    if (!health_pool_get(&world->health, entity, &view)) return -1;
+    return *view.current;
+}
+
+TEST(sim_hero_combat, attack_command_canonicality_is_self_contained) {
+    SimCommand attack = attack_command(0u, 3);
+    CHECK(sim_command_is_canonical(&attack, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+
+    SimCommand bad = attack;
+    bad.value_y = mm::fix_from_int(1);
+    CHECK(!sim_command_is_canonical(&bad, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    bad = attack;
+    bad.amount = 1;
+    CHECK(!sim_command_is_canonical(&bad, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    bad = attack;
+    bad.value_x = mm::fix_from_int(1) + 1;                 // not an exact unit slot
+    CHECK(!sim_command_is_canonical(&bad, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    bad = attack;
+    bad.value_x = mm::fix_from_int(-1);
+    CHECK(!sim_command_is_canonical(&bad, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    bad = attack;
+    bad.value_x = mm::fix_from_int(static_cast<int32_t>(SIM_MAX_UNITS));
+    CHECK(!sim_command_is_canonical(&bad, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+    CHECK(sz(sizeof(SimCommand)) == 16u);                  // the record stays frozen
+}
+
+TEST(sim_hero_combat, basic_attack_runs_through_the_pipeline_with_cooldown_and_range) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+    CHECK(health_of(&world, fixture.target) == 100);
+
+    SimCommand attack = attack_command(0u, 1);
+    SimCommandBuffer buffer{&attack, 1u};
+    CHECK(sim_validate_commands(&world, &buffer));
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(health_of(&world, fixture.target) == 100 - SIM_BASIC_ATTACK_MAGNITUDE);
+
+    HeroView hero{};
+    CHECK(hero_pool_get(&world.heroes, fixture.hero, &hero));
+    // sys_cooldown_tick runs after the action in the same tick, so one tick of the
+    // cadence is already spent.
+    CHECK(*hero.basic_attack_cooldown == SIM_BASIC_ATTACK_COOLDOWN_TICKS - 1u);
+    CHECK(*hero.pending_kind == SIM_HERO_PENDING_NONE);
+    CHECK(hero.pending_target->h == HANDLE_NULL);
+
+    // On cooldown the command is still accepted and the action is a no-op, never a
+    // rejected tick.
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(health_of(&world, fixture.target) == 100 - SIM_BASIC_ATTACK_MAGNITUDE);
+    for (uint32_t i = 0u; i < SIM_BASIC_ATTACK_COOLDOWN_TICKS - 2u; ++i)
+        CHECK(sim_tick(&world, nullptr));
+    CHECK(*hero.basic_attack_cooldown == 0u);
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(health_of(&world, fixture.target) == 100 - 2 * SIM_BASIC_ATTACK_MAGNITUDE);
+}
+
+TEST(sim_hero_combat, out_of_range_attack_is_a_no_op_not_a_failed_tick) {
+    HeroFixture fixture{};
+    // attack_range is 4; put the target at 9 so the squared test misses by a mile.
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(9)));
+    SimWorld& world = fixture.world;
+    SimCommand attack = attack_command(0u, 1);
+    SimCommandBuffer buffer{&attack, 1u};
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(health_of(&world, fixture.target) == 100);
+    HeroView hero{};
+    CHECK(hero_pool_get(&world.heroes, fixture.hero, &hero));
+    CHECK(*hero.basic_attack_cooldown == 0u);
+    CHECK(*hero.pending_kind == SIM_HERO_PENDING_NONE);
+
+    // The range test is a squared comparison in 64 bits, so a Q16.16 square that
+    // overflows 32 bits still compares correctly.
+    CHECK(sim_range_squared(mm::fix_from_int(4)) ==
+          static_cast<int64_t>(mm::fix_from_int(4)) * mm::fix_from_int(4));
+    int64_t distance_squared = 0;
+    CHECK(sim_distance_squared(&world, fixture.hero, fixture.target, &distance_squared));
+    CHECK(distance_squared > sim_range_squared(mm::fix_from_int(4)));
+    CHECK(distance_squared == sim_range_squared(mm::fix_from_int(9)));
+}
+
+TEST(sim_hero_combat, resolve_effect_is_the_only_committer_and_rejects_stale_handles) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    SimEffectDef basic = sim_basic_attack_effect();
+    CHECK(basic.effect_type == SIM_EFFECT_PROJECTILE_DAMAGE);
+    CHECK(basic.magnitude == SIM_BASIC_ATTACK_MAGNITUDE);
+    CHECK(sim_effect_def_valid(&basic));
+
+    uint32_t damage_events = 0u;
+    uint32_t sim_events = 0u;
+    CHECK(resolve_effect_measure(&world, fixture.hero, fixture.target, &basic, 0, 0,
+                                 &damage_events, &sim_events));
+    CHECK(damage_events == 1u);
+    CHECK(sim_events == 0u);
+    CHECK(world.damage_events.counts[world.damage_events.write_index] == 0u);
+
+    SimEffectDef heal = effect_self_heal(15);
+    damage_events = 0u;
+    sim_events = 0u;
+    CHECK(resolve_effect_measure(&world, fixture.hero, fixture.hero, &heal, 0, 0,
+                                 &damage_events, &sim_events));
+    CHECK(damage_events == 0u);
+    CHECK(sim_events == 1u);
+
+    // A stale handle fails the pipeline instead of committing a partial effect.
+    EntityId stale{handle_make(handle_index(fixture.target.h),
+                               static_cast<uint16_t>(handle_gen(fixture.target.h) + 1u))};
+    CHECK(!resolve_effect(&world, fixture.hero, stale, &basic, 0, 0));
+    CHECK(!resolve_effect(&world, stale, fixture.target, &basic, 0, 0));
+    SimEffectDef malformed = basic;
+    malformed.effect_type = 12u;
+    CHECK(!resolve_effect(&world, fixture.hero, fixture.target, &malformed, 0, 0));
+    CHECK(world.damage_events.counts[world.damage_events.write_index] == 0u);
+
+    CHECK(resolve_effect(&world, fixture.hero, fixture.target, &basic, 0, 0));
+    CHECK(world.damage_events.counts[world.damage_events.write_index] == 1u);
+}
+
+TEST(sim_hero_combat, basic_attack_translation_only_fires_for_a_hero_actor) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    Command command{};
+    command.command_kind = COMMAND_KIND_BASIC_ATTACK;
+    command.actor = fixture.hero;
+    command.target = fixture.target;
+    SimCommand translated{};
+    CHECK(command_to_sim(&world, &command, &translated));
+    CHECK(translated.kind == SIM_COMMAND_ATTACK);
+    CHECK(translated.unit_index == 0u);
+    CHECK(translated.value_x == mm::fix_from_int(1));
+    CHECK(translated.amount == 0);
+
+    // A unit with no hero row keeps the M5.1 DAMAGE placeholder untouched.
+    command.actor = fixture.target;
+    command.target = fixture.hero;
+    CHECK(command_to_sim(&world, &command, &translated));
+    CHECK(translated.kind == SIM_COMMAND_DAMAGE);
+    CHECK(translated.unit_index == 0u);
+    CHECK(translated.amount == 1);
 }

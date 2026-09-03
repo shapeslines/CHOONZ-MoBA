@@ -25,6 +25,14 @@ static const uint32_t SIM_DEFAULT_DAMAGE_EVENT_CAPACITY = SIM_MAX_COMMANDS_PER_T
 typedef enum SimCommandKind : uint8_t {
     SIM_COMMAND_SET_VELOCITY = 1,
     SIM_COMMAND_DAMAGE = 2,
+    // M5.2. Both fit the frozen 16-byte record, so the replay v1 codec and the
+    // placeholder generator are untouched. ATTACK: unit_index is the acting hero's
+    // slot, value_x is fix_from_int(target slot), value_y and amount are zero.
+    // CAST: unit_index is the acting hero's slot, amount is the action slot, and
+    // value_x/value_y are read according to the action's target_mode, which comes
+    // from the def table and never from the wire.
+    SIM_COMMAND_ATTACK = 3,
+    SIM_COMMAND_CAST = 4,
 } SimCommandKind;
 
 // Canonical placeholder command record. Unused fields must be zero: SET_VELOCITY

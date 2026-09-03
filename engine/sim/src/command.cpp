@@ -178,6 +178,14 @@ bool command_to_sim(const SimWorld* world, const Command* command, SimCommand* o
         case COMMAND_KIND_BASIC_ATTACK: {
             uint32_t target_slot = 0u;
             if (!command_actor_slot(world, command->target, &target_slot)) return false;
+            // M5.2: a hero attacks through the unified pipeline (ATTACK carries the
+            // actor and names the target in value_x). A non-hero unit keeps the M5.1
+            // DAMAGE placeholder, so worlds without a hero pool are byte-identical.
+            if (hero_pool_has(&world->heroes, command->actor)) {
+                sim.kind = SIM_COMMAND_ATTACK;
+                sim.value_x = mm::fix_from_int(static_cast<int32_t>(target_slot));
+                break;
+            }
             sim.kind = SIM_COMMAND_DAMAGE;
             sim.unit_index = static_cast<uint16_t>(target_slot);
             sim.amount = COMMAND_BASIC_ATTACK_PLACEHOLDER_AMOUNT;
