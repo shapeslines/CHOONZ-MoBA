@@ -55,6 +55,11 @@ owner-gated. Docs-only; no engine, test, or generated file changed in this lane.
 
 ## Still owner-gated / proposed
 
+- **GitHub Actions is locked for the `shapeslines` account (billing).** Check-run annotation on every
+  job of PR #65 and of the `main` push run for `4f66af1`: "The job was not started because your
+  account is locked due to a billing issue." No step ran; no diff is at fault. The `main-gate` ruleset
+  cannot go green until billing is restored and the runs are re-triggered.
+
 - Merge of this lane's PR.
 - Vault: `20 Projects/moba/moba.md` and `20 Projects/game-design.md` overlap (both claim the engine's
   PM state). Proposal: keep `moba.md` as the github-project record, make `game-design.md` the area hub

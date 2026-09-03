@@ -21,7 +21,7 @@ Depth: standard.
 - **communicated:** mailbox posture/start/wrap on `choonz-moba`; GAP-011 request to GromCodebase seat.
 - **raised for /custodian:** 1 marker → [custodian-queue.md](custodian-queue.md)
 - **FOR /brain:** distill → brain/choonz-moba.md ← CHOONZ-MoBA@4f66af1: vault is `Y:\GromBrain`; plan-before-slate convention; M4.1 DoD = cooker + `content` target + runtime `asset_load`.
-- **DEFERRED / unresolved:** owner merge of the PM baseline PR; Carson disposition of vault `moba`/`game-design` note overlap; PR #64 closed, not merged.
+- **DEFERRED / unresolved:** **GitHub Actions is locked (org billing issue) — no job starts since 2026-09-03T01:41Z; `main` run at `4f66af1` and PR #65 both red for that reason only.** Owner fixes billing then re-runs; merge of PR #65 waits on that. Carson disposition of vault `moba`/`game-design` overlap; PR #64 closed, not merged.
 
 ## Next — FIRST action
 1. Claim `m5-map-navigation`: read [plans/m5.0-map-navigation.md](plans/m5.0-map-navigation.md), create worktree branch `lane/moba-m5.0-map/<yyyymmdd>` under `GITHUB-ROOT/_worktrees/`, open `slate-moba-phase5-m5.0.md`, run the Debug matrix before the first edit.
