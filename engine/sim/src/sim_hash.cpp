@@ -121,7 +121,7 @@ static bool canonical_world_valid(const SimWorld* world) {
         !world->transforms.position_x || !world->transforms.position_y || !world->transforms.facing ||
         !world->velocities.velocity_x || !world->velocities.velocity_y ||
         !world->health.current || !world->health.maximum || !world->health.damage_cooldown ||
-        !damage_queue_valid_for_world(world) ||
+        !damage_queue_valid_for_world(world) || !map_valid(&world->map) ||
         !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
         return false;
 
@@ -214,6 +214,32 @@ static uint64_t hash_damage_events(uint64_t hash, const SimWorld* world) {
     return hash;
 }
 
+static uint64_t hash_map(uint64_t hash, const SimWorld* world) {
+    const MapGrid* map = &world->map;
+    hash = hash_u64_le(hash, map->map_id);
+    hash = hash_u16_le(hash, map->width_cells);
+    hash = hash_u16_le(hash, map->height_cells);
+    hash = hash_u32_le(hash, i32_bits(map->cell_size_q16));
+    for (uint32_t cell = 0u; cell < map->cell_count; ++cell) {
+        hash = hash_u8(hash, map->flags[cell]);
+        hash = hash_u8(hash, map->movement_cost[cell]);
+        hash = hash_u16_le(hash, static_cast<uint16_t>(map->height_cell[cell]));
+    }
+    hash = hash_u16_le(hash, map->lane_count);
+    for (uint32_t lane = 0u; lane < map->lane_count; ++lane) {
+        const MapLane& def = map->lanes[lane];
+        const uint16_t* waypoints = map_lane_waypoints(map, static_cast<uint16_t>(lane));
+        hash = hash_u8(hash, def.lane_id);
+        hash = hash_u8(hash, def.waypoint_count);
+        hash = hash_u16_le(hash, def.wave_interval_ticks);
+        hash = hash_u32_le(hash, def.first_wave_tick);
+        hash = hash_u64_le(hash, def.creep_archetype_id);
+        for (uint32_t i = 0u; i < def.waypoint_count; ++i)
+            hash = hash_u16_le(hash, waypoints[i]);
+    }
+    return hash;
+}
+
 uint64_t sim_hash_state(const SimWorld* world) {
     if (!canonical_world_valid(world)) return 0u;
 
@@ -246,7 +272,8 @@ uint64_t sim_hash_state(const SimWorld* world) {
 
     hash = hash_transform(hash, world);
     hash = hash_velocity(hash, world);
-    return hash_health(hash, world);
+    hash = hash_health(hash, world);
+    return hash_map(hash, world);
 }
 
 static void set_diff(SimStateDiff* diff, SimStateField field, uint32_t index,
@@ -446,6 +473,75 @@ static bool diff_health(const SimWorld* expected, const SimWorld* actual,
     return false;
 }
 
+static bool diff_map(const SimWorld* expected, const SimWorld* actual, SimStateDiff* out_diff) {
+    const MapGrid* e = &expected->map;
+    const MapGrid* a = &actual->map;
+    DIFF_SCALAR(e->map_id, a->map_id, SIM_STATE_FIELD_MAP_ID);
+    DIFF_SCALAR(e->width_cells, a->width_cells, SIM_STATE_FIELD_MAP_WIDTH);
+    DIFF_SCALAR(e->height_cells, a->height_cells, SIM_STATE_FIELD_MAP_HEIGHT);
+    if (e->cell_size_q16 != a->cell_size_q16) {
+        set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_SIZE, SIM_STATE_DIFF_NO_INDEX,
+                 i32_bits(e->cell_size_q16), i32_bits(a->cell_size_q16));
+        return true;
+    }
+    for (uint32_t cell = 0u; cell < e->cell_count; ++cell) {
+        if (e->flags[cell] != a->flags[cell]) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_FLAGS, cell, e->flags[cell], a->flags[cell]);
+            return true;
+        }
+        if (e->movement_cost[cell] != a->movement_cost[cell]) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_COST, cell,
+                     e->movement_cost[cell], a->movement_cost[cell]);
+            return true;
+        }
+        if (e->height_cell[cell] != a->height_cell[cell]) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_HEIGHT, cell,
+                     static_cast<uint16_t>(e->height_cell[cell]),
+                     static_cast<uint16_t>(a->height_cell[cell]));
+            return true;
+        }
+    }
+    DIFF_SCALAR(e->lane_count, a->lane_count, SIM_STATE_FIELD_MAP_LANE_COUNT);
+    for (uint32_t lane = 0u; lane < e->lane_count; ++lane) {
+        const MapLane& el = e->lanes[lane];
+        const MapLane& al = a->lanes[lane];
+        if (el.lane_id != al.lane_id) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_ID, lane, el.lane_id, al.lane_id);
+            return true;
+        }
+        if (el.waypoint_count != al.waypoint_count) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_WAYPOINT_COUNT, lane,
+                     el.waypoint_count, al.waypoint_count);
+            return true;
+        }
+        if (el.wave_interval_ticks != al.wave_interval_ticks) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_WAVE_INTERVAL, lane,
+                     el.wave_interval_ticks, al.wave_interval_ticks);
+            return true;
+        }
+        if (el.first_wave_tick != al.first_wave_tick) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_FIRST_WAVE, lane,
+                     el.first_wave_tick, al.first_wave_tick);
+            return true;
+        }
+        if (el.creep_archetype_id != al.creep_archetype_id) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_ARCHETYPE, lane,
+                     el.creep_archetype_id, al.creep_archetype_id);
+            return true;
+        }
+        const uint16_t* ew = map_lane_waypoints(e, static_cast<uint16_t>(lane));
+        const uint16_t* aw = map_lane_waypoints(a, static_cast<uint16_t>(lane));
+        for (uint32_t i = 0u; i < el.waypoint_count; ++i) {
+            if (ew[i] != aw[i]) {
+                set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_WAYPOINT,
+                         lane * SIM_MAP_MAX_WAYPOINTS + i, ew[i], aw[i]);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDiff* out_diff) {
     if (!out_diff) return false;
     set_diff(out_diff, SIM_STATE_FIELD_NONE, SIM_STATE_DIFF_NO_INDEX, 0u, 0u);
@@ -514,7 +610,8 @@ bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDi
 
     if (diff_transform(expected, actual, out_diff) ||
         diff_velocity(expected, actual, out_diff) ||
-        diff_health(expected, actual, out_diff)) return true;
+        diff_health(expected, actual, out_diff) ||
+        diff_map(expected, actual, out_diff)) return true;
     return false;
 }
 
@@ -562,6 +659,20 @@ const char* sim_state_field_name(SimStateField field) {
         case SIM_STATE_FIELD_HEALTH_CURRENT: return "health_current";
         case SIM_STATE_FIELD_HEALTH_MAXIMUM: return "health_maximum";
         case SIM_STATE_FIELD_DAMAGE_COOLDOWN: return "damage_cooldown";
+        case SIM_STATE_FIELD_MAP_ID: return "map_id";
+        case SIM_STATE_FIELD_MAP_WIDTH: return "map_width";
+        case SIM_STATE_FIELD_MAP_HEIGHT: return "map_height";
+        case SIM_STATE_FIELD_MAP_CELL_SIZE: return "map_cell_size";
+        case SIM_STATE_FIELD_MAP_CELL_FLAGS: return "map_cell_flags";
+        case SIM_STATE_FIELD_MAP_CELL_COST: return "map_cell_cost";
+        case SIM_STATE_FIELD_MAP_CELL_HEIGHT: return "map_cell_height";
+        case SIM_STATE_FIELD_MAP_LANE_COUNT: return "map_lane_count";
+        case SIM_STATE_FIELD_MAP_LANE_ID: return "map_lane_id";
+        case SIM_STATE_FIELD_MAP_LANE_WAYPOINT_COUNT: return "map_lane_waypoint_count";
+        case SIM_STATE_FIELD_MAP_LANE_WAVE_INTERVAL: return "map_lane_wave_interval";
+        case SIM_STATE_FIELD_MAP_LANE_FIRST_WAVE: return "map_lane_first_wave";
+        case SIM_STATE_FIELD_MAP_LANE_ARCHETYPE: return "map_lane_archetype";
+        case SIM_STATE_FIELD_MAP_LANE_WAYPOINT: return "map_lane_waypoint";
         default: return "invalid";
     }
 }
