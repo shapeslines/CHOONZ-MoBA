@@ -33,10 +33,23 @@ if(EXISTS "${SOURCE_DIR}/tools/sandbox/src/tga_direct.cpp" OR
 endif()
 
 file(READ "${SOURCE_DIR}/tools/sandbox/src/main.cpp" sandbox)
-if(NOT sandbox MATCHES "asset_load_texture_tga" OR
+if(NOT sandbox MATCHES "asset_load[ \t\r\n]*\\(" OR
+   NOT sandbox MATCHES "uv_test\\.mba" OR
+   sandbox MATCHES "asset_load_texture_tga[ \t\r\n]*\\(" OR
    NOT sandbox MATCHES "asset_registry_shutdown" OR
    sandbox MATCHES "tga_decode[ \t\r\n]*\\(")
-    message(FATAL_ERROR "sandbox does not exclusively use the AssetRegistry texture path")
+    message(FATAL_ERROR "sandbox does not exclusively use the baked AssetRegistry texture path")
+endif()
+
+file(READ "${SOURCE_DIR}/tools/sandbox/CMakeLists.txt" sandbox_cmake)
+if(NOT sandbox_cmake MATCHES "add_custom_command\\(" OR
+   NOT sandbox_cmake MATCHES "add_custom_target\\(content" OR
+   NOT sandbox_cmake MATCHES "assets/uv_test\\.tga" OR
+   NOT sandbox_cmake MATCHES "uv_test\\.mba" OR
+   NOT sandbox_cmake MATCHES "\\$<TARGET_FILE:cooker>" OR
+   NOT sandbox_cmake MATCHES "add_dependencies\\(sandbox content\\)" OR
+   NOT sandbox_cmake MATCHES "add_dependencies\\(sandbox_null content\\)")
+    message(FATAL_ERROR "sandbox lacks the CMake-baked M4.1 texture dependency")
 endif()
 
 message(STATUS "asset boundary: core/platform only, no Vulkan/render/sim dependency")

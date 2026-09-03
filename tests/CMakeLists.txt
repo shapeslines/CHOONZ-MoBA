@@ -258,3 +258,18 @@ add_test(NAME cooker_cli
             -File "${CMAKE_CURRENT_SOURCE_DIR}/assets/cooker_cli_tests.ps1"
             -Exe $<TARGET_FILE:cooker>
             -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
+
+# This is the M4.1 vertical proof: invoke CMake's content target, then compare its
+# sandbox artifact to repeated direct bakes of the checked-in source texture.
+add_test(NAME sandbox_baked_content
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/assets/sandbox_baked_content_tests.ps1"
+            -Cmake "${CMAKE_COMMAND}"
+            -BuildDir "${CMAKE_BINARY_DIR}"
+            -Configuration "$<CONFIG>"
+            -Cooker $<TARGET_FILE:cooker>
+            -Source "${CMAKE_SOURCE_DIR}/assets/uv_test.tga"
+            -Baked "${CMAKE_BINARY_DIR}/content/$<CONFIG>/uv_test.mba"
+            -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
+set_tests_properties(sandbox_baked_content PROPERTIES
+    PASS_REGULAR_EXPRESSION "sandbox baked content: CMake output matches deterministic cooker bytes")
