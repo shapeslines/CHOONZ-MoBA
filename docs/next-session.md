@@ -7,7 +7,7 @@ Depth: standard.
 
 ## Shipped
 - `4f66af1` M4.1: sandbox texture through CMake `content` target [PR #63]
-- `lane/moba-pm-baseline/20260902` PM baseline + roadmap translation (docs-only) [PR pending]
+- `lane/moba-pm-baseline/20260902` PM baseline + roadmap translation (docs-only) [PR #65]
 
 ## Companion packet
 - changelog: inline/none

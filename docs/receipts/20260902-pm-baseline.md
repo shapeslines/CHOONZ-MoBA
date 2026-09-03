@@ -20,7 +20,7 @@ owner-gated. Docs-only; no engine, test, or generated file changed in this lane.
 | Canonical repository | `https://github.com/shapeslines/CHOONZ-MoBA.git` |
 | Base | `main` at `4f66af17e9b8ad65c9b5238426775f656d2811fe` (PR #63 squash) |
 | Lane branch | `lane/moba-pm-baseline/20260902` |
-| Pull request | opened from the lane branch against `main`; owner merge required |
+| Pull request | [PR #65](https://github.com/shapeslines/CHOONZ-MoBA/pull/65) against `main`; owner merge required |
 
 ## Owner decisions exercised (authorized in-session 2026-09-02)
 

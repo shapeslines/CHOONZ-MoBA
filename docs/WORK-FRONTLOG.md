@@ -22,7 +22,7 @@ State cell, create the worktree branch named in the plan, and open the slate. Ro
 | Work | Evidence |
 |---|---|
 | M4.1 close-out: `content` target + sandbox baked texture | PR #63 → `4f66af1`; [slate-moba-phase4-m4.1.md](slate-moba-phase4-m4.1.md) |
-| ADR-0025 surfaces filled, CLAUDE.md shim, objects map, plans bridge | lane `lane/moba-pm-baseline/20260902` |
+| ADR-0025 surfaces filled, CLAUDE.md shim, objects map, plans bridge | PR #65 (`lane/moba-pm-baseline/20260902`) |
 | Rescue PR #64 closed as superseded | GitHub #64 comment, 2026-09-02 |
 
 ## Pointers
