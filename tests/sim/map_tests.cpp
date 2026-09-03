@@ -404,3 +404,56 @@ TEST(sim_map, sim_world_carries_the_map_and_stays_transactional) {
     CHECK(!sim_init(&untouched, &arena, 7u, bad));
     CHECK(arena.offset == before);
 }
+
+// ---------------------------------------------------------------- S5 hash + replay parity
+
+static bool load_golden_world(SimWorld* world, Arena* arena, uint8_t* storage, size_t bytes,
+                              uint64_t seed) {
+    arena_init_fixed(arena, storage, bytes);
+    SimWorldConfig config = SimWorldConfig{64u, 8u, 8u, SMALL_CONFIG};
+    if (!sim_init(world, arena, seed, config)) return false;
+    ByteReader reader;
+    byte_reader_init(&reader, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
+    return map_decode(&world->map, &reader) == MAP_STATUS_OK &&
+           map_require_end(&reader) == MAP_STATUS_OK;
+}
+
+TEST(sim_map, map_is_hashed_and_two_identical_loads_tick_identically) {
+    static const size_t WORLD_BYTES = 262144u;
+    alignas(16) static uint8_t storage_a[WORLD_BYTES];
+    alignas(16) static uint8_t storage_b[WORLD_BYTES];
+    alignas(16) static uint8_t storage_c[WORLD_BYTES];
+    Arena arena_a, arena_b, arena_c;
+    SimWorld a{}, b{}, c{};
+    CHECK(load_golden_world(&a, &arena_a, storage_a, WORLD_BYTES, 99u));
+    CHECK(load_golden_world(&b, &arena_b, storage_b, WORLD_BYTES, 99u));
+    arena_init_fixed(&arena_c, storage_c, WORLD_BYTES);
+    CHECK(sim_init(&c, &arena_c, 99u, SimWorldConfig{64u, 8u, 8u, SMALL_CONFIG}));
+
+    uint64_t hash_a = sim_hash_state(&a);
+    CHECK(hash_a != 0u);
+    CHECK(hash_a == sim_hash_state(&b));
+    CHECK(hash_a != sim_hash_state(&c));   // the map block is part of canonical state
+
+    // A single cell edit is the first divergence, named as a map field.
+    SimStateDiff diff{};
+    CHECK(!sim_diff_state(&a, &b, &diff));
+    b.map.movement_cost[47] = 9u;
+    CHECK(sim_diff_state(&a, &b, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_MAP_CELL_COST && diff.index == 47u);
+    CHECK(std::strcmp(sim_state_field_name(diff.field), "map_cell_cost") == 0);
+    b.map.movement_cost[47] = a.map.movement_cost[47];
+    CHECK(!sim_diff_state(&a, &b, &diff));
+
+    // Two identical loads stay bit-identical through 10,000 ticks with the map
+    // present; the map itself never changes under sim_tick (navigation is M5.1).
+    SimCommandBuffer none{nullptr, 0u};
+    for (uint32_t tick = 0u; tick < 10000u; ++tick) {
+        CHECK(sim_tick(&a, &none));
+        CHECK(sim_tick(&b, &none));
+    }
+    CHECK(sim_hash_state(&a) == sim_hash_state(&b));
+    CHECK(sim_hash_state(&a) != hash_a);
+    CHECK(!sim_diff_state(&a, &b, &diff));
+    CHECK(map_valid(&a.map) && a.map.movement_cost[47] == 3u);
+}

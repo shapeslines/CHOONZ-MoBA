@@ -1,0 +1,309 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{8132BDDC-63FF-3830-A1B6-EADC54BDCF48}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>fixture</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\d7a97fc47a4ae4f89dc84eaeb951ab5f\basic.vert.spv.rule">
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generating shaders/Debug/basic.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+unused-glslc -g --target-env=vulkan1.3 -MD -MF C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/Debug/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/valid/basic.vert -o C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/Debug/basic.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_transform_depfile "Visual Studio 17 2022" MSBuildAdditionalInputs C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/Debug/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/d/e2356f529ecc44e0311d1375eaeba62780ac09b1a483fb60f0eeb3d995dd42d4.AdditionalInputs
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\source\valid\basic.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\Debug\basic.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <DepFileAdditionalInputsFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\d\e2356f529ecc44e0311d1375eaeba62780ac09b1a483fb60f0eeb3d995dd42d4.AdditionalInputs</DepFileAdditionalInputsFile>
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generating shaders/Release/basic.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+unused-glslc -O --target-env=vulkan1.3 -MD -MF C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/Release/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/valid/basic.vert -o C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/Release/basic.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_transform_depfile "Visual Studio 17 2022" MSBuildAdditionalInputs C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/Release/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/d/acf3e189a117af2ddf3297dff19dc6c8877a051c1816852166bb4664b38b1d2c.AdditionalInputs
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\source\valid\basic.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\Release\basic.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <DepFileAdditionalInputsFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\d\acf3e189a117af2ddf3297dff19dc6c8877a051c1816852166bb4664b38b1d2c.AdditionalInputs</DepFileAdditionalInputsFile>
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Generating shaders/MinSizeRel/basic.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+unused-glslc -O --target-env=vulkan1.3 -MD -MF C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/MinSizeRel/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/valid/basic.vert -o C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/MinSizeRel/basic.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_transform_depfile "Visual Studio 17 2022" MSBuildAdditionalInputs C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/MinSizeRel/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/d/6a6e2f7beb878ce1ae60800bc93a3e49603f91d5dd40c287fabb04d2009aa69a.AdditionalInputs
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\source\valid\basic.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\MinSizeRel\basic.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <DepFileAdditionalInputsFile Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\d\6a6e2f7beb878ce1ae60800bc93a3e49603f91d5dd40c287fabb04d2009aa69a.AdditionalInputs</DepFileAdditionalInputsFile>
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Generating shaders/RelWithDebInfo/basic.vert.spv</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+unused-glslc -O --target-env=vulkan1.3 -MD -MF C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/RelWithDebInfo/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/valid/basic.vert -o C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/RelWithDebInfo/basic.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E cmake_transform_depfile "Visual Studio 17 2022" MSBuildAdditionalInputs C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/shaders/RelWithDebInfo/basic.vert.spv.d C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/d/702696c9780ad07c045055706484b3da6a94d9b64b479c3adc5515231bc6d8e9.AdditionalInputs
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\source\valid\basic.vert;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\RelWithDebInfo\basic.vert.spv</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+      <DepFileAdditionalInputsFile Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\d\702696c9780ad07c045055706484b3da6a94d9b64b479c3adc5515231bc6d8e9.AdditionalInputs</DepFileAdditionalInputsFile>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\2e51a7d1c5643de327ee977df49a8b93\fixture.rule">
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\Debug\basic.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\fixture</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <VerifyInputsAndOutputsExist Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</VerifyInputsAndOutputsExist>
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\Release\basic.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\fixture</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <VerifyInputsAndOutputsExist Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</VerifyInputsAndOutputsExist>
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\MinSizeRel\basic.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\fixture</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <VerifyInputsAndOutputsExist Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</VerifyInputsAndOutputsExist>
+      <BuildInParallel Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</BuildInParallel>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\shaders\RelWithDebInfo\basic.vert.spv;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\fixture</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+      <VerifyInputsAndOutputsExist Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</VerifyInputsAndOutputsExist>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\source\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source -BC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid --check-stamp-file C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\WindowsPaths.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\4.4.0-rc2\CMakeSystem.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\cmake\CompileShaders.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source -BC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid --check-stamp-file C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\WindowsPaths.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\4.4.0-rc2\CMakeSystem.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\cmake\CompileShaders.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source -BC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid --check-stamp-file C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\WindowsPaths.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\4.4.0-rc2\CMakeSystem.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\cmake\CompileShaders.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/source -BC:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid --check-stamp-file C:/Users/doton/Desktop/GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map/build-asan-1444/tests/shader-source-contract/build-valid/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeDetermineSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeGenericSystem.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystem.cmake.in;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\Windows.cmake;C:\Program Files\CMake\share\cmake-4.4\Modules\Platform\WindowsPaths.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\4.4.0-rc2\CMakeSystem.cmake;C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\cmake\CompileShaders.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\fixture">
+    </None>
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\ZERO_CHECK.vcxproj">
+      <Project>{6EFE9545-5FED-3119-92C6-35304C9FB6BB}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <Import Project="C:\Program Files\CMake\share\cmake-4.4\Templates\MSBuild\CustomBuildDepFile.targets" />
+</Project>

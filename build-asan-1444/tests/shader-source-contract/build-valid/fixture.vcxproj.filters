@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\d7a97fc47a4ae4f89dc84eaeb951ab5f\basic.vert.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\2e51a7d1c5643de327ee977df49a8b93\fixture.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\source\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\doton\Desktop\GITHUB-ROOT\_worktrees\CHOONZ-MoBA-m5.0-map\build-asan-1444\tests\shader-source-contract\build-valid\CMakeFiles\fixture" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{B8EF3E82-1770-356B-AFE9-4C4DC33DC46A}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
