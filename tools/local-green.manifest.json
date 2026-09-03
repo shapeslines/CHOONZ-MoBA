@@ -1,0 +1,28 @@
+{
+  "schema": "grom.local-green-manifest/v1",
+  "repo": "CHOONZ-MoBA",
+  "note": [
+    "Maps CI jobs to local tiers for GromCodebase tools/local_green.py. No command",
+    "strings live here; commands are read live from the workflow YAML, so a new CI",
+    "job that is not classified below is a hard error (drift detector).",
+    "Tiers: fast (cheap), full (adds the compile matrix), skip (never local; reason required)."
+  ],
+  "workflows": ["ci.yml", "docs-surface-lint.yml"],
+  "jobs": {
+    "ci.yml": {
+      "windows-msvc": "full",
+      "windows-clang-cl-stretch": "full",
+      "fresh-walk": "skip"
+    },
+    "docs-surface-lint.yml": {
+      "lint": "fast"
+    }
+  },
+  "skip_reasons": {
+    "ci.yml/fresh-walk": "Fresh-clone stranger's walk clones the repo again; run manually via tools/fresh-walk.ps1 before a release."
+  },
+  "notes_on_fidelity": [
+    "windows-msvc needs a vcvars64 developer environment; tools/local-ci.ps1 is the canonical local equivalent and writes out/local-ci-<Config>.json.",
+    "The sandbox Vulkan smoke inside windows-msvc runs the real renderer locally (owner GPU) and SKIPs on GPU-less runners."
+  ]
+}
