@@ -8,6 +8,39 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 17 — 2026-09-03 — M5.1 command intake, clean M5.0 lane, typed-payload plan
+
+**Scope:** replace the tainted M5.0 lane, execute M5.1 `m5-command-replay`, and write the
+`content-typed-payloads` plan so the next content slice is claimable.
+
+**Outcome:** PR #68 re-cuts M5.0 cleanly (S1–S4 cherry-picked, S5 re-applied by path, `build*/`
+ignored) and supersedes #67. PR #69 (`lane/moba-m5.1-command/20260903`) lands
+`engine/sim/command.h/.cpp`: the proto-design §3.4 `Command`/`CommandReject` shapes, the canonical key
+`(tick, player_id, sequence, actor.index, command_kind)`, a pure intake (validate → key order → dedup →
+capacity) translated into the legacy `SimCommandBuffer`, and a 2,000-tick hostile live/replay parity
+proof through replay v1. Replay bytes and the oracle are unchanged (no logic-hash bump). Design
+decision recorded in the slate: the §3.4 key cannot ride the 16-byte replay v1 record, so the intake
+sits in front of the seam and M6.0 carries `Command` verbatim in replay v2.
+
+### What changed
+
+- `docs/plans/content-typed-payloads.md` written (ADR-0016 `.mba` v2 typed payloads as its first slice);
+  bridge table and frontlog updated.
+- ROADMAP M5.2/M6.0 execution notes; ADR-0014 consequences line notes the M5.0 oracle re-pin.
+
+### Verification
+
+- M5.1: `/WX` Debug / RelWithDebInfo / Release 49/49 each with the pre-M5.0 oracle reproduced in every
+  config; `debug-asan` (MSVC 14.44) 49/49; clang-cl 19 + UBSan PASS; `sim_command` 5 tests / 6,069 checks.
+- M5.0 clean lane: Debug 49/49; oracle `0xff4e1ca0c779455b` reproduced.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 (local green + admin bypass). Then claim `content-typed-payloads`
+per its plan from the merged `main`; refresh `AGENTS.md` §1 oracle values in that lane.
+
+---
+
 ## Session 16 — 2026-09-02 — Phase 5 M5.0 map grid, CI runner handoff, vault reconcile
 
 **Scope:** execute the first Phase 5 slice (`m5-map-navigation`), prepare CI for the fleet's

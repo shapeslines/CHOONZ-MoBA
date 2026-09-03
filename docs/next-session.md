@@ -1,14 +1,15 @@
 # CHOONZ-MoBA — next session
 
 ## State @ `4f66af1` · 2026-09-02 · homebase/pm-baseline
-Main still at `4f66af1` (M4.1). Three lanes await owner merge: #65 PM baseline (docs), #66 CI runner
-handoff, #68 M5.0 map grid (sim half done, logic hash bumped). Vault reconciled. Depth: standard.
+Main still at `4f66af1` (M4.1). Four lanes await owner merge: #65 docs, #66 CI runner handoff, #68 M5.0
+map grid (clean re-cut), #69 M5.1 command intake (oracle unchanged). Depth: standard.
 
 ## Shipped
 - `4f66af1` M4.1: sandbox texture through CMake `content` target [PR #63]
 - `lane/moba-pm-baseline/20260902` PM baseline + roadmap translation (docs-only) [PR #65]
 - `lane/moba-ci-runner/20260902` CI → fleet runner handoff + local-ci fix [PR #66]
-- `lane/moba-m5.0-map/20260902` M5.0 map grid + `.mapdesc` + canonical hash [PR #68]
+- `lane/moba-m5.0-map/20260903` M5.0 map grid + `.mapdesc` + canonical hash [PR #68, supersedes #67]
+- `lane/moba-m5.1-command/20260903` M5.1 command intake + live/replay parity [PR #69]
 
 ## Companion packet
 - changelog: inline/none
@@ -22,10 +23,10 @@ handoff, #68 M5.0 map grid (sim half done, logic hash bumped). Vault reconciled.
 - **communicated:** mailbox posture/start/wrap on `choonz-moba`; GAP-011 request to GromCodebase seat.
 - **raised for /custodian:** 1 marker → [custodian-queue.md](custodian-queue.md)
 - **FOR /brain:** distill → brain/choonz-moba.md ← CHOONZ-MoBA@4f66af1: vault is `Y:\GromBrain`; plan-before-slate convention; M4.1 DoD = cooker + `content` target + runtime `asset_load`.
-- **DEFERRED / unresolved:** Actions billing-locked; owner adds admin bypass on `main-gate` and merges #65 → #66 → #68 on local green (`docs/ci-runner-handoff.md`); runner manager provisions the toolchain (WID `wid-20260903-choonz-moba-f56aa7`). ASan needs `vcvars64 -vcvars_ver=14.44` (M5.0 slate).
+- **DEFERRED / unresolved:** Actions billing-locked; owner adds admin bypass on `main-gate` and merges #65 → #66 → #68 → #69 on local green (`docs/ci-runner-handoff.md`); runner manager provisions the toolchain (WID `wid-20260903-choonz-moba-f56aa7`). ASan needs `vcvars64 -vcvars_ver=14.44` (M5.0 slate).
 
 ## Next — FIRST action
-1. Owner merges #65, #66, #68 (local green + admin bypass). Then claim M5.1 `m5-command-replay` per [plans/m5.1-command-replay.md](plans/m5.1-command-replay.md) from the merged `main`; refresh `AGENTS.md` §1 oracle values in that lane.
+1. Owner merges #65 → #66 → #68 → #69 (local green + admin bypass). Then claim `content-typed-payloads` per [plans/content-typed-payloads.md](plans/content-typed-payloads.md) from the merged `main`; refresh `AGENTS.md` §1 oracle values in that lane.
 
 ## Queue
 - Presentation slice for the M5.0 heightfield mesh (deferred from ROADMAP M5.0).
