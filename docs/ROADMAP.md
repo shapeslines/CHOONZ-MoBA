@@ -788,7 +788,17 @@ silent bump.
 
 ---
 
-### M5.3 — Data-driven abilities + projectiles + status effects  · L
+### M5.3 — Data-driven abilities + projectiles + status effects  · L  ✅ SIM CORE COMPLETE 2026-09-03 (`m5-hero-combat`, slate `slate-moba-phase5-m5-hero-combat.md`; dash, spatial-hash collision, and the full stacking taxonomy deferred)
+**Execution note (2026-09-03):** the v1 sim half landed on the `m5-hero-combat` lane, not on a
+separately numbered lane. `engine/sim/hero.h` carries the sim-owned POD mirror of the authored
+`HeroDef`/`ActionDef`/`EffectDef` (proto-design §3.3); `HeroPool`/`ProjectilePool`/`StatusPool` are
+bounded SoA pools; and the effect vocabulary is `projectile_damage`, `self_heal`, `area_slow`, every
+one of them routed through the single `resolve_effect` pipeline in `engine/sim/combat.cpp` — enforced
+by the `sim_pipeline_owner` source lint. Cooldowns and resource are integer ticks and integer points;
+status stacking is refresh-and-max per (target, effect_type). Still open here: dash, AoE via the
+spatial hash (v1 range and area are squared-distance tests, never `map_*`), the wider stacking
+taxonomy, and `.gamedata` baking of ability defs (the game-layer `HeroDef` → `SimHeroDef` translation
+lands after PR #70).
 **Goal:** abilities as data, not code — a fixed effect vocabulary, no scripting VM.
 **Deliverables:** flat `AbilityDef` (targeting/cost/cooldown + ordered `Effect[]` from a fixed
 vocabulary: damage/heal/spawn-projectile/apply-status/dash/aoe), baked into `.gamedata`; per-entity
@@ -802,7 +812,16 @@ taxonomy needs enumeration once real abilities exist. **Exercises:** Gameplay (a
 
 ---
 
-### M5.4 — Event-driven combat resolution  · M
+### M5.4 — Event-driven combat resolution  · M  🟡 SINGLE-RESOLUTION-POINT LANDED 2026-09-03 (`m5-hero-combat`; mitigation, shields, lifesteal, gold/XP, and respawn still open)
+**Execution note (2026-09-03):** the single-resolution-point invariant is no longer "enforced by
+convention" — it is enforced by a gate. `resolve_effect` is the only appender and
+`sys_combat_resolve`/`sys_effects_resolve` in `combat.cpp` are the only committers of `health.current`;
+`tests/sim/check_sim_pipeline_owner.cmake` (CTest `sim_pipeline_owner`) fails the build on any other
+health, resource, or cooldown write in `engine/sim`. Alongside the frozen 12-byte `DamageEvent` wire
+there is now one 32-byte `SimEvent` envelope queue (heal, status applied/expired, death), fixed
+capacity and reject-at-source per ADR-0014. Deaths route through `sim_destroy_deferred`. Still open
+here: armor mitigation as real data (v1 mitigation is a constant 0), shields, lifesteal, kill credit,
+gold/XP on death, and hero respawn timers.
 **Goal:** one central deterministic damage pipeline.
 **Deliverables:** systems emit `DamageEvent`s into a per-tick queue; a single `combat_resolve` drains
 them in deterministic order — mitigation (`amount * 100/(100+armor)` in fixed-point), shields,

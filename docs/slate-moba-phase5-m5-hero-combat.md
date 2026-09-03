@@ -1,6 +1,7 @@
 # Phase 5 M5.2 Slate - Hero Combat and the Unified Effect Pipeline (`m5-hero-combat`)
 
-**Status:** in progress (S0 complete; S1-S6 open)
+**Status:** complete (S0-S6 landed; PR open against `main`, stacked behind #68 and #69,
+owner merge gated)
 
 **Branch:** `lane/moba-m5-hero-combat/20260903` (worktree `GITHUB-ROOT/_worktrees/CHOONZ-MoBA-hero`)
 
@@ -130,11 +131,11 @@ The `docs/ROADMAP.md` and `docs/JOURNAL.md` occurrences are past-tense narrative
 - [x] **S4** Hash + mirrored diff appended after the map block; `SimStateField` entries;
   `canonical_world_valid` extended; the single `SIM_LOGIC_HASH` bump; new oracle
   identical in Debug and Release; all fourteen pins moved.
-- [ ] **S5** Acceptance: section 7.2 items 3 (full buffer fails the source op, never
+- [x] **S5** Acceptance: section 7.2 items 3 (full buffer fails the source op, never
   drops), 4 (adding an action def does not move the RNG stream), 5 (all three effects
   through the pipeline; integer cooldown/resource; 3,000-tick duel hashes equal), plus a
   no-pipeline-bypass source scan over `engine/sim/src`.
-- [ ] **S6** Gates: `/WX` Debug / RelWithDebInfo / Release, `debug-asan`
+- [x] **S6** Gates: `/WX` Debug / RelWithDebInfo / Release, `debug-asan`
   (`vcvars64 -vcvars_ver=14.44`), `check-clang-cl-determinism.ps1 -RequireCompiler
   -RequireUbsan`, isolation lint, binary parity, mutation pin intact. No Vulkan smoke
   (no renderer change). ROADMAP M5.2 status line, ADR-0014 consequences clause, JOURNAL,
@@ -278,6 +279,137 @@ Pins moved (14 sites):
 values in past-tense narrative and were deliberately left alone.
 `docs/decisions/0014` gets its appended clause from Agent C.
 
-### S5-S6 gates
+### S5 - acceptance and the no-bypass lint
 
-_Pending (Agent C)._
+Five new cases in `tests/sim/hero_combat_tests.cpp` plus one new CTest lint. The
+suite went from **22 tests / 448 checks** at S4 to **27 tests / 704 checks**, and
+the Debug CTest roster from 51 to **52** entries (`sim_pipeline_owner`).
+
+**Item 3 - reject at source, never drop (ADR-0014).**
+`a_full_event_queue_fails_the_source_operation_and_drops_nothing` fills the
+`SimEventQueue` write phase to capacity with canonical `SIM_EVENT_HEAL` events of
+its own, confirms one further `sim_event_queue_append` is refused at the queue, then
+issues a self-heal CAST. `sim_validate_commands` passes (the shape is fine; only
+capacity is not), `sys_hero_actions`' measure pass sees `sim_needed = 1` against
+zero write room, and `sim_tick` returns **false** with `world.tick` unmoved. Every
+queued event is then re-read: count, `event_kind`, `append_ordinal`, payload target
+and amount, and `sim_event_is_canonical` all hold, so nothing was dropped,
+reordered, or overwritten. Health, resource, and the slot cooldown are all exactly
+what they were before the rejected tick. Publishing and consuming the queue then
+makes the **identical** command succeed and `sim_tick` advance again - the world was
+refused, not corrupted. `a_full_damage_queue_fails_the_attack_that_would_append`
+proves the same property on the untouched 12-byte damage wire.
+
+Recorded reading of the contract: overflow fails the tick (`sim_tick` returns false
+and `world.tick` does not advance), which is what the plan's failure table specifies
+and what `sim_tick` implements - `sys_hero_actions` returns false at step 3 and the
+schedule stops there. "Never drops" and "the source operation pays nothing" are the
+properties the test pins; per-command rejection inside a tick is M6.0.
+
+**Item 4 - an extra action def draws no extra RNG (ADR-0013).**
+`an_extra_action_def_changes_neither_rng_stream_nor_draw_count` builds two worlds
+whose defs differ by exactly one action (`action_count` 3 vs 4) and drives both with
+one scripted 1,000-tick command stream. The draw **count** is proven without
+instrumenting the sim: a local `mm::pcg32` copied from each world's initial state is
+advanced exactly once per tick and compared to the world's state after every tick,
+so equality proves the world took exactly one draw per tick and not one more. Both
+worlds also agree with each other every tick. `sim_hash_state` differs between them
+at the end, so the agreement is between two genuinely different worlds.
+
+**Item 5 - all three effects, integer economy, 3,000-tick duel.**
+`two_identical_scripted_duels_hash_equal_at_every_checkpoint` runs the same scripted
+duel twice in independent arenas. The script is a pure function of the tick index -
+`projectile_damage` at the target, `self_heal`, `area_slow` centred on the target,
+and a basic attack, on a 25-tick cycle, with an identical scripted top-up of the
+non-regenerating resource so the duel stays live for the full run. Both runs record
+projectile spawns, projectile landings, heals, slow applications, resource payments,
+and cooldown arms; every counter is non-zero (so all three data-defined effects
+really ran through `resolve_effect`) and every counter is equal across the two runs.
+`resource_payments == cooldown_arms` pins that a cast pays and arms together, and
+every `action_cooldown` stays a whole-tick countdown bounded by the def's largest
+cooldown. `sim_hash_state` is equal at all six 500-tick checkpoints and at the end,
+and `sim_diff_state` reports `SIM_STATE_FIELD_NONE`.
+
+**Intake seam.** `use_action_intake_verdicts_and_translation` drives
+`command_intake_run` directly: an unknown `action_id` is `COMMAND_REJECT_MALFORMED`
+(the def table is the only authority, so an action the def does not carry is a shape
+failure, not a cooldown or range verdict); a known entity-targeted action aimed at a
+handle that is not alive at that generation is `COMMAND_REJECT_STALE_ENTITY`; the
+same action at a live target is accepted and `command_to_sim` yields
+`SIM_COMMAND_CAST` with the slot from the **def** and the target slot in `value_x`.
+A unit with no hero row is MALFORMED. `command_batch_to_sim` translates the whole
+accepted batch, and a `SIM_TARGET_SELF` action passes its point through untouched.
+
+**No-bypass source scan.** `tests/sim/check_sim_pipeline_owner.cmake`, registered as
+CTest `sim_pipeline_owner`, is the sibling of `check_sim_boundary`: absence of a
+second mutation path is a source-level property no runtime test can prove. Four
+rules, each matching an assignment or compound assignment only (never a read, so
+`sim_hash.cpp` reading `health.current` stays legal):
+
+| Rule | Owners of record |
+|---|---|
+| `health.current` written | `combat.cpp` (`sys_combat_resolve` commits damage, `sys_effects_resolve` commits heals) |
+| hero `resource` written | `hero.cpp` (payment), `components.cpp` (pool bookkeeping) |
+| cooldown assigned | `hero.cpp` (arming), `components.cpp` (pool bookkeeping) |
+| cooldown decremented | `systems.cpp` (`sys_cooldown_tick` is the sole decrementer) |
+
+Each rule carries a positive control: it must match its own synthetic probe line
+before the real scan runs, so a pattern that rots into a blind scan fails the lint
+instead of passing it. The real scan is clean across `engine/sim` with no OWNERS
+list widened.
+
+### S6 - gates
+
+Every configuration was built with `/WX` (preset `ci`) and run to completion. The
+oracle line is byte-identical in all five, and it did **not** move from S4 - S5 added
+tests only, no schedule change.
+
+| Gate | Command | Result |
+|---|---|---|
+| Debug | `cmake --preset ci` -> `cmake --build build-ci --config Debug` -> `ctest -C Debug` | **52/52 passed** (26.8 s) |
+| RelWithDebInfo | `cmake --build build-ci --config RelWithDebInfo` -> `ctest -C RelWithDebInfo` | **52/52 passed** |
+| Release | `cmake --build build-ci --config Release` -> `ctest -C Release` | **52/52 passed** |
+| ASan | `vcvars64 -vcvars_ver=14.44` -> `cmake --preset debug-asan -B build-asan-1444` -> build -> `ctest -C Debug` | **52/52 passed**, zero AddressSanitizer reports |
+| clang-cl + UBSan | `tools/check-clang-cl-determinism.ps1 -RequireCompiler -RequireUbsan` | **6/6 passed**, `CLANG_CL_DETERMINISM=PASS: ubsan=on` |
+
+Oracle, identical in Debug, RelWithDebInfo, Release, ASan, and clang-cl:
+
+```
+sim_oracle ticks=10000 commands=923 final=0xac06a80d7f71b503 stream=0x4209159b82890bcb logic=0x46e9e287878ba88c
+```
+
+`engine_tests --suite sim_hero_combat`: **27 tests, 704 checks, 0 failed**.
+
+Isolation and contract lints green in every config that runs them:
+`sim_boundary`, `sim_compiler_policy`, `sim_compiler_policy_selftest`,
+`sim_isolation_selftest`, `sim_binary_parity`, `sim_ubsan_tripwire`, and the new
+`sim_pipeline_owner`.
+
+The determinism mutation proof is unchanged -
+`build-ci\tests\Debug\sim_determinism_tests.exe --suite sim_determinism` prints
+exactly:
+
+```
+controlled divergence tick=4321 field=position_x entity=7
+```
+
+(4 tests, 178,690 checks, 0 failed), and CTest still enforces that string as
+`sim_determinism`'s `PASS_REGULAR_EXPRESSION`. The replay byte-size pin `134812`
+holds; the replay v1 codec and the placeholder command generator were never touched.
+
+**No Vulkan smoke.** This lane changes no renderer code (plan, "Out of scope"), so
+the swapchain smoke gate is deliberately not part of acceptance.
+
+Harness note: three `.cmd` wrappers under `build-ci/` (gitignored) drive the
+configurations from a non-developer shell; ASan needs
+`vcvars64.bat -vcvars_ver=14.44` and a separate build directory because the default
+14.38 toolset ships no AddressSanitizer runtime.
+
+### Paper landed with S6
+
+- `docs/ROADMAP.md` M5.2 / M5.3 markers reflect hero combat executed on this lane.
+- `docs/decisions/0014-command-validation-and-backpressure.md` gained a consequences
+  clause for the 32-byte `SimEvent` envelope and its fixed-capacity, reject-at-source
+  queue.
+- PR body drafted with the oracle-bump recipe and the Actions billing-lock merge
+  path (`docs/ci-runner-handoff.md`).
