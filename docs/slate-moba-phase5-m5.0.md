@@ -1,0 +1,121 @@
+# Phase 5 M5.0 Slate - Map Grid and `.mapdesc` Codec (`m5-map-navigation`)
+
+**Status:** complete on the lane; PR open, owner merge gated (Actions billing lock; see `docs/ci-runner-handoff.md`)
+
+**Branch:** `lane/moba-m5.0-map/20260902` (worktree `GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map`)
+
+**Plan of record:** `docs/plans/m5.0-map-navigation.md` (PR #65); ARC manifest
+`docs/arc-m5.0-map-navigation-manifest.json`
+
+**Base:** `main` at `4f66af17e9b8ad65c9b5238426775f656d2811fe` (M4.1 accepted)
+
+## Goal
+
+Give the simulation its authoritative integer tile grid: `MapGrid` SoA storage in a caller-owned
+arena, `MapCell` flags/cost/height, Q16.16 cell↔world conversions with floor semantics, the fixed
+N,E,S,W,NE,SE,SW,NW neighbour order with the diagonal corner rule, `MapLane` waypoint storage with
+fail-closed validation, spawn lookup, and a little-endian `.mapdesc` codec that rejects every
+malformed stream at the first invalid boundary without mutating the grid. Then hash the map into
+canonical state with one recorded `SIM_LOGIC_HASH` bump. No renderer, no navigation, no `.mba` change.
+
+## Fence nuances recorded against the plan
+
+- Capacities live in `engine/sim/include/sim/map.h` (`SIM_MAP_MAX_*`) next to the module, not in
+  `sim_config.h`; `SimWorldConfig` gains `MapConfig map` (all-zero = empty map, the default).
+- `tests/CMakeLists.txt` gets the `add_executable` source line as well as the `add_test`.
+- `engine/sim/CMakeLists.txt` gets one `src/map.cpp` line; the link graph stays `core + math + serialize`.
+- `AssetId` is unreachable from `eng_sim` (compiler-policy include allow-list); the map carries a
+  plain `uint64_t map_id`.
+- `tests/sim/map_golden.py` is an independent Python encoder that writes both
+  `assets/maps/lane_test.mapdesc` and `tests/sim/map_golden.inc`; the C++ encoder must match it byte
+  for byte (cross-implementation check of the §3.2 field order).
+
+## Baseline evidence (S0)
+
+- Untouched worktree at `4f66af1`, `cmake --preset ci` (Ninja Multi-Config, `/WX`).
+- Debug: 48/48 CTest passed (20.3 s). Release: 48/48 CTest passed.
+- Oracle pinned by `sim_determinism`: final `0x637628abff59c823`, stream `0x6f381609f7e59f0c`,
+  `SIM_LOGIC_HASH 0xab96814425ba80a4`; controlled mutation `tick=4321 field=position_x entity=7`.
+
+## Slice ledger
+
+- [x] **S0** Baseline recorded above.
+- [x] **S1** `map.h/.cpp`: config validity, transactional `map_init`, `map_set_dimensions`,
+  `map_set_cell`, cell↔world (centre; int64 floor-div), `SimWorld.map` + config + memory budget.
+- [x] **S2** `map_is_walkable`, `map_cost`, `map_flags`, `map_neighbors` (fixed order, corner rule).
+- [x] **S3** `map_add_lane` (≥2 waypoints, in-bounds, walkable + lane-flagged, unique lane id,
+  capacity), `map_lane_waypoints`, `map_find_spawn` (ascending cell order).
+- [x] **S4** `.mapdesc` codec: `MAPD` magic, schema 1, header/cells/lanes in §3.2 order; decode is a
+  validate-everything-then-apply walk; malformed matrix (truncated ×3, bad magic, bad version, bad
+  dimensions, bad count, bad cell, bad lane, capacity, trailing) rejects with the grid untouched;
+  golden byte-identical to `assets/maps/lane_test.mapdesc`; `content` target copies `assets/maps/`.
+- [x] **S5** Map hashed into canonical state after `hash_health`; `map_valid` in
+  `canonical_world_valid`; `SimStateField` map entries + mirrored `diff_map`; `SIM_LOGIC_HASH` bumped
+  once; every pin updated; Debug == Release on two identical loads + 10,000 ticks; mutation still
+  `tick=4321 field=position_x entity=7`.
+- [x] **S6** Full matrix (`/WX` Debug/RelWithDebInfo/Release, `debug-asan`, clang-cl/UBSan),
+  isolation lint, local green; ROADMAP status; JOURNAL Session 16; pin; PR.
+
+## Locked decisions
+
+- Zero-size map is valid and is the default; the placeholder world and every existing fixture keep
+  their memory footprint. Gameplay slices size the map from the authored `.mapdesc`.
+- Flags: walkable 0x01, blocked 0x02, lane 0x04, spawn 0x08, objective 0x10, block_vision 0x20,
+  ramp 0x40; walkable and blocked are mutually exclusive; bit 7 is rejected.
+- Cell size is any positive Q16.16; the default authored map uses 0.5 u. `height_cell` is an integer
+  band; ramps are flagged, no slope math.
+- The derived render heightfield (ROADMAP M5.0 second half) moves to a presentation slice.
+- No Vulkan smoke is required for this milestone: no renderer file changes.
+
+## Slice evidence
+
+### S1–S4 (commit `ced40d6`)
+
+- `engine/sim/include/sim/map.h` (+ `src/map.cpp`, 430 lines): 13 statuses, 7 cell flags, `MapConfig`,
+  `MapLane`, `MapGrid`; `map_init` transactional over the caller arena; `map_world_to_cell` uses an
+  int64 floor-div (the `fix_div` truncation trap in the recon is avoided); `map_neighbors` fixed order;
+  `map_add_lane` fail-closed; codec validate-then-apply.
+- `tests/sim/map_tests.cpp` suite `sim_map`: 11 tests / 327 checks green in Debug; golden
+  `assets/maps/lane_test.mapdesc` (318 bytes) generated by the independent Python encoder
+  `tests/sim/map_golden.py` and byte-identical to the C++ `map_encode` output; malformed matrix covers
+  truncated ×3, bad magic, bad version, bad dimensions, bad count, bad cell, bad lane, capacity,
+  trailing bytes — every rejection leaves a pre-dimensioned grid untouched.
+- `content` target stages `content/<CONFIG>/maps/lane_test.mapdesc`.
+- Full Debug CTest after S1–S4: **49/49** (sim boundary, compiler policy, binary parity, isolation
+  self-tests all green over the new files). Canonical hash untouched: oracle still
+  `0x637628abff59c823` / `0x6f381609f7e59f0c` / `0xab96814425ba80a4` at this commit.
+
+### S5 hash + replay
+
+- `sim_hash_state` appends `hash_map` after `hash_health` (map_id, width, height, cell_size, every
+  cell's flags/cost/height in ascending index, lane_count, lane scalars + waypoints);
+  `canonical_world_valid` requires `map_valid`; 14 `SimStateField` map entries with a mirrored
+  `diff_map` after `diff_health`; canonical-order comment updated.
+- **`SIM_LOGIC_HASH` bump (the one permitted change):** `0xab96814425ba80a4` →
+  `0xcef8548df2b2a518` = first 64 bits of SHA-256 over
+  `M5.0|ordered-cache|damage-event-v1|same-tick|explicit-schedule-v1|map-grid-v1` (the M3.2 recipe
+  re-verified: SHA-256 of the M3.2 string reproduces `0xab96814425ba80a4`). The old key is now a
+  rejected historical row in `replay_tests.cpp`.
+- New oracle, identical in Debug and Release via `sim_oracle_probe --sim-self-check`:
+  `ticks=10000 commands=923 final=0xff4e1ca0c779455b stream=0x218da333e6834496 logic=0xcef8548df2b2a518`.
+  Replay byte size unchanged (134,812). Pins updated: `sim_determinism_tests.cpp`, `tests/CMakeLists.txt`
+  (`sim_ubsan_oracle`, `replay_inspect` regexes), `check_sim_binary_parity.cmake`, `README.md`.
+- `sim_map.map_is_hashed_and_two_identical_loads_tick_identically`: two golden loads hash equal, differ
+  from a map-less world, a single cost edit is reported as `map_cell_cost` index 47, and both worlds
+  stay bit-identical through 10,000 empty-command ticks (suite now 12 tests / 20,342 checks).
+- Follow-up on merge: `AGENTS.md` §1 (PR #65 lane) and `.github/PULL_REQUEST_TEMPLATE.md` cite the
+  old oracle; refresh them when this lane and #65 are both on `main`.
+
+### S6 gates
+
+- `/WX` matrix (`vcvars64` → `cmake --preset ci` → build → `ctest --no-tests=error`): Debug **49/49**,
+  RelWithDebInfo **49/49**, Release **49/49**.
+- `tools/check-clang-cl-determinism.ps1 -RequireCompiler -RequireUbsan`: `CLANG_CL_DETERMINISM=PASS:
+  ubsan=on`, 6/6, oracle line reproduced with the new hashes.
+- `debug-asan` preset: **49/49** with `vcvars64 -vcvars_ver=14.44` (fresh `build-asan-1444`). The
+  default toolset selected by plain `vcvars64` on this machine is MSVC 14.38, whose `link.exe` ignores
+  `/fsanitize=address` and lacks the ASan runtime; that run fails on `cooker.exe` before any sim
+  target and is an environment gap, not a code failure. Recorded for the next seat.
+- Isolation: `check_sim_boundary`, `check_sim_compiler_policy` (+selftest), `check_sim_binary_parity`,
+  `check_sim_isolation_selftest`, `check_sim_ubsan_tripwire` all green in every configuration.
+- No Vulkan smoke required (no renderer change). Hosted CI cannot run (billing lock).
