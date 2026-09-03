@@ -96,7 +96,7 @@ Run on the untouched integration worktree at `d9efd33`, via
 - Replay byte size pin `134812` and mutation pin `tick=4321 field=position_x entity=7`
   hold at this commit.
 
-## Planned hash bump (S4, the one permitted change)
+## Hash bump (S4, the one permitted change) - LANDED
 
 ```
 SIM_LOGIC_HASH  0xcef8548df2b2a518  ->  0x46e9e287878ba88c
@@ -127,7 +127,7 @@ The `docs/ROADMAP.md` and `docs/JOURNAL.md` occurrences are past-tense narrative
 - [x] **S3** `sys_hero_actions`, `sys_projectiles`, `sys_status`, `sys_effects_resolve`;
   `SIM_COMMAND_CAST`; the three effects; slow feeding `sys_movement`; `sim_tick` on the
   section 4 schedule.
-- [ ] **S4** Hash + mirrored diff appended after the map block; `SimStateField` entries;
+- [x] **S4** Hash + mirrored diff appended after the map block; `SimStateField` entries;
   `canonical_world_valid` extended; the single `SIM_LOGIC_HASH` bump; new oracle
   identical in Debug and Release; all fourteen pins moved.
 - [ ] **S5** Acceptance: section 7.2 items 3 (full buffer fails the source op, never
@@ -226,9 +226,57 @@ movement on tick N+1.
   sim_oracle ticks=10000 commands=923 final=0xff4e1ca0c779455b stream=0x218da333e6834496 logic=0xcef8548df2b2a518
   ```
 
-### S4
+### S4 - hash, diff, and the single logic-hash bump
 
-_Pending (Agent B)._
+`sim_hash_state` appends, after the M5.0 map block and in this order: the hero def
+table (count, then each def's scalars and each action's and effect's scalars),
+`HeroPool`, `ProjectilePool`, `StatusPool`, then the `SimEventQueue` read phase and
+write phase (count, then per event `tick`, `event_kind`, `payload_size`,
+`append_ordinal`, and exactly `payload_size` payload bytes - never the tail
+padding). `sim_diff_state` gained `diff_hero_defs` / `diff_heroes` /
+`diff_projectiles` / `diff_statuses` / `diff_sim_events` walking the identical
+order, and 39 `SimStateField` entries were appended after
+`SIM_STATE_FIELD_MAP_LANE_WAYPOINT`, so every pre-existing first-divergence report
+keeps its meaning. `canonical_world_valid` now also proves the def table, the three
+optional pools (a zero capacity must be a fully absent pool), the envelope queue,
+and that every hero row names an installed def.
+
+`SIM_LOGIC_HASH` moved exactly once, `0xcef8548df2b2a518` -> `0x46e9e287878ba88c`.
+The recipe was re-verified locally: the M5.0 string reproduces
+`0xcef8548df2b2a518` and the M3.2 string reproduces `0xab96814425ba80a4`.
+
+New oracle, **identical in Debug and Release**:
+
+```
+sim_oracle ticks=10000 commands=923 final=0xac06a80d7f71b503 stream=0x4209159b82890bcb logic=0x46e9e287878ba88c
+```
+
+Both the final state hash and the stream digest move, because the stream digest is
+an FNV chain over every tick's state hash.
+
+- `engine_tests --suite sim_hero_combat`: **22 tests, 448 checks, 0 failed**.
+- Debug CTest **51/51** (29.0 s); Release CTest **51/51** (29.2 s).
+- `sim_determinism` still reports exactly
+  `controlled divergence tick=4321 field=position_x entity=7`, and the replay byte
+  size pin `134812` is unchanged (the replay v1 codec and the placeholder command
+  generator were never touched).
+
+Pins moved (14 sites):
+
+| File | Change |
+|---|---|
+| `engine/sim/include/sim/replay.h` | `SIM_LOGIC_HASH` -> `0x46e9e287878ba88c` (+ comment) |
+| `tests/sim/sim_determinism_tests.cpp` | logic `static_assert` + both oracle `CHECK`s |
+| `tests/CMakeLists.txt` | `sim_ubsan_oracle` regex + `replay_inspect` `logic_hash=` regex |
+| `tests/sim/check_sim_binary_parity.cmake` | `final=`, `stream=`, `logic=` |
+| `tools/check-clang-cl-determinism.ps1` | the whole expected oracle line |
+| `README.md` | Debug/Release oracle value |
+| `.github/PULL_REQUEST_TEMPLATE.md` | oracle + logic key |
+| `tests/sim/replay_tests.cpp` | **added** a rejected historical row for `0xcef8548df2b2a518` |
+
+`docs/ROADMAP.md`, `docs/JOURNAL.md`, and the M3.x / M5.0 slates record historical
+values in past-tense narrative and were deliberately left alone.
+`docs/decisions/0014` gets its appended clause from Agent C.
 
 ### S5-S6 gates
 

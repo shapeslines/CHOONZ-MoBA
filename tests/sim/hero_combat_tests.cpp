@@ -3,6 +3,7 @@
 #include "sim/command.h"
 #include "sim/sim.h"
 #include "sim/sim_hash.h"
+#include "sim/replay.h"
 #include "sim/systems.h"
 
 #include <cstring>
@@ -19,6 +20,7 @@ alignas(16) static uint8_t g_hero_storage_b[HERO_WORLD_BYTES];
 // MSVC /WX flags a compile-time constant inside an if (C4127), and CHECK is an if.
 // Routing layout constants through a function keeps the assertion a runtime one.
 static size_t sz(size_t value) { return value; }
+static uint64_t u64(uint64_t value) { return value; }
 
 static SimWorldConfig hero_config(uint32_t max_entities = 64u) {
     SimWorldConfig config{};
@@ -848,4 +850,97 @@ TEST(sim_hero_combat, unknown_cast_slot_is_an_atomic_packet_reject) {
     SimCommand from_non_hero = cast_command(1u, 0);
     SimCommandBuffer non_hero{&from_non_hero, 1u};
     CHECK(!sim_validate_commands(&world, &non_hero));
+}
+
+// ------------------------------------------------------------------ S4 hash + diff
+
+TEST(sim_hero_combat, the_hero_block_is_canonical_state_and_diffs_in_hash_order) {
+    HeroFixture a{};
+    HeroFixture b{};
+    CHECK(build_fixture(&a, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    CHECK(build_fixture(&b, g_hero_storage_b, sizeof(g_hero_storage_b), hero_config(),
+                        mm::fix_from_int(2)));
+
+    uint64_t base = sim_hash_state(&a.world);
+    CHECK(base != 0u);
+    CHECK(sim_hash_state(&b.world) == base);
+    SimStateDiff diff{};
+    CHECK(!sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_NONE);
+
+    HeroView hero{};
+    CHECK(hero_pool_get(&b.world.heroes, b.hero, &hero));
+    *hero.resource += 1;
+    CHECK(sim_hash_state(&b.world) != base);
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_HERO_RESOURCE);
+    CHECK(diff.expected_value == 50u);
+    CHECK(diff.actual_value == 51u);
+    *hero.resource -= 1;
+    CHECK(sim_hash_state(&b.world) == base);
+
+    hero.action_cooldown[2] = 4u;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_HERO_ACTION_COOLDOWN);
+    hero.action_cooldown[2] = 0u;
+
+    *hero.pending_kind = SIM_HERO_PENDING_ATTACK;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_HERO_PENDING_KIND);
+    *hero.pending_kind = SIM_HERO_PENDING_NONE;
+
+    // A second def in one world only: the def table is hashed and diffs per record.
+    SimHeroDef extra = fixture_hero_def(0x5150ULL);
+    CHECK(sim_install_hero_def(&b.world, &extra, nullptr));
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_HERO_DEF_COUNT);
+    CHECK(sim_hash_state(&b.world) != base);
+
+    // Status and projectile rows are canonical state too.
+    CHECK(status_pool_add(&a.world.statuses, a.target, SIM_EFFECT_AREA_SLOW, 3u, 1,
+                          FIX_ONE / 2));
+    CHECK(sim_hash_state(&a.world) != base);
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_HERO_DEF_COUNT);   // still the earliest block
+    CHECK(status_pool_remove(&a.world.statuses, a.target));
+    CHECK(sim_hash_state(&a.world) == base);
+}
+
+TEST(sim_hero_combat, every_new_state_field_has_a_name_and_the_logic_key_moved_once) {
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_HERO_DEF_COUNT),
+                      "hero_def_count") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_HERO_DEF_RECORD),
+                      "hero_def_record") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_HERO_RESOURCE),
+                      "hero_resource") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_PROJECTILE_POSITION_X),
+                      "projectile_position_x") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_STATUS_REMAINING_TICKS),
+                      "status_remaining_ticks") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_SIM_EVENT_WRITE_PAYLOAD),
+                      "sim_event_write_payload") == 0);
+    // The M5.0 block still reports the same names, so old divergence reports read
+    // exactly as they did before the append.
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_MAP_LANE_WAYPOINT),
+                      "map_lane_waypoint") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_POSITION_X), "position_x") == 0);
+    CHECK(u64(SIM_LOGIC_HASH) == 0x46e9e287878ba88cULL);
+}
+
+TEST(sim_hero_combat, a_hero_row_naming_an_absent_def_is_not_a_canonical_world) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    CHECK(sim_hash_state(&fixture.world) != 0u);
+
+    HeroView hero{};
+    CHECK(hero_pool_get(&fixture.world.heroes, fixture.hero, &hero));
+    *hero.def_index = 9u;
+    CHECK(sim_hash_state(&fixture.world) == 0u);
+    SimStateDiff diff{};
+    CHECK(sim_diff_state(&fixture.world, &fixture.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_INVALID);
+    *hero.def_index = fixture.def_index;
+    CHECK(sim_hash_state(&fixture.world) != 0u);
 }
