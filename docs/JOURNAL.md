@@ -13,7 +13,7 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 **Scope:** execute the first Phase 5 slice (`m5-map-navigation`), prepare CI for the fleet's
 self-hosted Windows runner, and reconcile the two vault project notes.
 
-**Outcome:** PR #67 (`lane/moba-m5.0-map/20260902`) lands `engine/sim/map.h/.cpp`: `MapGrid` SoA,
+**Outcome:** PR #68 (`lane/moba-m5.0-map/20260902`) lands `engine/sim/map.h/.cpp`: `MapGrid` SoA,
 Q16.16 cell↔world with floor semantics, fixed neighbour order, fail-closed lanes, spawn lookup, the
 `.mapdesc` codec, and the map hashed into canonical state with one recorded `SIM_LOGIC_HASH` bump
 (`0xab96814425ba80a4` → `0xcef8548df2b2a518`; new oracle final `0xff4e1ca0c779455b`, stream
@@ -41,7 +41,7 @@ Vault: `moba.md` = engine record, `game-design.md` = area hub with `depends_on` 
 
 ### Next
 
-Owner merges #65, #66, #67 (local green + admin bypass, or runner activation). Then claim M5.1
+Owner merges #65, #66, #68 (local green + admin bypass, or runner activation). Then claim M5.1
 `m5-command-replay` per `docs/plans/m5.1-command-replay.md`; refresh `AGENTS.md` §1 oracle values.
 
 ---
