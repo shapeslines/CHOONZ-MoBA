@@ -8,6 +8,44 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 19 — 2026-09-03 — M5.2 hero combat (unified effect pipeline)
+
+**Scope:** execute `m5-hero-combat` on an integration branch (`main` + #68 + #69) through Opus 5
+subagents so the orchestrator stayed light on context: Agent A wrote the plan and slate, Agent B built
+S1–S4, Agent C (cut off by an API session limit, resumed as Agent C′) closed S5–S6.
+
+**Outcome:** PR #71 (`lane/moba-m5-hero-combat/20260903`, stacked on #68 and #69). The sim owns a
+POD mirror of the §3.3 content shapes (`sim/hero.h`), bounded SoA `HeroPool` / `ProjectilePool` /
+`StatusPool`, a 32-byte `SimEvent` envelope on a fixed-capacity reject-at-source queue, and one
+`resolve_effect` pipeline that is the only writer of health, resource, and cooldown. Basic attack,
+`projectile_damage`, `self_heal`, and `area_slow` run through it; `SIM_COMMAND_ATTACK=3` and
+`SIM_COMMAND_CAST=4` translate from the M5.1 intake, which now validates `USE_ACTION` against the def
+table. Exactly one `SIM_LOGIC_HASH` bump (`…|hero-combat-v1` → `0x46e9e287878ba88c`); oracle
+`0xac06a80d7f71b503` / `0x4209159b82890bcb`, mutation probe unchanged.
+
+### What changed
+
+- New source lint `sim_pipeline_owner` (`tests/sim/check_sim_pipeline_owner.cmake`) proves no second
+  mutation path exists, in the spirit of `check_sim_boundary`.
+- ADR-0014 consequences clause records the envelope + fixed-capacity queue; ROADMAP M5.3 sim core
+  complete, M5.4 single resolution point landed.
+- Deviation of record: a full event queue fails the source op and `sim_tick` returns false for that
+  tick (plan failure table), drain-then-retry proven in test.
+
+### Verification
+
+- `sim_hero_combat` 27 tests / 704 checks; CTest 52/52 in Debug, RelWithDebInfo, Release, `debug-asan`
+  (MSVC 14.44); clang-cl/UBSan PASS with the new oracle; boundary, compiler-policy, binary-parity, and
+  pipeline-owner lints green; determinism mutation `tick=4321 field=position_x entity=7`.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 → #70 → #71. Then write `plans/m5-lane-objectives.md` (minion
+waves, towers, objectives on the M5.0 lanes) from the merged `main` and claim it; the game-layer
+`HeroDef` bytes → `SimHeroDef` translation is a small follow-on named in the hero slate.
+
+---
+
 ## Session 18 — 2026-09-03 — typed content record payloads (ADR-0016)
 
 **Scope:** execute `content-typed-payloads` so heroes, objectives, economy rules, and maps are
