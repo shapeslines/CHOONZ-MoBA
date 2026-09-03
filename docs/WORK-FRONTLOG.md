@@ -13,9 +13,9 @@ State cell, create the worktree branch named in the plan, and open the slate. Ro
 | 3 | **`content-typed-payloads`** — validated hero/action/map/economy `.mba` payloads, byte-identical recook | needs `plans/content-typed-payloads.md` first; fence `engine/assets/`, `engine/asset_parsers/`, `tools/cooker/`, `tests/assets/`; ADR-0015 successor ADR required | open — gate met; plan missing |
 | 4 | M4.2 PNG + own inflate (cooker-only) | ROADMAP M4.2; fence `tools/cooker/`, `engine/asset_parsers/` | open — pull forward only if M5.0 map authoring needs PNG |
 | 5 | M4.3 glTF strict subset → SoA mesh + frustum culling (G27) | ROADMAP M4.3; fence `tools/cooker/`, `engine/render/`, `engine/game/` | open — after typed payloads |
-| 0 | **Restore GitHub Actions** — org account locked for billing; every job since 2026-09-03T01:41Z fails to start (`main`@`4f66af1`, PR #65) | check-run annotations; owner-only | open — owner; then re-run `main` and PR #65 |
+| 0 | **CI on fleet runner** — hosted Actions billing-locked; PR #66 prepares `ci.yml` for the self-hosted Windows runner; runner manager must bake the toolchain (`CHOONZ-MOBA-WIN-TOOLCHAIN-1`, WID `wid-20260903-choonz-moba-f56aa7`); owner adds admin bypass on `main-gate` for local-green merges | [ci-runner-handoff.md](ci-runner-handoff.md) | open — runner manager + owner |
 | 6 | GAP-011 closing receipt (in-tree `CHOONZ/MOBA-proto` clone is gone from disk) | [custodian-queue.md](custodian-queue.md); GromCodebase `docs/fleet/GAP-REGISTER.md` row GAP-011, `FLEET-MAP.md` rows 51/79 | open — mailbox request posted 2026-09-02; GromCodebase seat owns the edit |
-| 7 | Vault `20 Projects/moba/moba.md` vs `game-design.md` duplication | proposal only; Carson locks | open — proposed in receipt `receipts/20260902-pm-baseline.md` |
+| 7 | Vault `20 Projects/moba/moba.md` vs `game-design.md` duplication | vault record `05 Exchange/records/2026-09-02-moba-game-design-reconcile.md` | done 2026-09-02 — moba = engine record (area make, blocks game-design); game-design = area hub (depends_on moba, pixelart-assistant, godot) |
 | 8 | Fix `moba` skill line "maps to UE5/C++" (contradicts its own frontmatter) | GromAgentKit `live/skills/moba/SKILL.md` | open — skills repo, not here |
 
 ## Done (recent)

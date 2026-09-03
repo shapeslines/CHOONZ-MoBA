@@ -19,6 +19,7 @@ Which file answers which question. Start at the top; stop when the question is a
 | Where did the fat pins go? | [session-archive/](session-archive/) | extracted pins, dated |
 | Older per-milestone retrospectives? | [sessions/](sessions/) | **retired 2026-09-02**; slates + session-archive replace it |
 | What must propagate elsewhere after a landing? | [custodian-queue.md](custodian-queue.md) | markers for `/custodian` |
+| How does CI reach the fleet runners, and how do I merge meanwhile? | [ci-runner-handoff.md](ci-runner-handoff.md) | runner-manager handoff (PR #66); local-green interim path |
 | Which GPU/driver was the smoke run on? | [testing-hardware.md](testing-hardware.md) | hardware gate record |
 | Historic gap and security ledgers | [gap-analysis-report.md](gap-analysis-report.md), [gap-close-ledger.md](gap-close-ledger.md), [security-consolidation-ledger.md](security-consolidation-ledger.md) | closed; reference only |
 

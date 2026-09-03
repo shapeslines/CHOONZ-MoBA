@@ -61,9 +61,9 @@ owner-gated. Docs-only; no engine, test, or generated file changed in this lane.
   cannot go green until billing is restored and the runs are re-triggered.
 
 - Merge of this lane's PR.
-- Vault: `20 Projects/moba/moba.md` and `20 Projects/game-design.md` overlap (both claim the engine's
-  PM state). Proposal: keep `moba.md` as the github-project record, make `game-design.md` the area hub
-  pointing at it. Not applied.
+- Vault overlap `moba.md` / `game-design.md`: **resolved 2026-09-02** on owner authorization — record
+  `05 Exchange/records/2026-09-02-moba-game-design-reconcile.md` (moba = engine record, game-design =
+  area hub with `depends_on` edges; `project-doctor.py --check` PASS).
 - GromCodebase GAP-011 closing receipt (the `CHOONZ/MOBA-proto` in-tree clone is gone from disk;
   `FLEET-MAP.md` rows 51/79 still describe it). Mailbox request posted; the GromCodebase seat edits.
 - GromAgentKit `live/skills/moba/SKILL.md` line "maps to UE5/C++" contradicts its own frontmatter.
