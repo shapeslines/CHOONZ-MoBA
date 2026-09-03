@@ -1,0 +1,4 @@
+# Authored EconomyRule. Cooked by: cooker --kind economy.
+award_kind = gold
+source_kind = hero_kill
+award_amount = 300

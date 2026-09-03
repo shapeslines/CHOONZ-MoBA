@@ -1,5 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
+    [Parameter(Mandatory = $true)][string]$ContentDir,
     [Parameter(Mandatory = $true)][string]$WorkDir
 )
 
@@ -48,6 +49,37 @@ try {
     [System.IO.File]::WriteAllBytes($malformed, [byte[]](0,0,2))
     & $Exe --input $malformed --asset 'textures/rejected.mba' --output $rejected
     Require ($LASTEXITCODE -ne 0) 'Cooker accepted malformed TGA input.'
+
+    # ADR-0016 typed records: each authored kind recooks byte-identically and matches
+    # the independent Python golden; malformed text is rejected; a bad --kind is usage.
+    function Require-EqualFiles([string]$A, [string]$B, [string]$Message) {
+        [byte[]]$ab = [System.IO.File]::ReadAllBytes($A)
+        [byte[]]$bb = [System.IO.File]::ReadAllBytes($B)
+        Require ($ab.Length -eq $bb.Length) $Message
+        for ($i = 0; $i -lt $ab.Length; ++$i) { Require ($ab[$i] -eq $bb[$i]) $Message }
+    }
+    $records = @(
+        @{ kind = 'hero';      source = 'hero_test.txt';  asset = 'hero_test.mba';              golden = 'hero_test.mba' },
+        @{ kind = 'objective'; source = 'tower_test.txt'; asset = 'objectives/tower_a.mba';     golden = 'tower_test.mba' },
+        @{ kind = 'economy';   source = 'gold_rule.txt';  asset = 'economy/gold_hero_kill.mba'; golden = 'gold_rule.mba' }
+    )
+    foreach ($record in $records) {
+        $src = Join-Path $ContentDir $record.source
+        $outA = Join-Path $caseDir ($record.kind + '_a.mba')
+        $outB = Join-Path $caseDir ($record.kind + '_b.mba')
+        & $Exe --kind $record.kind --input $src --asset $record.asset --output $outA
+        Require ($LASTEXITCODE -eq 0) ("The " + $record.kind + " record bake failed.")
+        & $Exe --kind $record.kind --input $src --asset $record.asset --output $outB
+        Require ($LASTEXITCODE -eq 0) ("The repeated " + $record.kind + " record bake failed.")
+        Require-EqualFiles $outA $outB ("Repeated " + $record.kind + " bakes are not byte-identical.")
+        Require-EqualFiles $outA (Join-Path (Join-Path $ContentDir 'golden') $record.golden) ("The " + $record.kind + " bake differs from the Python golden.")
+    }
+    $badText = Join-Path $caseDir 'bad_hero.txt'
+    [System.IO.File]::WriteAllText($badText, "schema_version = 1`nhero_id = heroes/x`nmax_health = 0`nmove_speed_q16 = 1`nattack_range_q16 = 1`n")
+    & $Exe --kind hero --input $badText --asset 'heroes/x.mba' --output (Join-Path $caseDir 'bad_hero.mba')
+    Require ($LASTEXITCODE -eq 1) 'Cooker accepted an invalid hero record.'
+    & $Exe --kind bogus --input $badText --asset 'heroes/x.mba' --output (Join-Path $caseDir 'bogus.mba')
+    Require ($LASTEXITCODE -eq 2) 'Cooker did not treat an unknown --kind as usage.'
 
     Write-Output 'cooker CLI: deterministic TGA bake and malformed-input rejection passed'
 }

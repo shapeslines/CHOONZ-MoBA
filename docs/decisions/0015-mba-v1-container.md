@@ -1,6 +1,8 @@
 # ADR 0015 — Unified baked asset container `.mba` version 1
 
 - **Status:** Accepted (2026-08-25)
+- **Superseded in part by:** [0016](0016-mba-typed-record-payloads.md) (2026-09-03) — the
+  "one texture payload" clause; typed record payloads now share this container.
 - **See also:** [0008](0008-shader-build.md), [0009](0009-error-handling.md),
   [0010](0010-asset-id-scheme.md), `ARCHITECTURE.md` §11
 

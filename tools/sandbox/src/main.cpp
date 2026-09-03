@@ -245,6 +245,17 @@ int main(int argc, char** argv) {
                                 texture_view.width, texture_view.height,
                                 (unsigned long long)texture_view.id);
             }
+            // ADR-0016: a typed content record travels the same asset_load path and
+            // stays verbatim bytes in the level arena; eng::sim decodes it later.
+            AssetHandle hero_asset = asset_load(
+                &asset_registry, "hero_test.mba", ASSET_LIFETIME_LEVEL);
+            AssetRecordView hero_view{};
+            if (asset_get_record(&asset_registry, hero_asset, &hero_view))
+                std::printf("sandbox: content record loaded kind=%u schema=%u bytes=%u id=0x%016llx\n",
+                            hero_view.kind, hero_view.schema_version, hero_view.bytes_count,
+                            (unsigned long long)hero_view.id);
+            else
+                std::printf("sandbox: content record hero_test.mba failed to load\n");
         } else std::printf("sandbox: asset registry initialization failed\n");
     }
 

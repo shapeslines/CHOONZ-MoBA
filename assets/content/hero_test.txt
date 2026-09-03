@@ -1,0 +1,39 @@
+# Authored HeroDef (proto-design section 3.3). Cooked by: cooker --kind hero.
+# Ids are canonical asset paths; the cooker hashes them (ADR-0010). Q16 fields are
+# raw Q16.16 integers (65536 = 1.0 unit).
+schema_version = 1
+hero_id = heroes/mirror.hero
+max_health = 600
+move_speed_q16 = 229376
+attack_range_q16 = 327680
+
+action.0.id = actions/mirror/bolt
+action.0.target_mode = entity
+action.0.cooldown_ticks = 180
+action.0.cast_time_ticks = 6
+action.0.resource_cost = 40
+action.0.range_q16 = 524288
+action.0.projectile_speed_q16 = 786432
+action.0.effect.0.type = projectile_damage
+action.0.effect.0.magnitude = 90
+
+action.1.id = actions/mirror/mend
+action.1.target_mode = self
+action.1.cooldown_ticks = 360
+action.1.cast_time_ticks = 0
+action.1.resource_cost = 60
+action.1.effect.0.type = self_heal
+action.1.effect.0.magnitude = 120
+action.1.effect.0.duration_ticks = 90
+
+action.2.id = actions/mirror/mire
+action.2.target_mode = area
+action.2.cooldown_ticks = 540
+action.2.cast_time_ticks = 12
+action.2.resource_cost = 80
+action.2.range_q16 = 393216
+action.2.effect.0.type = area_slow
+action.2.effect.0.magnitude = 40
+action.2.effect.0.duration_ticks = 120
+action.2.effect.0.radius_q16 = 196608
+action.2.effect.0.scalar_q16 = 32768
