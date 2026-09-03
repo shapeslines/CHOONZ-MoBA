@@ -156,6 +156,12 @@ add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_boundary.cmake")
 
+# M5.2: the unified-pipeline no-bypass scan. Absence of a second mutation path is a
+# source-level property, so it is a lint beside check_sim_boundary, not a unit test.
+add_test(NAME sim_pipeline_owner
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_pipeline_owner.cmake")
+
 add_test(NAME sim_compiler_policy
     COMMAND ${CMAKE_COMMAND}
             -DSOURCE_DIR=${CMAKE_SOURCE_DIR}

@@ -77,9 +77,31 @@ static CommandRejectReason validate_one(const SimWorld* world, CommandIntakeConf
             return COMMAND_REJECT_STALE_ENTITY;
     }
     if (c->command_kind == COMMAND_KIND_USE_ACTION) {
-        // No action table exists yet; every action is unknown, which is a shape
-        // failure rather than a cooldown/range verdict.
-        return COMMAND_REJECT_MALFORMED;
+        // M5.2: the def table is the only authority on what an action_id means. A
+        // unit with no hero row, or a hero whose def does not carry this action_id,
+        // has no such intent at all - that is a shape failure (MALFORMED), the same
+        // verdict M5.1 gave when no action table existed. A hero that owns the
+        // action but has it on cooldown is still accepted here: reading a hero's
+        // per-slot cooldown from a const world needs a const accessor that
+        // components.h does not expose yet, so COMMAND_REJECT_COOLDOWN and
+        // COMMAND_REJECT_RANGE both stay defined-but-unproduced and both stay
+        // sys_hero_actions no-ops (the target may legally move, and a hero may
+        // legally come off cooldown, between intake and the tick).
+        uint16_t def_index = 0u;
+        if (!hero_pool_def_index(&world->heroes, c->actor, &def_index))
+            return COMMAND_REJECT_MALFORMED;
+        const SimHeroDef* def = sim_hero_def_table_get(&world->hero_defs, def_index);
+        if (!def) return COMMAND_REJECT_MALFORMED;
+        const SimActionDef* action = nullptr;
+        for (uint16_t i = 0u; i < def->action_count; ++i) {
+            if (def->actions[i].action_id == c->action_id) action = &def->actions[i];
+        }
+        if (!action) return COMMAND_REJECT_MALFORMED;
+        if (action->slot >= SIM_MAX_ACTION_SLOTS) return COMMAND_REJECT_MALFORMED;
+        if (action->target_mode == SIM_TARGET_ENTITY &&
+            (c->target.h == HANDLE_NULL ||
+             !entity_manager_is_alive(&world->entities, c->target)))
+            return COMMAND_REJECT_STALE_ENTITY;
     }
     return COMMAND_REJECT_NONE;
 }

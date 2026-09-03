@@ -16,6 +16,7 @@
 static const size_t HERO_WORLD_BYTES = 512u * 1024u;
 alignas(16) static uint8_t g_hero_storage[HERO_WORLD_BYTES];
 alignas(16) static uint8_t g_hero_storage_b[HERO_WORLD_BYTES];
+alignas(16) static uint8_t g_hero_storage_c[HERO_WORLD_BYTES];
 
 // MSVC /WX flags a compile-time constant inside an if (C4127), and CHECK is an if.
 // Routing layout constants through a function keeps the assertion a runtime one.
@@ -476,16 +477,18 @@ struct HeroFixture {
     EntityId hero;
     EntityId target;
     uint16_t def_index;
+    size_t arena_offset;                 // arena bytes consumed by sim_init
 };
 
-static bool build_fixture(HeroFixture* fixture, uint8_t* storage, size_t storage_bytes,
-                          SimWorldConfig config, mm::fix target_x) {
+static bool build_fixture_with_def(HeroFixture* fixture, uint8_t* storage,
+                                   size_t storage_bytes, SimWorldConfig config,
+                                   mm::fix target_x, const SimHeroDef* def) {
     Arena arena;
     arena_init_fixed(&arena, storage, storage_bytes);
     config.initial_unit_count = 2u;
     if (!sim_init(&fixture->world, &arena, 17u, config)) return false;
-    SimHeroDef def = fixture_hero_def();
-    if (!sim_install_hero_def(&fixture->world, &def, &fixture->def_index)) return false;
+    fixture->arena_offset = arena.offset;
+    if (!sim_install_hero_def(&fixture->world, def, &fixture->def_index)) return false;
 
     fixture->hero = fixture->world.unit_entities[0];
     fixture->target = fixture->world.unit_entities[1];
@@ -499,6 +502,12 @@ static bool build_fixture(HeroFixture* fixture, uint8_t* storage, size_t storage
     *target_transform.position_x = target_x;
     *target_transform.position_y = 0;
     return hero_pool_add(&fixture->world.heroes, fixture->hero, fixture->def_index, 50);
+}
+
+static bool build_fixture(HeroFixture* fixture, uint8_t* storage, size_t storage_bytes,
+                          SimWorldConfig config, mm::fix target_x) {
+    SimHeroDef def = fixture_hero_def();
+    return build_fixture_with_def(fixture, storage, storage_bytes, config, target_x, &def);
 }
 
 static SimCommand attack_command(uint16_t actor_slot, int32_t target_slot) {
@@ -943,4 +952,429 @@ TEST(sim_hero_combat, a_hero_row_naming_an_absent_def_is_not_a_canonical_world) 
     CHECK(diff.field == SIM_STATE_FIELD_INVALID);
     *hero.def_index = fixture.def_index;
     CHECK(sim_hash_state(&fixture.world) != 0u);
+}
+
+// ------------------------------------------------------------------ S5 acceptance
+// proto-design section 7.2 items 3, 4, and 5, plus the command-intake seam for
+// USE_ACTION. Everything above proves a mechanism; this block proves the three
+// properties the milestone is accepted on.
+
+// Item 3. ADR-0014 is reject-at-source: a write phase that cannot hold the tick's
+// events fails the operation that produced them, and never drops or overwrites an
+// event that is already queued.
+TEST(sim_hero_combat, a_full_event_queue_fails_the_source_operation_and_drops_nothing) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+    HealthView hero_health{};
+    CHECK(health_pool_get(&world.health, fixture.hero, &hero_health));
+    *hero_health.current = 50;
+
+    // Fill the write phase to capacity with canonical events of our own, so the
+    // rejection below is provably backpressure and not a malformed payload.
+    const uint32_t capacity = world.config.sim_event_capacity;
+    CHECK(sim_event_queue_write_room(&world.sim_events) == capacity);
+    for (uint32_t i = 0u; i < capacity; ++i) {
+        SimEvent filler = sim_event_make_heal(world.tick, fixture.hero,
+                                              static_cast<int32_t>(i) + 1);
+        CHECK(sim_event_queue_append(&world.sim_events, &filler));
+    }
+    CHECK(sim_event_queue_write_room(&world.sim_events) == 0u);
+    CHECK(world.sim_events.counts[world.sim_events.write_index] == capacity);
+    // One more append is refused at the queue, not silently wrapped.
+    SimEvent overflow = sim_event_make_heal(world.tick, fixture.hero, 99);
+    CHECK(!sim_event_queue_append(&world.sim_events, &overflow));
+
+    HeroView hero{};
+    CHECK(hero_pool_get(&world.heroes, fixture.hero, &hero));
+    const int32_t resource_before = *hero.resource;
+    const int32_t health_before = *hero_health.current;
+    const uint32_t cooldown_before = hero.action_cooldown[1];
+    const uint64_t tick_before = world.tick;
+
+    // Slot 1 is the self heal: exactly one SimEvent, and there is no room for it.
+    // The shape is fine, so intake and validation both pass; only the source
+    // operation fails.
+    SimCommand cast = cast_command(0u, 1);
+    SimCommandBuffer buffer{&cast, 1u};
+    CHECK(sim_validate_commands(&world, &buffer));
+    CHECK(!sim_tick(&world, &buffer));
+    CHECK(world.tick == tick_before);
+
+    // Nothing queued was dropped, reordered, or overwritten.
+    CHECK(world.sim_events.counts[world.sim_events.write_index] == capacity);
+    const SimEvent* written = world.sim_events.buffers[world.sim_events.write_index];
+    for (uint32_t i = 0u; i < capacity; ++i) {
+        CHECK(written[i].event_kind == SIM_EVENT_HEAL);
+        CHECK(written[i].append_ordinal == i);
+        CHECK(sim_event_payload_u32(&written[i], 0u) == fixture.hero.h);
+        CHECK(sim_event_payload_i32(&written[i], 4u) == static_cast<int32_t>(i) + 1);
+        CHECK(sim_event_is_canonical(&written[i]));
+    }
+    // The rejected source operation paid nothing: no health, no resource, no cooldown.
+    CHECK(*hero_health.current == health_before);
+    CHECK(*hero.resource == resource_before);
+    CHECK(hero.action_cooldown[1] == cooldown_before);
+
+    // Draining the queue makes the identical command succeed, so the world was
+    // refused, not corrupted, and sim_tick advances again.
+    CHECK(sim_event_queue_publish(&world.sim_events));
+    CHECK(sim_event_queue_consume(&world.sim_events));
+    CHECK(sim_event_queue_write_room(&world.sim_events) == capacity);
+    CHECK(sim_tick(&world, &buffer));
+    CHECK(world.tick == tick_before + 1u);
+    CHECK(*hero_health.current == health_before + 15);
+    CHECK(*hero.resource == resource_before - 5);
+    CHECK(hero.action_cooldown[1] == 7u - 1u);
+}
+
+// The same property on the damage wire: a full DamageEventQueue fails the attack
+// that would have appended to it, and DamageEvent stays untouched.
+TEST(sim_hero_combat, a_full_damage_queue_fails_the_attack_that_would_append) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    const uint32_t capacity = world.config.damage_event_capacity;
+    CHECK(damage_event_queue_write_room(&world.damage_events) == capacity);
+    for (uint32_t i = 0u; i < capacity; ++i) {
+        DamageEvent filler{};
+        filler.source = fixture.hero;
+        filler.target = fixture.target;
+        filler.amount = static_cast<int32_t>(i) + 1;
+        CHECK(damage_event_is_canonical(&filler));
+        CHECK(damage_event_queue_append(&world.damage_events, &filler));
+    }
+    CHECK(damage_event_queue_write_room(&world.damage_events) == 0u);
+
+    HeroView hero{};
+    CHECK(hero_pool_get(&world.heroes, fixture.hero, &hero));
+    const int32_t target_health_before = health_of(&world, fixture.target);
+    const uint32_t attack_cooldown_before = *hero.basic_attack_cooldown;
+
+    SimCommand attack = attack_command(0u, 1);
+    SimCommandBuffer buffer{&attack, 1u};
+    CHECK(!sim_tick(&world, &buffer));
+    CHECK(world.tick == 0u);
+    CHECK(world.damage_events.counts[world.damage_events.write_index] == capacity);
+    CHECK(health_of(&world, fixture.target) == target_health_before);
+    CHECK(*hero.basic_attack_cooldown == attack_cooldown_before);
+}
+
+// Item 4. ADR-0013: sys_rng_advance draws exactly once per tick, unconditionally.
+// Two worlds that differ only in how much hero data they carry must therefore agree
+// on the stream AND on the number of draws taken to reach it.
+TEST(sim_hero_combat, an_extra_action_def_changes_neither_rng_stream_nor_draw_count) {
+    SimHeroDef lean = fixture_hero_def();
+    SimHeroDef rich = fixture_hero_def();
+    SimActionDef& extra = rich.actions[3];
+    extra.action_id = 0xA4ULL;
+    extra.slot = 3u;
+    extra.target_mode = SIM_TARGET_SELF;
+    extra.effect_count = 1u;
+    extra.cooldown_ticks = 3u;
+    extra.resource_cost = 1u;
+    extra.effects[0] = effect_self_heal(2);
+    rich.action_count = 4u;
+    CHECK(sim_hero_def_valid(&lean));
+    CHECK(sim_hero_def_valid(&rich));
+
+    HeroFixture lean_world{};
+    HeroFixture rich_world{};
+    CHECK(build_fixture_with_def(&lean_world, g_hero_storage, sizeof(g_hero_storage),
+                                 hero_config(), mm::fix_from_int(2), &lean));
+    CHECK(build_fixture_with_def(&rich_world, g_hero_storage_b, sizeof(g_hero_storage_b),
+                                 hero_config(), mm::fix_from_int(2), &rich));
+
+    // A local generator seeded from the world's own initial state is the draw
+    // counter: after N ticks the world must be exactly N draws along, so equality
+    // proves the count as well as the stream, with no instrumentation in the sim.
+    mm::pcg32 lean_expected = lean_world.world.rng;
+    mm::pcg32 rich_expected = rich_world.world.rng;
+    CHECK(lean_expected.state == rich_expected.state);
+    CHECK(lean_expected.inc == rich_expected.inc);
+
+    HeroView lean_hero{};
+    HeroView rich_hero{};
+    CHECK(hero_pool_get(&lean_world.world.heroes, lean_world.hero, &lean_hero));
+    CHECK(hero_pool_get(&rich_world.world.heroes, rich_world.hero, &rich_hero));
+    HealthView lean_health{};
+    HealthView rich_health{};
+    CHECK(health_pool_get(&lean_world.world.health, lean_world.target, &lean_health));
+    CHECK(health_pool_get(&rich_world.world.health, rich_world.target, &rich_health));
+
+    const uint32_t TICKS = 1000u;
+    uint32_t drift = 0u;
+    for (uint32_t tick = 0u; tick < TICKS; ++tick) {
+        // One scripted stream drives both worlds. The top-up at the end of each
+        // 25-tick cycle is applied identically to both, so neither world ever runs
+        // out of resource or loses its target, and the comparison stays live for
+        // the whole run.
+        if (tick % 25u == 24u) {
+            *lean_hero.resource = 50;
+            *rich_hero.resource = 50;
+            *lean_health.current = 100;
+            *rich_health.current = 100;
+        }
+        SimCommand command{};
+        SimCommandBuffer buffer{&command, 1u};
+        const SimCommandBuffer* drive = nullptr;
+        switch (tick % 25u) {
+            case 0u:  command = cast_command(0u, 0, mm::fix_from_int(1)); drive = &buffer; break;
+            case 7u:  command = cast_command(0u, 1);                      drive = &buffer; break;
+            case 14u: command = cast_command(0u, 2, mm::fix_from_int(2), 0); drive = &buffer; break;
+            case 20u: command = attack_command(0u, 1);                    drive = &buffer; break;
+            default: break;
+        }
+        if (!sim_tick(&lean_world.world, drive)) ++drift;
+        if (!sim_tick(&rich_world.world, drive)) ++drift;
+        (void)mm::pcg32_next(&lean_expected);
+        (void)mm::pcg32_next(&rich_expected);
+        if (lean_world.world.rng.state != lean_expected.state) ++drift;
+        if (rich_world.world.rng.state != rich_expected.state) ++drift;
+        if (lean_world.world.rng.state != rich_world.world.rng.state) ++drift;
+    }
+    CHECK(drift == 0u);
+    CHECK(lean_world.world.tick == TICKS);
+    CHECK(rich_world.world.tick == TICKS);
+    CHECK(lean_world.world.rng.state == rich_world.world.rng.state);
+    CHECK(lean_world.world.rng.inc == rich_world.world.rng.inc);
+    // The extra action really is in the rich world, so the agreement above is not
+    // the agreement of two identical worlds.
+    CHECK(lean_world.world.hero_defs.defs[0].action_count == 3u);
+    CHECK(rich_world.world.hero_defs.defs[0].action_count == 4u);
+    CHECK(sim_hash_state(&lean_world.world) != sim_hash_state(&rich_world.world));
+}
+
+// Item 5. A scripted duel that drives all three data-defined effects through
+// resolve_effect for 3,000 ticks. Two identical runs must agree at every checkpoint
+// and at the end.
+static const uint32_t DUEL_TICKS = 3000u;
+static const uint32_t DUEL_CHECKPOINT = 500u;
+static const uint32_t DUEL_CHECKPOINTS = DUEL_TICKS / DUEL_CHECKPOINT;
+
+struct DuelTrace {
+    uint64_t checkpoints[DUEL_CHECKPOINTS];
+    uint64_t final_hash;
+    uint32_t projectile_spawns;
+    uint32_t projectile_landings;
+    uint32_t heals;
+    uint32_t slow_applications;
+    uint32_t failed_ticks;
+    uint32_t resource_payments;
+    uint32_t cooldown_arms;
+};
+
+// Pure function of (seed world, script): no wall clock, no RNG of its own, no
+// branch on anything but the tick index.
+static bool run_duel(HeroFixture* fixture, DuelTrace* trace) {
+    SimWorld& world = fixture->world;
+    HeroView hero{};
+    HealthView hero_health{};
+    HealthView target_health{};
+    if (!hero_pool_get(&world.heroes, fixture->hero, &hero)) return false;
+    if (!health_pool_get(&world.health, fixture->hero, &hero_health)) return false;
+    if (!health_pool_get(&world.health, fixture->target, &target_health)) return false;
+
+    uint32_t previous_projectiles = 0u;
+    int32_t previous_hero_health = *hero_health.current;
+    int32_t previous_target_health = *target_health.current;
+    bool previously_slowed = status_pool_has(&world.statuses, fixture->target);
+
+    for (uint32_t tick = 0u; tick < DUEL_TICKS; ++tick) {
+        if (tick % 25u == 24u) {
+            // Scripted top-up, identical in both runs: resource never regenerates
+            // in v1 and the hero must stay wounded for the heal to be observable.
+            *hero.resource = 50;
+            *hero_health.current = 60;
+            *target_health.current = 100;
+            previous_hero_health = 60;
+            previous_target_health = 100;
+        }
+        SimCommand command{};
+        SimCommandBuffer buffer{&command, 1u};
+        const SimCommandBuffer* drive = nullptr;
+        switch (tick % 25u) {
+            case 0u:  command = cast_command(0u, 0, mm::fix_from_int(1)); drive = &buffer; break;
+            case 6u:  command = cast_command(0u, 1);                      drive = &buffer; break;
+            // The area is centred on the target itself (radius 3, and the target
+            // stands at x = 6), so the slow lands rather than falling short.
+            case 12u: command = cast_command(0u, 2, mm::fix_from_int(6), 0); drive = &buffer; break;
+            case 18u: command = attack_command(0u, 1);                    drive = &buffer; break;
+            default: break;
+        }
+        const int32_t resource_before = *hero.resource;
+        const uint32_t slot_cooldowns_before =
+            hero.action_cooldown[0] + hero.action_cooldown[1] + hero.action_cooldown[2];
+
+        if (!sim_tick(&world, drive)) ++trace->failed_ticks;
+
+        if (*hero.resource < resource_before) ++trace->resource_payments;
+        const uint32_t slot_cooldowns_after =
+            hero.action_cooldown[0] + hero.action_cooldown[1] + hero.action_cooldown[2];
+        if (slot_cooldowns_after > slot_cooldowns_before) ++trace->cooldown_arms;
+
+        const uint32_t projectiles = world.projectiles.membership.count;
+        if (projectiles > previous_projectiles) ++trace->projectile_spawns;
+        previous_projectiles = projectiles;
+        if (*target_health.current < previous_target_health - SIM_BASIC_ATTACK_MAGNITUDE)
+            ++trace->projectile_landings;
+        previous_target_health = *target_health.current;
+        if (*hero_health.current > previous_hero_health) ++trace->heals;
+        previous_hero_health = *hero_health.current;
+        const bool slowed = status_pool_has(&world.statuses, fixture->target);
+        if (slowed && !previously_slowed) ++trace->slow_applications;
+        previously_slowed = slowed;
+
+        if ((tick + 1u) % DUEL_CHECKPOINT == 0u)
+            trace->checkpoints[(tick + 1u) / DUEL_CHECKPOINT - 1u] = sim_hash_state(&world);
+    }
+    trace->final_hash = sim_hash_state(&world);
+    return true;
+}
+
+TEST(sim_hero_combat, two_identical_scripted_duels_hash_equal_at_every_checkpoint) {
+    HeroFixture first{};
+    HeroFixture second{};
+    CHECK(build_fixture(&first, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(6)));
+    CHECK(build_fixture(&second, g_hero_storage_b, sizeof(g_hero_storage_b), hero_config(),
+                        mm::fix_from_int(6)));
+    CHECK(sim_hash_state(&first.world) == sim_hash_state(&second.world));
+
+    DuelTrace a{};
+    DuelTrace b{};
+    CHECK(run_duel(&first, &a));
+    CHECK(run_duel(&second, &b));
+
+    CHECK(a.failed_ticks == 0u);
+    CHECK(b.failed_ticks == 0u);
+    CHECK(first.world.tick == DUEL_TICKS);
+    CHECK(second.world.tick == DUEL_TICKS);
+
+    // All three data-defined effects actually ran, so the equality below is over a
+    // duel and not over two idle worlds.
+    CHECK(a.projectile_spawns > 0u);
+    CHECK(a.projectile_landings > 0u);
+    CHECK(a.heals > 0u);
+    CHECK(a.slow_applications > 0u);
+    // Cooldown and resource are integer ticks paid through the pipeline.
+    CHECK(a.resource_payments > 0u);
+    CHECK(a.cooldown_arms > 0u);
+    CHECK(a.resource_payments == a.cooldown_arms);
+
+    CHECK(a.projectile_spawns == b.projectile_spawns);
+    CHECK(a.projectile_landings == b.projectile_landings);
+    CHECK(a.heals == b.heals);
+    CHECK(a.slow_applications == b.slow_applications);
+    CHECK(a.resource_payments == b.resource_payments);
+    CHECK(a.cooldown_arms == b.cooldown_arms);
+
+    for (uint32_t i = 0u; i < DUEL_CHECKPOINTS; ++i) {
+        CHECK(a.checkpoints[i] != 0u);
+        CHECK(a.checkpoints[i] == b.checkpoints[i]);
+    }
+    CHECK(a.final_hash != 0u);
+    CHECK(a.final_hash == b.final_hash);
+    CHECK(a.final_hash == a.checkpoints[DUEL_CHECKPOINTS - 1u]);
+    CHECK(sim_hash_state(&first.world) == sim_hash_state(&second.world));
+    SimStateDiff diff{};
+    CHECK(!sim_diff_state(&first.world, &second.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_NONE);
+
+    // Cooldown and resource are whole ticks and whole points: every action_cooldown
+    // is a countdown of integers, never a fixed-point remainder.
+    HeroView hero{};
+    CHECK(hero_pool_get(&first.world.heroes, first.hero, &hero));
+    for (uint16_t slot = 0u; slot < SIM_MAX_ACTION_SLOTS; ++slot)
+        CHECK(hero.action_cooldown[slot] <= 9u);          // the largest def cooldown
+}
+
+// The intake seam for USE_ACTION. command_intake_run is the front door, so the
+// verdicts it produces for an action command are part of acceptance.
+TEST(sim_hero_combat, use_action_intake_verdicts_and_translation) {
+    HeroFixture fixture{};
+    CHECK(build_fixture(&fixture, g_hero_storage, sizeof(g_hero_storage), hero_config(),
+                        mm::fix_from_int(2)));
+    SimWorld& world = fixture.world;
+
+    CommandIntakeConfig config{};
+    config.tick = 0u;
+    config.player_count = 1u;
+    config.damage_capacity_remaining = world.config.damage_event_capacity;
+
+    Command input{};
+    input.tick = 0u;
+    input.command_kind = COMMAND_KIND_USE_ACTION;
+    input.actor = fixture.hero;
+
+    Command accepted[4]{};
+    CommandReject rejects[4]{};
+    uint32_t accepted_count = 0u;
+    uint32_t reject_count = 0u;
+
+    // Unknown action_id: the def table is the only authority, so an action the def
+    // does not carry is a shape failure, not a cooldown or range verdict.
+    input.action_id = 0xDEADULL;
+    input.target = fixture.target;
+    CHECK(command_intake_run(&world, config, &input, 1u, 4u, accepted, &accepted_count,
+                            rejects, &reject_count));
+    CHECK(accepted_count == 0u);
+    CHECK(reject_count == 1u);
+    CHECK(rejects[0].reason == COMMAND_REJECT_MALFORMED);
+
+    // A known action whose target_mode is ENTITY, aimed at a handle that is not
+    // alive at that exact generation: stale-entity.
+    EntityId stale{handle_make(handle_index(fixture.target.h),
+                               static_cast<uint16_t>(handle_gen(fixture.target.h) + 1u))};
+    input.action_id = 0xA1ULL;                        // slot 0, SIM_TARGET_ENTITY
+    input.target = stale;
+    CHECK(command_intake_run(&world, config, &input, 1u, 4u, accepted, &accepted_count,
+                            rejects, &reject_count));
+    CHECK(accepted_count == 0u);
+    CHECK(reject_count == 1u);
+    CHECK(rejects[0].reason == COMMAND_REJECT_STALE_ENTITY);
+
+    // The same action at a live target is accepted and translates to CAST.
+    input.target = fixture.target;
+    CHECK(command_intake_run(&world, config, &input, 1u, 4u, accepted, &accepted_count,
+                            rejects, &reject_count));
+    CHECK(accepted_count == 1u);
+    CHECK(reject_count == 0u);
+    SimCommand translated{};
+    CHECK(command_to_sim(&world, &accepted[0], &translated));
+    CHECK(translated.kind == SIM_COMMAND_CAST);
+    CHECK(translated.unit_index == 0u);
+    CHECK(translated.amount == 0);                    // the def's slot, not the wire's
+    CHECK(translated.value_x == mm::fix_from_int(1));
+    CHECK(translated.value_y == 0);
+    CHECK(sim_command_is_canonical(&translated, SIM_MAX_PLAYERS, SIM_MAX_UNITS));
+
+    // A unit with no hero row has no action intent at all.
+    input.actor = fixture.target;
+    input.target = fixture.hero;
+    CHECK(command_intake_run(&world, config, &input, 1u, 4u, accepted, &accepted_count,
+                            rejects, &reject_count));
+    CHECK(accepted_count == 0u);
+    CHECK(reject_count == 1u);
+    CHECK(rejects[0].reason == COMMAND_REJECT_MALFORMED);
+
+    // And the whole batch translates as one, so the accepted buffer the tick sees
+    // is the batch the intake produced.
+    input.actor = fixture.hero;
+    input.target = fixture.target;
+    input.action_id = 0xA2ULL;                        // slot 1, SIM_TARGET_SELF
+    input.point_x_q16 = mm::fix_from_int(7);
+    input.point_y_q16 = mm::fix_from_int(-3);
+    CHECK(command_intake_run(&world, config, &input, 1u, 4u, accepted, &accepted_count,
+                            rejects, &reject_count));
+    CHECK(accepted_count == 1u);
+    SimCommand batch[4]{};
+    CHECK(command_batch_to_sim(&world, accepted, accepted_count, batch) == accepted_count);
+    CHECK(batch[0].kind == SIM_COMMAND_CAST);
+    CHECK(batch[0].amount == 1);
+    CHECK(batch[0].value_x == mm::fix_from_int(7));    // SELF reads the point through
+    CHECK(batch[0].value_y == mm::fix_from_int(-3));
 }
