@@ -8,6 +8,7 @@
 #include "sim/components.h"
 #include "sim/entity.h"
 #include "sim/events.h"
+#include "sim/map.h"
 #include "sim/sim_config.h"
 
 // SIM_MAX_UNITS is the replay command seam: commands address units by slot, and the
@@ -44,10 +45,13 @@ typedef struct SimCommandBuffer {
     uint32_t count;
 } SimCommandBuffer;
 
+// map: M5.0 grid capacity. All-zero is the empty map (the placeholder world has
+// none); gameplay slices size it from the authored .mapdesc.
 typedef struct SimWorldConfig {
     uint32_t max_entities;
     uint32_t initial_unit_count;
     uint32_t damage_event_capacity;
+    MapConfig map;
 } SimWorldConfig;
 
 typedef struct SimWorld {
@@ -62,6 +66,7 @@ typedef struct SimWorld {
     DamageEventQueue damage_events;
     EntityId* pending_destroy;
     uint32_t pending_destroy_count;
+    MapGrid map;
 } SimWorld;
 
 SimWorldConfig sim_world_config_default(void);
