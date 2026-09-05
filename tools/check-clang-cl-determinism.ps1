@@ -111,11 +111,16 @@ $targets = 'sim_oracle_probe'
 if ($ubsanSupported) { $targets += ' sim_ubsan_tripwire' }
 Invoke-VsCommand "cmake --build `"$BuildDir`" --config RelWithDebInfo --target $targets"
 
+# sim_pipeline_owner is a source lint, so it is toolchain-independent by construction -
+# but it is the gate that proves health.current, the ledgers, and the match verdict have
+# exactly one writer each, and a second toolchain reading the same sources is exactly
+# where a stray writer would surface. It rides along with the isolation lints (PR #71
+# follow-on).
 $testRegex =
-    '^(sim_boundary|sim_compiler_policy|sim_compiler_policy_selftest|sim_isolation_selftest)$'
+    '^(sim_boundary|sim_compiler_policy|sim_compiler_policy_selftest|sim_isolation_selftest|sim_pipeline_owner)$'
 if ($ubsanSupported) {
     $testRegex =
-        '^(sim_ubsan_oracle|sim_ubsan_tripwire|sim_boundary|sim_compiler_policy|sim_compiler_policy_selftest|sim_isolation_selftest)$'
+        '^(sim_ubsan_oracle|sim_ubsan_tripwire|sim_boundary|sim_compiler_policy|sim_compiler_policy_selftest|sim_isolation_selftest|sim_pipeline_owner)$'
 }
 $testCommand =
     "ctest --test-dir `"$BuildDir`" -C RelWithDebInfo -R `"$testRegex`" " +
@@ -129,7 +134,7 @@ if ($LASTEXITCODE -ne 0) { Fail "clang-cl oracle exited $LASTEXITCODE" }
 $oracle = [System.IO.File]::ReadAllText(
     $probeLog, [System.Text.Encoding]::UTF8).Trim()
 $expected =
-    'sim_oracle ticks=10000 commands=923 final=0x637628abff59c823 stream=0x6f381609f7e59f0c logic=0xab96814425ba80a4'
+    'sim_oracle ticks=10000 commands=923 final=0x36e6de56cb662dba stream=0xb6067f3f0955b292 logic=0x5b47e648953a63fc'
 if ($oracle -ne $expected) { Fail "unexpected oracle output: $oracle" }
 Write-Output $oracle
 
