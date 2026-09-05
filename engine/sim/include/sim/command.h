@@ -81,6 +81,12 @@ int command_key_compare(const Command* a, const Command* b);
 // owns unit slots [p * (SIM_MAX_UNITS / player_count), (p + 1) * ...).
 bool command_player_owns_unit(uint32_t player_id, uint32_t player_count, uint32_t unit_index);
 
+// M5.3 team-aware ownership: when the world carries a TeamPool, player p owns team p
+// and nothing else. A world with team_capacity == 0 falls back to the placeholder
+// above, so every M5.1 test keeps its meaning.
+bool command_world_owns_unit(const SimWorld* world, uint32_t player_id, uint32_t player_count,
+                             uint32_t unit_index);
+
 // Resolve a live actor handle to its unit slot in world->unit_entities.
 bool command_actor_slot(const SimWorld* world, EntityId actor, uint32_t* out_slot);
 

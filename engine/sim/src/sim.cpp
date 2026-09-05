@@ -311,6 +311,8 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
     // attacks before publish, so they commit on this tick like sys_hero_actions.
     bool minions = sys_minion_ai(world);
     if (!minions) return false;
+    bool towers = sys_tower_ai(world);
+    if (!towers) return false;
     bool acted = sys_hero_actions(world);
     if (!acted) return false;
     bool flew = sys_projectiles(world);
@@ -335,6 +337,12 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
         bool consumed_events = sim_event_queue_consume(&world->sim_events);
         ENSURE(consumed_events);
     }
+    // Steps 7. Both run AFTER consume, so what they append lands in the write phase
+    // and is read on tick N+1 - exactly the cadence the hero death walk already had.
+    bool deaths = sys_death(world);
+    if (!deaths) return false;
+    bool economy = sys_economy(world);
+    if (!economy) return false;
     bool cooled_down = sys_cooldown_tick(world);
     ENSURE(cooled_down);
     sys_rng_advance(world);

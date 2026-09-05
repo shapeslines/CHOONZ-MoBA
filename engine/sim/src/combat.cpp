@@ -156,6 +156,20 @@ bool sys_combat_resolve(SimWorld* world) {
              !entity_manager_is_alive(&world->entities, event.source))) return false;
     }
 
+    // M5.3: a damaged objective is a damage-commit observation, so its event is
+    // emitted from here, the one place that commits damage. Pre-flight the whole
+    // read phase so an envelope overflow fails the source operation before any
+    // health moves (ADR-0014).
+    if (world->config.objective_capacity > 0u && world->config.sim_event_capacity > 0u) {
+        uint32_t objective_hits = 0u;
+        for (uint32_t i = 0u; i < events.count; ++i) {
+            if (events.events[i].amount > 0 &&
+                objective_pool_has(&world->objectives, events.events[i].target))
+                ++objective_hits;
+        }
+        if (sim_event_queue_write_room(&world->sim_events) < objective_hits) return false;
+    }
+
     for (uint32_t i = 0u; i < events.count; ++i) {
         const DamageEvent& event = events.events[i];
         HealthView health{};
@@ -164,6 +178,15 @@ bool sys_combat_resolve(SimWorld* world) {
         if (event.amount >= *health.current) *health.current = 0;
         else *health.current -= event.amount;
         if (event.amount > 0) *health.damage_cooldown = 3u;
+        // The sole kill-credit input, written on the damage commit and nowhere else.
+        if (event.amount > 0) *health.last_damage_source = event.source;
+        if (event.amount > 0 && world->config.objective_capacity > 0u &&
+            world->config.sim_event_capacity > 0u &&
+            objective_pool_has(&world->objectives, event.target)) {
+            SimEvent damaged = sim_event_make_objective_damaged(
+                world->tick, event.target, event.source, event.amount, *health.current);
+            if (!sim_event_queue_append(&world->sim_events, &damaged)) return false;
+        }
     }
     return true;
 }
@@ -209,24 +232,8 @@ bool sys_effects_resolve(SimWorld* world) {
         }
     }
 
-    // Death is a hero-only verdict in v1, so a world with no hero pool keeps the
-    // legacy zero-health-is-alive behaviour of every earlier milestone.
-    if (world->config.hero_capacity == 0u) return true;
-    ComponentPoolOrderedView heroes{};
-    if (!component_pool_ordered_view(&world->heroes.membership, &heroes)) return false;
-    for (uint32_t i = 0u; i < heroes.count; ++i) {
-        EntityId hero = heroes.entities[i];
-        HealthView health{};
-        if (!health_pool_get(&world->health, hero, &health)) continue;
-        if (*health.current > 0) continue;
-        bool pending = false;
-        for (uint32_t ordinal = 0u; ordinal < world->pending_destroy_count; ++ordinal) {
-            if (world->pending_destroy[ordinal].h == hero.h) pending = true;
-        }
-        if (pending) continue;
-        SimEvent death = sim_event_make_death(world->tick, hero, EntityId{HANDLE_NULL});
-        if (!sim_event_queue_append(&world->sim_events, &death)) return false;
-        if (!sim_destroy_deferred(world, hero)) return false;
-    }
+    // M5.3: the death verdict moved to sys_death in objectives.cpp, where it is
+    // generalized over heroes, minions, and objectives and carries a killer. This
+    // step now commits heals and statuses only.
     return true;
 }

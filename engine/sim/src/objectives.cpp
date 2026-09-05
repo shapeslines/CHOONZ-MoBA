@@ -149,13 +149,40 @@ static bool entity_position(const SimWorld* world, EntityId entity, mm::fix* out
     return true;
 }
 
+// Acquisition tiers. ANY is the creep rule; the other three are the ROADMAP M5.5
+// tower priority, tried in order. HERO_ATTACKER is exactly what the plan pins: an
+// enemy hero whose last_damage_source names a hero on the tower's own team.
+typedef enum TargetTier : uint8_t {
+    TARGET_TIER_ANY = 0,
+    TARGET_TIER_HERO_ATTACKER = 1,
+    TARGET_TIER_MINION = 2,
+    TARGET_TIER_HERO = 3,
+} TargetTier;
+
+static bool tier_accepts(SimWorld* world, EntityId actor, EntityId candidate, uint8_t tier) {
+    if (tier == TARGET_TIER_ANY) return true;
+    if (tier == TARGET_TIER_MINION) return minion_pool_has(&world->minions, candidate);
+    if (!hero_pool_has(&world->heroes, candidate)) return false;
+    if (tier == TARGET_TIER_HERO) return true;
+
+    HealthView health{};
+    uint8_t actor_team = SIM_TEAM_NONE;
+    if (!health_pool_get(&world->health, candidate, &health)) return false;
+    EntityId attacker = *health.last_damage_source;
+    if (attacker.h == HANDLE_NULL || !entity_manager_is_alive(&world->entities, attacker))
+        return false;
+    if (!hero_pool_has(&world->heroes, attacker)) return false;
+    uint8_t attacker_team = SIM_TEAM_NONE;
+    if (!team_pool_team(&world->teams, actor, &actor_team) ||
+        !team_pool_team(&world->teams, attacker, &attacker_team)) return false;
+    return actor_team != SIM_TEAM_NONE && actor_team == attacker_team;
+}
+
 // Nearest live enemy of `actor` within range_squared, tie-broken by ascending
 // EntityId so the choice is a total order over already-hashed state and never
-// depends on traversal luck. `filter` narrows the tier; nullptr accepts every enemy.
-typedef bool (*TargetFilter)(SimWorld* world, EntityId candidate);
-
+// depends on traversal luck. `tier` narrows the candidate set.
 static bool acquire_nearest_enemy(SimWorld* world, EntityId actor, int64_t range_squared,
-                                  TargetFilter filter, EntityId* out_target) {
+                                  uint8_t tier, EntityId* out_target) {
     ComponentPoolOrderedView ordered{};
     if (!component_pool_ordered_view(&world->teams.membership, &ordered)) return false;
     bool found = false;
@@ -166,7 +193,7 @@ static bool acquire_nearest_enemy(SimWorld* world, EntityId actor, int64_t range
         if (candidate.h == actor.h) continue;
         if (!team_is_enemy(&world->teams, actor, candidate)) continue;
         if (!target_is_live(world, candidate)) continue;
-        if (filter && !filter(world, candidate)) continue;
+        if (!tier_accepts(world, actor, candidate, tier)) continue;
         int64_t distance = 0;
         if (!sim_distance_squared(world, actor, candidate, &distance)) continue;
         if (distance > range_squared) continue;
@@ -359,7 +386,8 @@ bool sys_minion_ai(SimWorld* world) {
         }
 
         EntityId acquired{HANDLE_NULL};
-        if (acquire_nearest_enemy(world, entity, attack_range_squared, nullptr, &acquired)) {
+        if (acquire_nearest_enemy(world, entity, attack_range_squared, TARGET_TIER_ANY,
+                                  &acquired)) {
             // Acquisition and the first shot are one step: a creep that has just
             // reached its enemy does not stand idle for a tick before swinging.
             *minion.state = SIM_MINION_ATTACK;
@@ -373,4 +401,244 @@ bool sys_minion_ai(SimWorld* world) {
                          world->match.teams[team].waypoint_reverse)) return false;
     }
     return true;
+}
+
+// ---------------------------------------------------------------- sys_tower_ai
+
+bool sys_tower_ai(SimWorld* world) {
+    if (!world) return false;
+    if (world->match.team_count == 0u || world->config.objective_capacity == 0u) return true;
+    ComponentPoolOrderedView ordered{};
+    if (!component_pool_ordered_view(&world->objectives.membership, &ordered)) return false;
+
+    int64_t range_squared = sim_range_squared(SIM_TOWER_ATTACK_RANGE);
+    for (uint32_t i = 0u; i < ordered.count; ++i) {
+        EntityId tower = ordered.entities[i];
+        ObjectiveView objective{};
+        if (!objective_pool_get(&world->objectives, tower, &objective)) return false;
+        if (*objective.state != SIM_OBJECTIVE_ALIVE) continue;
+        if (*objective.def_index >= world->match.objective_count) return false;
+        if (world->match.objectives[*objective.def_index].target_policy !=
+            SIM_TARGET_POLICY_TOWER) continue;
+        if (*objective.attack_cooldown != 0u) continue;
+        if (!target_is_live(world, tower)) continue;
+
+        // ROADMAP M5.5 priority. Each tier is restricted to entities in range and
+        // ordered nearest-first with ascending EntityId as the tie-break; an empty
+        // tier falls through to the next.
+        EntityId target{HANDLE_NULL};
+        if (!acquire_nearest_enemy(world, tower, range_squared, TARGET_TIER_HERO_ATTACKER,
+                                   &target) &&
+            !acquire_nearest_enemy(world, tower, range_squared, TARGET_TIER_MINION, &target) &&
+            !acquire_nearest_enemy(world, tower, range_squared, TARGET_TIER_HERO, &target))
+            continue;
+
+        SimEffectDef effect{};
+        effect.effect_type = SIM_EFFECT_PROJECTILE_DAMAGE;
+        effect.magnitude = SIM_TOWER_ATTACK_MAGNITUDE;
+        if (!resolve_effect(world, tower, target, &effect, 0, 0)) return false;
+        *objective.attack_cooldown = SIM_TOWER_ATTACK_COOLDOWN_TICKS;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------- sys_death
+
+static bool is_pending_destroy(const SimWorld* world, EntityId entity) {
+    for (uint32_t ordinal = 0u; ordinal < world->pending_destroy_count; ++ordinal) {
+        if (world->pending_destroy[ordinal].h == entity.h) return true;
+    }
+    return false;
+}
+
+static bool health_is_zero(SimWorld* world, EntityId entity, EntityId* out_killer) {
+    HealthView health{};
+    if (!health_pool_get(&world->health, entity, &health)) return false;
+    if (*health.current > 0) return false;
+    if (out_killer) *out_killer = *health.last_damage_source;
+    return true;
+}
+
+// The one death walk, run twice: commit == false counts the events the verdict needs
+// so an envelope overflow fails the source operation before anything moves, and
+// commit == true is the identical traversal that appends and defers destruction.
+static bool death_walk(SimWorld* world, bool commit, uint32_t* out_events) {
+    bool over = world->match_state.over != 0u;
+    ComponentPoolOrderedView ordered{};
+
+    if (world->config.hero_capacity > 0u) {
+        if (!component_pool_ordered_view(&world->heroes.membership, &ordered)) return false;
+        for (uint32_t i = 0u; i < ordered.count; ++i) {
+            EntityId entity = ordered.entities[i];
+            EntityId killer{HANDLE_NULL};
+            if (!health_is_zero(world, entity, &killer)) continue;
+            if (is_pending_destroy(world, entity)) continue;
+            if (!commit) {
+                ++*out_events;
+                continue;
+            }
+            SimEvent death = sim_event_make_death(world->tick, entity, killer);
+            if (!sim_event_queue_append(&world->sim_events, &death)) return false;
+            if (!sim_destroy_deferred(world, entity)) return false;
+        }
+    }
+
+    if (world->config.minion_capacity > 0u) {
+        if (!component_pool_ordered_view(&world->minions.membership, &ordered)) return false;
+        for (uint32_t i = 0u; i < ordered.count; ++i) {
+            EntityId entity = ordered.entities[i];
+            EntityId killer{HANDLE_NULL};
+            if (!health_is_zero(world, entity, &killer)) continue;
+            if (is_pending_destroy(world, entity)) continue;
+            if (!commit) {
+                ++*out_events;
+                continue;
+            }
+            SimEvent death = sim_event_make_death(world->tick, entity, killer);
+            if (!sim_event_queue_append(&world->sim_events, &death)) return false;
+            if (!sim_destroy_deferred(world, entity)) return false;
+        }
+    }
+
+    if (world->config.objective_capacity == 0u) return true;
+    if (!component_pool_ordered_view(&world->objectives.membership, &ordered)) return false;
+    for (uint32_t i = 0u; i < ordered.count; ++i) {
+        EntityId entity = ordered.entities[i];
+        ObjectiveView objective{};
+        EntityId killer{HANDLE_NULL};
+        if (!objective_pool_get(&world->objectives, entity, &objective)) return false;
+        if (*objective.state != SIM_OBJECTIVE_ALIVE) continue;
+        if (!health_is_zero(world, entity, &killer)) continue;
+
+        bool ends_match = *objective.kind == SIM_OBJECTIVE_CORE && !over;
+        if (!commit) {
+            *out_events += 2u;                       // DEATH plus OBJECTIVE_DESTROYED
+            if (ends_match) {
+                ++*out_events;
+                over = true;
+            }
+            continue;
+        }
+        // A destroyed objective is NOT routed through sim_destroy_deferred: it stays
+        // a hashed DESTROYED row so its cell and ownership remain queryable and its
+        // identity is stable for the rest of the match.
+        *objective.state = SIM_OBJECTIVE_DESTROYED;
+        SimEvent death = sim_event_make_death(world->tick, entity, killer);
+        if (!sim_event_queue_append(&world->sim_events, &death)) return false;
+        SimEvent destroyed = sim_event_make_objective_destroyed(
+            world->tick, entity, killer, *objective.owner_team, *objective.kind);
+        if (!sim_event_queue_append(&world->sim_events, &destroyed)) return false;
+        if (!ends_match) continue;
+
+        // The over flag is checked and set inside this same walk, so a second core
+        // falling on the same tick emits nothing further.
+        uint8_t winner = static_cast<uint8_t>(*objective.owner_team == 0u ? 1u : 0u);
+        world->match_state.over = 1u;
+        world->match_state.winner = winner;
+        world->match_state.end_tick = static_cast<uint32_t>(world->tick);
+        over = true;
+        SimEvent match_over = sim_event_make_match_over(
+            world->tick, winner, SIM_MATCH_OVER_CORE_DESTROYED,
+            world->match_state.end_tick);
+        if (!sim_event_queue_append(&world->sim_events, &match_over)) return false;
+    }
+    return true;
+}
+
+bool sys_death(SimWorld* world) {
+    if (!world) return false;
+    if (world->config.sim_event_capacity == 0u) return true;
+    uint32_t needed = 0u;
+    if (!death_walk(world, false, &needed)) return false;
+    if (needed == 0u) return true;
+    if (sim_event_queue_write_room(&world->sim_events) < needed) return false;
+    return death_walk(world, true, nullptr);
+}
+
+// ---------------------------------------------------------------- sys_economy
+
+// The killer's team, or absent when the death is unattributed. A handle that is not
+// alive at the exact generation, or that carries no Team row, awards nothing - an
+// unattributed death is legal, not an error.
+static bool credited_team(SimWorld* world, EntityId subject, uint8_t* out_team) {
+    HealthView health{};
+    if (!health_pool_get(&world->health, subject, &health)) return false;
+    EntityId killer = *health.last_damage_source;
+    if (killer.h == HANDLE_NULL || !entity_manager_is_alive(&world->entities, killer)) return false;
+    uint8_t team = SIM_TEAM_NONE;
+    if (!team_pool_team(&world->teams, killer, &team)) return false;
+    if (team >= world->match.team_count) return false;
+    *out_team = team;
+    return true;
+}
+
+static bool award_for(SimWorld* world, EntityId subject, uint8_t source_kind, bool commit,
+                      uint32_t* out_events) {
+    uint8_t team = SIM_TEAM_NONE;
+    if (!credited_team(world, subject, &team)) return true;
+    for (uint16_t i = 0u; i < world->match.economy_count; ++i) {
+        const SimEconomyRule& rule = world->match.economy[i];
+        if (rule.source_kind != source_kind) continue;
+        if (!commit) {
+            ++*out_events;
+            continue;
+        }
+        int32_t total = 0;
+        if (rule.award_kind == SIM_AWARD_GOLD) {
+            world->ledger.gold[team] =
+                sim_ledger_add_saturating(world->ledger.gold[team], rule.award_amount);
+            total = world->ledger.gold[team];
+        } else {
+            world->ledger.xp[team] =
+                sim_ledger_add_saturating(world->ledger.xp[team], rule.award_amount);
+            total = world->ledger.xp[team];
+        }
+        SimEvent event = sim_event_make_economy(world->tick, subject, team, rule.award_kind,
+                                                rule.source_kind, rule.award_amount, total);
+        if (!sim_event_queue_append(&world->sim_events, &event)) return false;
+    }
+    return true;
+}
+
+// sys_economy runs after consume, so it cannot read this tick's DEATH events through
+// sim_event_queue_read. It reads pending_destroy (ascending ordinal) and the
+// OBJECTIVE_DESTROYED rows sys_death just appended to the write phase - both are
+// already-hashed authoritative state.
+static bool economy_walk(SimWorld* world, bool commit, uint32_t* out_events) {
+    for (uint32_t ordinal = 0u; ordinal < world->pending_destroy_count; ++ordinal) {
+        EntityId entity = world->pending_destroy[ordinal];
+        if (!health_is_zero(world, entity, nullptr)) continue;
+        uint8_t source_kind = SIM_AWARD_SOURCE_NONE;
+        if (world->config.hero_capacity > 0u && hero_pool_has(&world->heroes, entity))
+            source_kind = SIM_AWARD_SOURCE_HERO_KILL;
+        else if (world->config.minion_capacity > 0u && minion_pool_has(&world->minions, entity))
+            source_kind = SIM_AWARD_SOURCE_MINION_KILL;
+        if (source_kind == SIM_AWARD_SOURCE_NONE) continue;
+        if (!award_for(world, entity, source_kind, commit, out_events)) return false;
+    }
+
+    // The bound is snapshotted: a commit pass appends ECONOMY rows to this very
+    // phase, and those must never re-enter the walk.
+    uint32_t write = world->sim_events.write_index;
+    uint32_t written = world->sim_events.counts[write];
+    for (uint32_t ordinal = 0u; ordinal < written; ++ordinal) {
+        const SimEvent& event = world->sim_events.buffers[write][ordinal];
+        if (event.event_kind != SIM_EVENT_OBJECTIVE_DESTROYED) continue;
+        if (event.tick != world->tick) continue;
+        EntityId subject{sim_event_payload_u32(&event, 0u)};
+        if (!award_for(world, subject, SIM_AWARD_SOURCE_OBJECTIVE_DESTROYED, commit,
+                       out_events)) return false;
+    }
+    return true;
+}
+
+bool sys_economy(SimWorld* world) {
+    if (!world) return false;
+    if (world->match.team_count == 0u || world->config.sim_event_capacity == 0u ||
+        world->match.economy_count == 0u) return true;
+    uint32_t needed = 0u;
+    if (!economy_walk(world, false, &needed)) return false;
+    if (needed == 0u) return true;
+    if (sim_event_queue_write_room(&world->sim_events) < needed) return false;
+    return economy_walk(world, true, nullptr);
 }

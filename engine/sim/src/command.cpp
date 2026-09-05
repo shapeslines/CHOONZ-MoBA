@@ -27,6 +27,18 @@ bool command_player_owns_unit(uint32_t player_id, uint32_t player_count, uint32_
     return unit_index >= first && unit_index < last;
 }
 
+bool command_world_owns_unit(const SimWorld* world, uint32_t player_id, uint32_t player_count,
+                             uint32_t unit_index) {
+    if (!world) return false;
+    if (world->config.team_capacity == 0u)
+        return command_player_owns_unit(player_id, player_count, unit_index);
+    if (player_count == 0u || player_count > SIM_MAX_PLAYERS || player_id >= player_count ||
+        unit_index >= SIM_MAX_UNITS) return false;
+    uint8_t team = SIM_TEAM_NONE;
+    if (!team_pool_team(&world->teams, world->unit_entities[unit_index], &team)) return false;
+    return team != SIM_TEAM_NONE && team == player_id;
+}
+
 bool command_actor_slot(const SimWorld* world, EntityId actor, uint32_t* out_slot) {
     if (!world || !out_slot || actor.h == HANDLE_NULL) return false;
     if (!entity_manager_is_alive(&world->entities, actor)) return false;
@@ -65,12 +77,15 @@ static bool command_shape_ok(const Command* c, uint32_t player_count) {
 
 static CommandRejectReason validate_one(const SimWorld* world, CommandIntakeConfig config,
                                         const Command* c) {
-    if (config.match_over) return COMMAND_REJECT_MATCH_OVER;
+    // The driver wires config.match_over from world->match_state.over; the world's
+    // own verdict is honoured too, so a decided match cannot accept intent even when
+    // a caller forgets to wire it.
+    if (config.match_over || world->match_state.over) return COMMAND_REJECT_MATCH_OVER;
     if (!command_shape_ok(c, config.player_count)) return COMMAND_REJECT_MALFORMED;
     if (c->tick != config.tick) return COMMAND_REJECT_WRONG_TICK;
     uint32_t slot = 0u;
     if (!command_actor_slot(world, c->actor, &slot)) return COMMAND_REJECT_STALE_ENTITY;
-    if (!command_player_owns_unit(c->player_id, config.player_count, slot))
+    if (!command_world_owns_unit(world, c->player_id, config.player_count, slot))
         return COMMAND_REJECT_UNAUTHORIZED_ACTOR;
     if (c->command_kind == COMMAND_KIND_BASIC_ATTACK) {
         if (c->target.h == HANDLE_NULL || !entity_manager_is_alive(&world->entities, c->target))

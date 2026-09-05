@@ -676,11 +676,19 @@ TEST(sim_lane_objectives, waves_spawn_on_the_lane_clock_in_ascending_team_then_o
         CHECK(u32(*minion.waypoint_index) == u32(expected_waypoint[i]));
     }
 
-    // No second wave until the authored interval elapses.
-    for (uint32_t i = 1u; i < LANE_SLICE_WAVE_INTERVAL; ++i) CHECK(sim_tick(&world, nullptr));
-    CHECK(u32(world.minions.membership.count) == 4u);
-    CHECK(sim_tick(&world, nullptr));
-    CHECK(u32(world.minions.membership.count) == 8u);
+    // The clock in isolation: no towers, no combat, only sys_waves, so the live count
+    // is exactly four per wave that has fired. Over ticks 0..40 that is the waves at
+    // tick 5 and tick 25 and nothing else.
+    LaneFixture clock{};
+    SimWorldConfig clock_config = lane_config();
+    clock_config.objective_capacity = 0u;
+    CHECK(build_installed_world(&clock, g_lane_storage_b, sizeof(g_lane_storage_b),
+                                clock_config));
+    for (uint64_t tick = 0u; tick <= 2u * LANE_SLICE_WAVE_INTERVAL; ++tick) {
+        clock.world.tick = tick;
+        CHECK(sys_waves(&clock.world));
+    }
+    CHECK(u32(clock.world.minions.membership.count) == 8u);
 }
 
 TEST(sim_lane_objectives, a_minion_walks_the_reversed_waypoint_chain_to_the_far_spawn) {
@@ -776,4 +784,289 @@ TEST(sim_lane_objectives, the_minion_state_machine_pushes_attacks_and_returns) {
     CHECK(sys_minion_ai(&world));
     CHECK(minion_pool_get(&world.minions, west, &w));
     CHECK(u32(*w.state) == SIM_MINION_PUSH);
+}
+
+// ------------------------------------------------------------------ S3 towers, death, economy
+
+static SimWorldConfig hero_lane_config(void) {
+    SimWorldConfig config = lane_config();
+    config.hero_def_capacity = 1u;
+    config.hero_capacity = 4u;
+    config.projectile_capacity = 4u;
+    config.status_capacity = 4u;
+    return config;
+}
+
+static SimHeroDef idle_hero_def(void) {
+    SimHeroDef def{};
+    def.hero_def_id = 0x00C0FFEEULL;
+    def.max_health = 40;
+    return def;                                   // no actions: these heroes never act
+}
+
+static bool spawn_test_hero(SimWorld* world, uint8_t team, uint16_t def_index, mm::fix x,
+                            mm::fix y, EntityId* out) {
+    EntityId entity = entity_manager_create(&world->entities);
+    if (entity.h == HANDLE_NULL) return false;
+    *out = entity;
+    return transform_pool_add(&world->transforms, entity, x, y, 0) &&
+           velocity_pool_add(&world->velocities, entity, 0, 0) &&
+           health_pool_add(&world->health, entity, 40, 40, 0u) &&
+           team_pool_add(&world->teams, entity, team) &&
+           hero_pool_add(&world->heroes, entity, def_index, 0);
+}
+
+static bool last_damage(SimWorld* world, EntityId* out_source, EntityId* out_target,
+                        int32_t* out_amount) {
+    uint32_t phase = world->damage_events.write_index;
+    uint32_t count = world->damage_events.counts[phase];
+    if (count == 0u) return false;
+    const DamageEvent& event = world->damage_events.buffers[phase][count - 1u];
+    *out_source = event.source;
+    *out_target = event.target;
+    *out_amount = event.amount;
+    return true;
+}
+
+static bool commit_damage(SimWorld* world) {
+    return damage_event_queue_publish(&world->damage_events) && sys_combat_resolve(world) &&
+           damage_event_queue_consume(&world->damage_events);
+}
+
+static bool clear_tower_cooldown(SimWorld* world, EntityId tower) {
+    ObjectiveView view{};
+    if (!objective_pool_get(&world->objectives, tower, &view)) return false;
+    *view.attack_cooldown = 0u;
+    return true;
+}
+
+static uint32_t count_write_events(const SimWorld* world, uint16_t kind) {
+    uint32_t phase = world->sim_events.write_index;
+    uint32_t found = 0u;
+    for (uint32_t i = 0u; i < world->sim_events.counts[phase]; ++i) {
+        if (world->sim_events.buffers[phase][i].event_kind == kind) ++found;
+    }
+    return found;
+}
+
+TEST(sim_lane_objectives, tower_priority_is_hero_attacker_then_nearest_minion_then_hero) {
+    LaneFixture fixture{};
+    CHECK(build_installed_world(&fixture, g_lane_storage, sizeof(g_lane_storage),
+                                hero_lane_config()));
+    SimWorld& world = fixture.world;
+    SimHeroDef hero_def = idle_hero_def();
+    uint16_t def_index = 0u;
+    CHECK(sim_install_hero_def(&world, &hero_def, &def_index));
+
+    // Only team 0's tower, at cell 18 -> (2.5, 2.5).
+    EntityId tower{HANDLE_NULL};
+    CHECK(sim_spawn_objective(&world, 0u, LANE_SLICE_TOWER_CELL[0], &tower));
+    EntityId ally{HANDLE_NULL};
+    EntityId enemy_hero{HANDLE_NULL};
+    EntityId enemy_minion{HANDLE_NULL};
+    CHECK(spawn_test_hero(&world, 0u, def_index, FIX_HALF, FIX_HALF, &ally));
+    // The enemy hero is NEARER than the minion, so tier order is what decides.
+    CHECK(spawn_test_hero(&world, 1u, def_index, mm::fix_from_int(3),
+                          mm::fix_from_int(2) + FIX_HALF, &enemy_hero));
+    CHECK(sim_spawn_minion(&world, 1u, LANE_SLICE_LANE_ID, 2u, 26u, &enemy_minion));
+
+    EntityId source{HANDLE_NULL};
+    EntityId target{HANDLE_NULL};
+    int32_t amount = 0;
+
+    // Tier 1 is empty, so tier 2 takes the minion even though the hero is closer.
+    CHECK(sys_tower_ai(&world));
+    CHECK(last_damage(&world, &source, &target, &amount));
+    CHECK(source.h == tower.h);
+    CHECK(target.h == enemy_minion.h);
+    CHECK(amount == SIM_TOWER_ATTACK_MAGNITUDE);
+    CHECK(commit_damage(&world));
+
+    // A tower fires only on cooldown expiry.
+    CHECK(sys_tower_ai(&world));
+    CHECK(!last_damage(&world, &source, &target, &amount));
+
+    // Tier 1: an enemy hero whose last_damage_source names a hero on our own team.
+    HealthView enemy_health{};
+    CHECK(health_pool_get(&world.health, enemy_hero, &enemy_health));
+    *enemy_health.last_damage_source = ally;
+    CHECK(clear_tower_cooldown(&world, tower));
+    CHECK(sys_tower_ai(&world));
+    CHECK(last_damage(&world, &source, &target, &amount));
+    CHECK(target.h == enemy_hero.h);
+    CHECK(commit_damage(&world));
+
+    // With tier 1 empty again and no live minion left, tier 3 takes the hero.
+    *enemy_health.last_damage_source = EntityId{HANDLE_NULL};
+    HealthView minion_health{};
+    CHECK(health_pool_get(&world.health, enemy_minion, &minion_health));
+    *minion_health.current = 0;
+    CHECK(clear_tower_cooldown(&world, tower));
+    CHECK(sys_tower_ai(&world));
+    CHECK(last_damage(&world, &source, &target, &amount));
+    CHECK(target.h == enemy_hero.h);
+
+    // A destroyed tower stops firing entirely.
+    ObjectiveView objective{};
+    CHECK(objective_pool_get(&world.objectives, tower, &objective));
+    *objective.state = SIM_OBJECTIVE_DESTROYED;
+    CHECK(commit_damage(&world));
+    CHECK(clear_tower_cooldown(&world, tower));
+    CHECK(sys_tower_ai(&world));
+    CHECK(!last_damage(&world, &source, &target, &amount));
+}
+
+TEST(sim_lane_objectives, a_kill_credits_the_killers_team_and_pays_every_matching_rule) {
+    LaneFixture fixture{};
+    CHECK(build_installed_world(&fixture, g_lane_storage, sizeof(g_lane_storage), lane_config()));
+    SimWorld& world = fixture.world;
+
+    EntityId west{HANDLE_NULL};
+    EntityId east{HANDLE_NULL};
+    CHECK(sim_spawn_minion(&world, 0u, LANE_SLICE_LANE_ID, 3u, 27u, &west));
+    CHECK(sim_spawn_minion(&world, 1u, LANE_SLICE_LANE_ID, 4u, 28u, &east));
+
+    CHECK(sys_minion_ai(&world));
+    CHECK(commit_damage(&world));
+    HealthView east_health{};
+    CHECK(health_pool_get(&world.health, east, &east_health));
+    CHECK(east_health.last_damage_source->h == west.h);   // credit written on the commit
+
+    *east_health.current = 0;
+    CHECK(sys_death(&world));
+    CHECK(count_write_events(&world, SIM_EVENT_DEATH) == 1u);
+    uint32_t phase = world.sim_events.write_index;
+    const SimEvent& death = world.sim_events.buffers[phase][world.sim_events.counts[phase] - 1u];
+    CHECK(u32(sim_event_payload_u32(&death, 0u)) == east.h);
+    CHECK(u32(sim_event_payload_u32(&death, 4u)) == west.h);   // DEATH now carries a killer
+
+    CHECK(sys_economy(&world));
+    CHECK(world.ledger.gold[0] == 20);                    // both MINION_KILL rules pay
+    CHECK(world.ledger.xp[0] == 15);
+    CHECK(world.ledger.gold[1] == 0);
+    CHECK(world.ledger.xp[1] == 0);
+    CHECK(count_write_events(&world, SIM_EVENT_ECONOMY) == 2u);
+    CHECK(sys_flush_destroy(&world));
+
+    // An unattributed death is legal and awards nothing.
+    HealthView west_health{};
+    CHECK(health_pool_get(&world.health, west, &west_health));
+    *west_health.current = 0;
+    *west_health.last_damage_source = EntityId{HANDLE_NULL};
+    CHECK(sys_death(&world));
+    CHECK(sys_economy(&world));
+    CHECK(world.ledger.gold[0] == 20);
+    CHECK(world.ledger.xp[0] == 15);
+    CHECK(world.ledger.gold[1] == 0);
+}
+
+TEST(sim_lane_objectives, destroying_a_core_ends_the_match_exactly_once) {
+    LaneFixture fixture{};
+    CHECK(build_match_world(&fixture, g_lane_storage, sizeof(g_lane_storage)));
+    SimWorld& world = fixture.world;
+    world.tick = 41u;
+
+    ComponentPoolOrderedView ordered{};
+    CHECK(component_pool_ordered_view(&world.objectives.membership, &ordered));
+    CHECK(u32(ordered.count) == 4u);
+    EntityId team0_core = ordered.entities[1];
+    EntityId team1_core = ordered.entities[3];
+
+    EntityId attacker{HANDLE_NULL};
+    CHECK(sim_spawn_minion(&world, 0u, LANE_SLICE_LANE_ID, 7u, 31u, &attacker));
+    HealthView core_health{};
+    CHECK(health_pool_get(&world.health, team1_core, &core_health));
+    *core_health.current = 0;
+    *core_health.last_damage_source = attacker;
+
+    CHECK(sys_death(&world));
+    CHECK(u32(world.match_state.over) == 1u);
+    CHECK(u32(world.match_state.winner) == 0u);
+    CHECK(u32(world.match_state.end_tick) == 41u);
+    CHECK(count_write_events(&world, SIM_EVENT_DEATH) == 1u);
+    CHECK(count_write_events(&world, SIM_EVENT_OBJECTIVE_DESTROYED) == 1u);
+    CHECK(count_write_events(&world, SIM_EVENT_MATCH_OVER) == 1u);
+
+    // The row survives as hashed DESTROYED state; it is never destroy-deferred.
+    ObjectiveView objective{};
+    CHECK(objective_pool_has(&world.objectives, team1_core));
+    CHECK(objective_pool_get(&world.objectives, team1_core, &objective));
+    CHECK(u32(*objective.state) == SIM_OBJECTIVE_DESTROYED);
+    CHECK(u32(world.pending_destroy_count) == 0u);
+
+    CHECK(sys_economy(&world));
+    CHECK(world.ledger.gold[0] == 100);                   // the OBJECTIVE_DESTROYED rule
+    CHECK(world.ledger.xp[0] == 0);                       // no XP rule for that source
+    CHECK(count_write_events(&world, SIM_EVENT_ECONOMY) == 1u);
+
+    // A second core falling later emits no second MATCH_OVER and does not change the
+    // winner: the over flag is the guard.
+    EntityId counter{HANDLE_NULL};
+    CHECK(sim_spawn_minion(&world, 1u, LANE_SLICE_LANE_ID, 0u, 24u, &counter));
+    HealthView other{};
+    CHECK(health_pool_get(&world.health, team0_core, &other));
+    *other.current = 0;
+    *other.last_damage_source = counter;
+    CHECK(sys_death(&world));
+    CHECK(count_write_events(&world, SIM_EVENT_MATCH_OVER) == 1u);
+    CHECK(count_write_events(&world, SIM_EVENT_OBJECTIVE_DESTROYED) == 2u);
+    CHECK(u32(world.match_state.winner) == 0u);
+    CHECK(u32(world.match_state.end_tick) == 41u);
+
+    // And the walk is idempotent: an already DESTROYED row reports nothing further.
+    uint32_t phase = world.sim_events.write_index;
+    uint32_t before = world.sim_events.counts[phase];
+    CHECK(sys_death(&world));
+    CHECK(u32(world.sim_events.counts[phase]) == before);
+}
+
+TEST(sim_lane_objectives, ownership_is_by_team_and_a_decided_match_rejects_every_command) {
+    LaneFixture fixture{};
+    SimWorldConfig config = lane_config();
+    config.initial_unit_count = 2u;
+    CHECK(build_installed_world(&fixture, g_lane_storage, sizeof(g_lane_storage), config));
+    SimWorld& world = fixture.world;
+    CHECK(team_pool_add(&world.teams, world.unit_entities[0], 0u));
+    CHECK(team_pool_add(&world.teams, world.unit_entities[1], 1u));
+
+    CommandIntakeConfig intake{};
+    intake.tick = 0u;
+    intake.player_count = 2u;
+    intake.damage_capacity_remaining = 8u;
+
+    Command move{};
+    move.tick = 0u;
+    move.player_id = 0u;
+    move.command_kind = COMMAND_KIND_MOVE;
+    move.sequence = 1u;
+    move.actor = world.unit_entities[0];
+
+    Command accepted[4]{};
+    CommandReject rejects[4]{};
+    uint32_t accepted_count = 0u;
+    uint32_t reject_count = 0u;
+    CHECK(command_intake_run(&world, intake, &move, 1u, 4u, accepted, &accepted_count,
+                             rejects, &reject_count));
+    CHECK(u32(accepted_count) == 1u);                     // player 0 owns team 0
+
+    move.player_id = 1u;                                  // team 1 does not own team 0's unit
+    CHECK(command_intake_run(&world, intake, &move, 1u, 4u, accepted, &accepted_count,
+                             rejects, &reject_count));
+    CHECK(u32(accepted_count) == 0u);
+    CHECK(u32(reject_count) == 1u);
+    CHECK(rejects[0].reason == COMMAND_REJECT_UNAUTHORIZED_ACTOR);
+
+    move.actor = world.unit_entities[1];
+    CHECK(command_intake_run(&world, intake, &move, 1u, 4u, accepted, &accepted_count,
+                             rejects, &reject_count));
+    CHECK(u32(accepted_count) == 1u);
+
+    // A decided match accepts no intent at all, whichever side sends it.
+    world.match_state.over = 1u;
+    world.match_state.winner = 0u;
+    CHECK(command_intake_run(&world, intake, &move, 1u, 4u, accepted, &accepted_count,
+                             rejects, &reject_count));
+    CHECK(u32(accepted_count) == 0u);
+    CHECK(u32(reject_count) == 1u);
+    CHECK(rejects[0].reason == COMMAND_REJECT_MATCH_OVER);
 }
