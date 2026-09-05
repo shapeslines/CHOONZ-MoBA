@@ -11,6 +11,12 @@ bool sys_movement(SimWorld* world);
 bool sys_hero_actions(SimWorld* world);
 bool sys_projectiles(SimWorld* world);
 bool sys_status(SimWorld* world);
+// M5.3: proto-design section 4 steps 1, 4, and 7, implemented in objectives.cpp.
+// Each returns true immediately when its feature is absent (match.team_count == 0 or
+// the relevant capacity is 0), so a world without a match ticks exactly as it did
+// before M5.3. None of them draws RNG.
+bool sys_waves(SimWorld* world);
+bool sys_minion_ai(SimWorld* world);
 bool sys_combat_resolve(SimWorld* world);
 bool sys_effects_resolve(SimWorld* world);
 bool sys_cooldown_tick(SimWorld* world);

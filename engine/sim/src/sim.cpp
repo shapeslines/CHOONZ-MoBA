@@ -299,10 +299,18 @@ bool sim_tick(SimWorld* world, const SimCommandBuffer* commands) {
     // Literal M3.2 schedule. Damage is intentionally published and resolved in
     // the same tick; moving publish to the next tick boundary is the retained
     // next-tick experiment seam.
+    // M5.3 step 1: a wave is authored state, not player intent, so the lane clock
+    // runs before commands. A full pool fails the source operation and the tick.
+    bool waves = sys_waves(world);
+    if (!waves) return false;
     bool applied = sys_apply_commands(world, commands);
     ENSURE(applied);
     bool moved = sys_movement(world);
     ENSURE(moved);
+    // Step 4: the minion FSM sets velocity for the NEXT sys_movement and appends its
+    // attacks before publish, so they commit on this tick like sys_hero_actions.
+    bool minions = sys_minion_ai(world);
+    if (!minions) return false;
     bool acted = sys_hero_actions(world);
     if (!acted) return false;
     bool flew = sys_projectiles(world);

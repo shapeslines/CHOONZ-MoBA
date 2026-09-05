@@ -67,7 +67,18 @@ typedef enum SimEventKind : uint16_t {
     SIM_EVENT_STATUS_APPLIED = 2,
     SIM_EVENT_STATUS_EXPIRED = 3,
     SIM_EVENT_DEATH = 4,
+    // M5.3 lane objectives. No queue change: SIM_EVENT_PAYLOAD_MAX stays 16 and
+    // sizeof(SimEvent) stays 32, so the phases, the canonicality predicate, and the
+    // reject-at-source policy are untouched.
+    SIM_EVENT_OBJECTIVE_DAMAGED = 5,     // payload_size 16
+    SIM_EVENT_OBJECTIVE_DESTROYED = 6,   // payload_size 12
+    SIM_EVENT_ECONOMY = 7,               // payload_size 16
+    SIM_EVENT_MATCH_OVER = 8,            // payload_size 12
 } SimEventKind;
+
+// Reason codes for SIM_EVENT_MATCH_OVER. v1 produces only CORE_DESTROYED; the field
+// exists so a later timeout or surrender rule is a data change, not a payload change.
+static const uint8_t SIM_MATCH_OVER_CORE_DESTROYED = 1;
 
 typedef struct SimEvent {
     uint64_t tick;
@@ -99,9 +110,15 @@ size_t sim_event_queue_memory_required(uint32_t capacity);
 bool sim_event_queue_init(SimEventQueue* queue, Arena* arena, uint32_t capacity);
 bool sim_event_queue_is_valid(const SimEventQueue* queue);
 
-// Known kind, payload_size exactly the kind's fixed size, and every byte past
-// payload_size zero. append_ordinal is not checked here: the queue assigns it, and
-// queue validity proves it equals the position in the phase.
+// Known kind, payload_size exactly the kind's fixed size, at least the four bytes the
+// standing offset-0 rule reserves, and every byte past payload_size zero.
+// append_ordinal is not checked here: the queue assigns it, and queue validity proves
+// it equals the position in the phase.
+//
+// The standing rule, made explicit by M5.3: payload offset 0 is ALWAYS a u32 EntityId
+// slot, HANDLE_NULL when the kind names no entity. sys_effects_resolve already reads
+// sim_event_payload_u32(&event, 0u) for every kind before branching, so preserving it
+// is a correctness requirement rather than a style choice.
 bool sim_event_is_canonical(const SimEvent* event);
 
 // Appends in literal call order and stamps append_ordinal with the write position.
@@ -122,6 +139,23 @@ SimEvent sim_event_make_status_applied(uint64_t tick, EntityId target, uint8_t e
                                        mm::fix scalar);
 SimEvent sim_event_make_status_expired(uint64_t tick, EntityId target, uint8_t effect_type);
 SimEvent sim_event_make_death(uint64_t tick, EntityId target, EntityId source);
+
+// M5.3 payload layouts, explicit little-endian byte offsets:
+//   OBJECTIVE_DAMAGED   (16): target 0..3, source 4..7, amount 8..11, remaining 12..15
+//   OBJECTIVE_DESTROYED (12): target 0..3, killer 4..7, owner_team 8, kind 9, rsvd 10..11
+//   ECONOMY             (16): subject 0..3, team 4, award_kind 5, source_kind 6,
+//                             reserved 7, amount 8..11, ledger_total 12..15
+//   MATCH_OVER          (12): HANDLE_NULL 0..3, winner 4, reason 5, rsvd 6..7,
+//                             end_tick 8..11
+SimEvent sim_event_make_objective_damaged(uint64_t tick, EntityId target, EntityId source,
+                                          int32_t amount, int32_t remaining_health);
+SimEvent sim_event_make_objective_destroyed(uint64_t tick, EntityId target, EntityId killer,
+                                            uint8_t owner_team, uint8_t kind);
+SimEvent sim_event_make_economy(uint64_t tick, EntityId subject, uint8_t team,
+                                uint8_t award_kind, uint8_t source_kind,
+                                uint32_t amount, int32_t ledger_total);
+SimEvent sim_event_make_match_over(uint64_t tick, uint8_t winner, uint8_t reason,
+                                   uint32_t end_tick);
 
 uint32_t sim_event_payload_u32(const SimEvent* event, uint16_t offset);
 uint16_t sim_event_payload_u16(const SimEvent* event, uint16_t offset);

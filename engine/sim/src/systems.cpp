@@ -108,7 +108,29 @@ bool sys_cooldown_tick(SimWorld* world) {
         if (*health.damage_cooldown > 0u) --*health.damage_cooldown;
     }
 
-    // sys_cooldown_tick is the sole decrementer of every cooldown in the sim.
+    // M5.3 minion and tower cooldowns tick here for the same reason hero cooldowns
+    // do: sys_cooldown_tick is the sole decrementer of every cooldown in the sim.
+    if (world->config.minion_capacity > 0u) {
+        ComponentPoolOrderedView minions{};
+        if (!component_pool_ordered_view(&world->minions.membership, &minions)) return false;
+        for (uint32_t i = 0u; i < minions.count; ++i) {
+            MinionView minion{};
+            bool found = minion_pool_get(&world->minions, minions.entities[i], &minion);
+            ENSURE(found);
+            if (*minion.attack_cooldown > 0u) --*minion.attack_cooldown;
+        }
+    }
+    if (world->config.objective_capacity > 0u) {
+        ComponentPoolOrderedView objectives{};
+        if (!component_pool_ordered_view(&world->objectives.membership, &objectives)) return false;
+        for (uint32_t i = 0u; i < objectives.count; ++i) {
+            ObjectiveView objective{};
+            bool found = objective_pool_get(&world->objectives, objectives.entities[i], &objective);
+            ENSURE(found);
+            if (*objective.attack_cooldown > 0u) --*objective.attack_cooldown;
+        }
+    }
+
     if (world->config.hero_capacity == 0u) return true;
     ComponentPoolOrderedView heroes{};
     if (!component_pool_ordered_view(&world->heroes.membership, &heroes)) return false;

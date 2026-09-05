@@ -107,6 +107,10 @@ uint16_t sim_event_payload_size(uint16_t event_kind) {
         case SIM_EVENT_STATUS_APPLIED: return 16u;
         case SIM_EVENT_STATUS_EXPIRED: return 8u;
         case SIM_EVENT_DEATH: return 8u;
+        case SIM_EVENT_OBJECTIVE_DAMAGED: return 16u;
+        case SIM_EVENT_OBJECTIVE_DESTROYED: return 12u;
+        case SIM_EVENT_ECONOMY: return 16u;
+        case SIM_EVENT_MATCH_OVER: return 12u;
         default: return 0u;
     }
 }
@@ -142,7 +146,9 @@ bool sim_event_queue_init(SimEventQueue* queue, Arena* arena, uint32_t capacity)
 bool sim_event_is_canonical(const SimEvent* event) {
     if (!event) return false;
     uint16_t size = sim_event_payload_size(event->event_kind);
-    if (size == 0u || size > SIM_EVENT_PAYLOAD_MAX || event->payload_size != size) return false;
+    // Offset 0 is always a u32 EntityId slot, so no kind may carry fewer than four
+    // payload bytes: every consumer reads that slot before it branches on the kind.
+    if (size < 4u || size > SIM_EVENT_PAYLOAD_MAX || event->payload_size != size) return false;
     for (uint16_t i = size; i < SIM_EVENT_PAYLOAD_MAX; ++i) {
         if (event->payload[i] != 0u) return false;
     }
@@ -272,6 +278,64 @@ SimEvent sim_event_make_death(uint64_t tick, EntityId target, EntityId source) {
     event.payload_size = sim_event_payload_size(SIM_EVENT_DEATH);
     payload_put_u32(&event, 0u, target.h);
     payload_put_u32(&event, 4u, source.h);
+    return event;
+}
+
+SimEvent sim_event_make_objective_damaged(uint64_t tick, EntityId target, EntityId source,
+                                          int32_t amount, int32_t remaining_health) {
+    SimEvent event{};
+    event.tick = tick;
+    event.event_kind = SIM_EVENT_OBJECTIVE_DAMAGED;
+    event.payload_size = sim_event_payload_size(SIM_EVENT_OBJECTIVE_DAMAGED);
+    payload_put_u32(&event, 0u, target.h);
+    payload_put_u32(&event, 4u, source.h);
+    payload_put_u32(&event, 8u, u32_from_i32(amount));
+    payload_put_u32(&event, 12u, u32_from_i32(remaining_health));
+    return event;
+}
+
+SimEvent sim_event_make_objective_destroyed(uint64_t tick, EntityId target, EntityId killer,
+                                            uint8_t owner_team, uint8_t kind) {
+    SimEvent event{};
+    event.tick = tick;
+    event.event_kind = SIM_EVENT_OBJECTIVE_DESTROYED;
+    event.payload_size = sim_event_payload_size(SIM_EVENT_OBJECTIVE_DESTROYED);
+    payload_put_u32(&event, 0u, target.h);
+    payload_put_u32(&event, 4u, killer.h);
+    payload_put_u8(&event, 8u, owner_team);
+    payload_put_u8(&event, 9u, kind);
+    payload_put_u16(&event, 10u, 0u);
+    return event;
+}
+
+SimEvent sim_event_make_economy(uint64_t tick, EntityId subject, uint8_t team,
+                                uint8_t award_kind, uint8_t source_kind,
+                                uint32_t amount, int32_t ledger_total) {
+    SimEvent event{};
+    event.tick = tick;
+    event.event_kind = SIM_EVENT_ECONOMY;
+    event.payload_size = sim_event_payload_size(SIM_EVENT_ECONOMY);
+    payload_put_u32(&event, 0u, subject.h);
+    payload_put_u8(&event, 4u, team);
+    payload_put_u8(&event, 5u, award_kind);
+    payload_put_u8(&event, 6u, source_kind);
+    payload_put_u8(&event, 7u, 0u);
+    payload_put_u32(&event, 8u, amount);
+    payload_put_u32(&event, 12u, u32_from_i32(ledger_total));
+    return event;
+}
+
+SimEvent sim_event_make_match_over(uint64_t tick, uint8_t winner, uint8_t reason,
+                                   uint32_t end_tick) {
+    SimEvent event{};
+    event.tick = tick;
+    event.event_kind = SIM_EVENT_MATCH_OVER;
+    event.payload_size = sim_event_payload_size(SIM_EVENT_MATCH_OVER);
+    payload_put_u32(&event, 0u, HANDLE_NULL);
+    payload_put_u8(&event, 4u, winner);
+    payload_put_u8(&event, 5u, reason);
+    payload_put_u16(&event, 6u, 0u);
+    payload_put_u32(&event, 8u, end_tick);
     return event;
 }
 
