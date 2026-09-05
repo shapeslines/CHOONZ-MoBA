@@ -1,6 +1,7 @@
 #include "sim/sim.h"
 
 #include "core/assert.h"
+#include "sim/objectives.h"
 #include "sim/systems.h"
 
 static bool sim_config_valid(SimWorldConfig config) {
@@ -18,7 +19,16 @@ static bool sim_config_valid(SimWorldConfig config) {
            (config.hero_capacity == 0u || config.hero_def_capacity > 0u) &&
            (config.hero_capacity == 0u || config.sim_event_capacity > 0u) &&
            (config.projectile_capacity == 0u || config.hero_capacity > 0u) &&
-           (config.status_capacity == 0u || config.hero_capacity > 0u);
+           (config.status_capacity == 0u || config.hero_capacity > 0u) &&
+           config.team_capacity <= config.max_entities &&
+           config.minion_capacity <= config.max_entities &&
+           config.objective_capacity <= config.max_entities &&
+           // M5.3: a minion or an objective without a team row has no side, and
+           // neither can report a death without the event envelope.
+           (config.minion_capacity == 0u || config.team_capacity > 0u) &&
+           (config.objective_capacity == 0u || config.team_capacity > 0u) &&
+           (config.minion_capacity == 0u || config.sim_event_capacity > 0u) &&
+           (config.objective_capacity == 0u || config.sim_event_capacity > 0u);
 }
 
 static bool add_required(size_t* total, size_t required) {
@@ -28,12 +38,13 @@ static bool add_required(size_t* total, size_t required) {
 }
 
 SimWorldConfig sim_world_config_default(void) {
-    // Every M5.2 hero-combat capacity is zero here on purpose: the placeholder
-    // world, every existing fixture, and the recorded oracle keep their exact
-    // arena layout and canonical state until a caller opts in.
+    // Every M5.2 hero-combat and M5.3 lane-objective capacity is zero here on
+    // purpose: the placeholder world, every existing fixture, and the recorded
+    // oracle keep their exact arena layout and canonical state until a caller
+    // opts in.
     return SimWorldConfig{
         SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY,
-        MapConfig{}, 0u, 0u, 0u, 0u, 0u};
+        MapConfig{}, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
 }
 
 size_t sim_world_memory_required(SimWorldConfig config) {
@@ -68,6 +79,15 @@ size_t sim_world_memory_required(SimWorldConfig config) {
     if (config.sim_event_capacity > 0u &&
         !add_required(&total, sim_event_queue_memory_required(config.sim_event_capacity)))
         return 0u;
+    if (config.team_capacity > 0u &&
+        !add_required(&total, team_pool_memory_required(config.max_entities,
+                                                        config.team_capacity))) return 0u;
+    if (config.minion_capacity > 0u &&
+        !add_required(&total, minion_pool_memory_required(config.max_entities,
+                                                          config.minion_capacity))) return 0u;
+    if (config.objective_capacity > 0u &&
+        !add_required(&total, objective_pool_memory_required(
+                                  config.max_entities, config.objective_capacity))) return 0u;
 
     size_t destroy_bytes = sizeof(EntityId) * static_cast<size_t>(config.max_entities);
     if (destroy_bytes > SIZE_MAX - (alignof(EntityId) - 1u) ||
@@ -107,10 +127,21 @@ bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig confi
          !status_pool_init(&staged.statuses, arena, config.max_entities,
                            config.status_capacity)) ||
         (config.sim_event_capacity > 0u &&
-         !sim_event_queue_init(&staged.sim_events, arena, config.sim_event_capacity))) {
+         !sim_event_queue_init(&staged.sim_events, arena, config.sim_event_capacity)) ||
+        (config.team_capacity > 0u &&
+         !team_pool_init(&staged.teams, arena, config.max_entities, config.team_capacity)) ||
+        (config.minion_capacity > 0u &&
+         !minion_pool_init(&staged.minions, arena, config.max_entities,
+                           config.minion_capacity)) ||
+        (config.objective_capacity > 0u &&
+         !objective_pool_init(&staged.objectives, arena, config.max_entities,
+                              config.objective_capacity))) {
         temp_end(temp);
         return false;
     }
+    // winner is SIM_TEAM_NONE while the match is running; objectives.cpp owns the
+    // three match-state fields, so the initial value comes from there.
+    staged.match_state = sim_match_state_initial();
     staged.pending_destroy = static_cast<EntityId*>(arena_push_zero(
         arena, sizeof(EntityId) * static_cast<size_t>(config.max_entities), alignof(EntityId)));
     mm::pcg32_seed(&staged.rng, seed, 1u);
@@ -193,7 +224,10 @@ bool sim_validate_commands(const SimWorld* world, const SimCommandBuffer* comman
         world->hero_defs.capacity != world->config.hero_def_capacity ||
         world->heroes.membership.capacity != world->config.hero_capacity ||
         world->projectiles.membership.capacity != world->config.projectile_capacity ||
-        world->statuses.membership.capacity != world->config.status_capacity)
+        world->statuses.membership.capacity != world->config.status_capacity ||
+        world->teams.membership.capacity != world->config.team_capacity ||
+        world->minions.membership.capacity != world->config.minion_capacity ||
+        world->objectives.membership.capacity != world->config.objective_capacity)
         return false;
     // Only the read phase must be drained between ticks. sys_effects_resolve runs
     // after publish, so a death it reports rides the write phase into the next

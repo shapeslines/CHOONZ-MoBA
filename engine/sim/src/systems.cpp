@@ -156,6 +156,21 @@ bool sys_flush_destroy(SimWorld* world) {
             bool removed = hero_pool_remove(&world->heroes, entity);
             ENSURE(removed);
         }
+        // M5.3. A destroyed objective is never routed here (it stays a hashed
+        // DESTROYED row), but the removal is written for completeness so a future
+        // caller that does destroy one cannot leave a dangling row behind.
+        if (minion_pool_has(&world->minions, entity)) {
+            bool removed = minion_pool_remove(&world->minions, entity);
+            ENSURE(removed);
+        }
+        if (objective_pool_has(&world->objectives, entity)) {
+            bool removed = objective_pool_remove(&world->objectives, entity);
+            ENSURE(removed);
+        }
+        if (team_pool_has(&world->teams, entity)) {
+            bool removed = team_pool_remove(&world->teams, entity);
+            ENSURE(removed);
+        }
         if (health_pool_has(&world->health, entity)) {
             bool removed = health_pool_remove(&world->health, entity);
             ENSURE(removed);

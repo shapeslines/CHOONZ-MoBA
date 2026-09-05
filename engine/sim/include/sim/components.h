@@ -61,13 +61,20 @@ typedef struct HealthView {
     int32_t* current;
     int32_t* maximum;
     uint32_t* damage_cooldown;
+    EntityId* last_damage_source;
 } HealthView;
 
+// last_damage_source (M5.3) is the sole kill-credit input. It is written only in
+// combat.cpp, on the damage commit inside sys_combat_resolve; health_pool_add starts
+// it at HANDLE_NULL and health_pool_remove clears it, so a recycled entity index can
+// never inherit a stale killer. It is authoritative between the commit and the death
+// verdict, so it is hashed inside the Health block.
 typedef struct HealthPool {
     ComponentPool membership;
     int32_t* current;
     int32_t* maximum;
     uint32_t* damage_cooldown;
+    EntityId* last_damage_source;
 } HealthPool;
 
 size_t health_pool_memory_required(uint32_t entity_capacity, uint32_t capacity);
@@ -191,3 +198,72 @@ bool status_pool_add(StatusPool* pool, EntityId entity, uint8_t effect_type,
 bool status_pool_remove(StatusPool* pool, EntityId entity);
 bool status_pool_has(const StatusPool* pool, EntityId entity);
 bool status_pool_get(StatusPool* pool, EntityId entity, StatusView* view);
+
+// --------------------------------------------------------------- M5.3 lane objectives
+// Two more bounded SoA pools on the same ComponentPool core. Both are optional:
+// capacity zero leaves the whole struct zeroed, allocates no arena bytes, and reports
+// every entity absent, so a world with no match ticks exactly as it did before M5.3.
+
+typedef enum SimMinionState : uint8_t {
+    SIM_MINION_PUSH = 0,
+    SIM_MINION_ATTACK = 1,
+    SIM_MINION_RETURN = 2,
+} SimMinionState;
+
+typedef struct MinionView {
+    uint8_t* lane;
+    uint8_t* waypoint_index;
+    uint8_t* state;
+    EntityId* target;
+    uint32_t* attack_cooldown;
+} MinionView;
+
+typedef struct MinionPool {
+    ComponentPool membership;
+    uint8_t* lane;               // MapLane.lane_id this minion walks
+    uint8_t* waypoint_index;     // < that lane's waypoint_count
+    uint8_t* state;              // SimMinionState
+    EntityId* target;            // HANDLE_NULL unless state == ATTACK
+    uint32_t* attack_cooldown;   // ticks remaining; sys_cooldown_tick is the sole decrementer
+} MinionPool;
+
+size_t minion_pool_memory_required(uint32_t entity_capacity, uint32_t capacity);
+bool minion_pool_init(MinionPool* pool, Arena* arena, uint32_t entity_capacity, uint32_t capacity);
+bool minion_pool_add(MinionPool* pool, EntityId entity, uint8_t lane, uint8_t waypoint_index);
+bool minion_pool_remove(MinionPool* pool, EntityId entity);
+bool minion_pool_has(const MinionPool* pool, EntityId entity);
+bool minion_pool_get(MinionPool* pool, EntityId entity, MinionView* view);
+
+typedef enum SimObjectiveState : uint8_t {
+    SIM_OBJECTIVE_ALIVE = 0,
+    SIM_OBJECTIVE_DESTROYED = 1,
+} SimObjectiveState;
+
+typedef struct ObjectiveView {
+    uint16_t* def_index;
+    uint8_t* owner_team;
+    uint8_t* kind;
+    uint32_t* attack_cooldown;
+    uint8_t* state;
+} ObjectiveView;
+
+// owner_team and kind are denormalized from the def so every AI walk is one array
+// read rather than a def-table indirection; canonical_world_valid enforces the
+// agreement, so the duplication can never drift.
+typedef struct ObjectivePool {
+    ComponentPool membership;
+    uint16_t* def_index;         // < match.objective_count
+    uint8_t* owner_team;
+    uint8_t* kind;
+    uint32_t* attack_cooldown;
+    uint8_t* state;              // SimObjectiveState
+} ObjectivePool;
+
+size_t objective_pool_memory_required(uint32_t entity_capacity, uint32_t capacity);
+bool objective_pool_init(ObjectivePool* pool, Arena* arena,
+                         uint32_t entity_capacity, uint32_t capacity);
+bool objective_pool_add(ObjectivePool* pool, EntityId entity, uint16_t def_index,
+                        uint8_t owner_team, uint8_t kind);
+bool objective_pool_remove(ObjectivePool* pool, EntityId entity);
+bool objective_pool_has(const ObjectivePool* pool, EntityId entity);
+bool objective_pool_get(ObjectivePool* pool, EntityId entity, ObjectiveView* view);

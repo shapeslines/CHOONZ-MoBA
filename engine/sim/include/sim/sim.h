@@ -10,7 +10,9 @@
 #include "sim/events.h"
 #include "sim/hero.h"
 #include "sim/map.h"
+#include "sim/match.h"
 #include "sim/sim_config.h"
+#include "sim/team.h"
 
 // SIM_MAX_UNITS is the replay command seam: commands address units by slot, and the
 // replay codec records them per tick (G23). 64 is a v1 cap sized for the placeholder
@@ -71,6 +73,13 @@ typedef struct SimWorldConfig {
     uint16_t projectile_capacity;
     uint16_t status_capacity;
     uint32_t sim_event_capacity;
+    // team_/minion_/objective_capacity: M5.3 lane-objective capacity, on the same
+    // zero-means-absent rule as the M5.2 pools above. All three are ZERO in
+    // sim_world_config_default(), so the placeholder world, every existing fixture,
+    // and the recorded oracle keep their exact arena layout and canonical state.
+    uint16_t team_capacity;
+    uint16_t minion_capacity;
+    uint16_t objective_capacity;
 } SimWorldConfig;
 
 typedef struct SimWorld {
@@ -91,6 +100,15 @@ typedef struct SimWorld {
     ProjectilePool projectiles;
     StatusPool statuses;
     SimEventQueue sim_events;
+    // M5.3. The match def is one bounded record, so it is a by-value member rather
+    // than an arena table; team_count == 0 means no match is configured and every
+    // wave, tower, credit, economy, and match-over path returns early.
+    SimMatchDef match;
+    TeamPool teams;
+    MinionPool minions;
+    ObjectivePool objectives;
+    SimLedger ledger;
+    SimMatchState match_state;
 } SimWorld;
 
 SimWorldConfig sim_world_config_default(void);

@@ -1,5 +1,7 @@
 #include "sim/components.h"
 
+#include "sim/match.h"
+
 static bool valid_pool_shape(uint32_t entity_capacity, uint32_t capacity) {
     return entity_capacity > 0u && entity_capacity <= HANDLE_INDEX_MASK + 1u &&
            capacity > 0u && capacity <= entity_capacity;
@@ -165,7 +167,8 @@ bool velocity_pool_get(VelocityPool* pool, EntityId entity, VelocityView* view) 
 }
 
 size_t health_pool_memory_required(uint32_t entity_capacity, uint32_t capacity) {
-    return typed_pool_memory_required(entity_capacity, capacity, 3u,
+    // current, maximum, damage_cooldown, last_damage_source: four 4-byte arrays.
+    return typed_pool_memory_required(entity_capacity, capacity, 4u,
                                       sizeof(uint32_t), alignof(uint32_t));
 }
 
@@ -186,6 +189,9 @@ bool health_pool_init(HealthPool* pool, Arena* arena,
     staged.maximum = static_cast<int32_t*>(arena_push_zero(arena, signed_bytes, alignof(int32_t)));
     staged.damage_cooldown = static_cast<uint32_t*>(
         arena_push_zero(arena, unsigned_bytes, alignof(uint32_t)));
+    staged.last_damage_source = static_cast<EntityId*>(
+        arena_push_zero(arena, sizeof(EntityId) * static_cast<size_t>(capacity),
+                        alignof(EntityId)));
     *pool = staged;
     return true;
 }
@@ -193,27 +199,32 @@ bool health_pool_init(HealthPool* pool, Arena* arena,
 bool health_pool_add(HealthPool* pool, EntityId entity,
                      int32_t current, int32_t maximum, uint32_t damage_cooldown) {
     if (!pool || !pool->current || !pool->maximum || !pool->damage_cooldown ||
-        current < 0 || maximum < 0 || current > maximum) return false;
+        !pool->last_damage_source || current < 0 || maximum < 0 || current > maximum) return false;
     uint32_t dense = 0u;
     if (!component_pool_add(&pool->membership, entity, &dense)) return false;
     pool->current[dense] = current;
     pool->maximum[dense] = maximum;
     pool->damage_cooldown[dense] = damage_cooldown;
+    pool->last_damage_source[dense] = EntityId{HANDLE_NULL};
     return true;
 }
 
 bool health_pool_remove(HealthPool* pool, EntityId entity) {
-    if (!pool || !pool->current || !pool->maximum || !pool->damage_cooldown) return false;
+    if (!pool || !pool->current || !pool->maximum || !pool->damage_cooldown ||
+        !pool->last_damage_source) return false;
     ComponentPoolRemoveResult result{};
     if (!component_pool_remove(&pool->membership, entity, &result)) return false;
     if (result.removed_dense != result.moved_from_dense) {
         pool->current[result.removed_dense] = pool->current[result.moved_from_dense];
         pool->maximum[result.removed_dense] = pool->maximum[result.moved_from_dense];
         pool->damage_cooldown[result.removed_dense] = pool->damage_cooldown[result.moved_from_dense];
+        pool->last_damage_source[result.removed_dense] =
+            pool->last_damage_source[result.moved_from_dense];
     }
     pool->current[result.moved_from_dense] = 0;
     pool->maximum[result.moved_from_dense] = 0;
     pool->damage_cooldown[result.moved_from_dense] = 0u;
+    pool->last_damage_source[result.moved_from_dense] = EntityId{HANDLE_NULL};
     return true;
 }
 
@@ -225,9 +236,9 @@ bool health_pool_get(HealthPool* pool, EntityId entity, HealthView* view) {
     if (!pool || !view) return false;
     uint32_t dense = component_pool_dense_index(&pool->membership, entity);
     if (dense == COMPONENT_POOL_INVALID_DENSE || !pool->current || !pool->maximum ||
-        !pool->damage_cooldown) return false;
+        !pool->damage_cooldown || !pool->last_damage_source) return false;
     HealthView staged{&pool->current[dense], &pool->maximum[dense],
-                      &pool->damage_cooldown[dense]};
+                      &pool->damage_cooldown[dense], &pool->last_damage_source[dense]};
     *view = staged;
     return true;
 }
@@ -614,6 +625,198 @@ bool status_pool_get(StatusPool* pool, EntityId entity, StatusView* view) {
     StatusView staged{&pool->effect_type[dense], &pool->stack_count[dense],
                       &pool->remaining_ticks[dense], &pool->magnitude[dense],
                       &pool->scalar[dense]};
+    *view = staged;
+    return true;
+}
+
+// --------------------------------------------------------------- M5.3 lane objectives
+
+size_t minion_pool_memory_required(uint32_t entity_capacity, uint32_t capacity) {
+    if (!valid_pool_shape(entity_capacity, capacity)) return 0u;
+    size_t total = component_pool_memory_required(entity_capacity, capacity);
+    if (total == 0u) return 0u;
+    size_t count = static_cast<size_t>(capacity);
+    if (!add_required(&total, sizeof(uint8_t) * count, alignof(uint8_t)) ||
+        !add_required(&total, sizeof(uint8_t) * count, alignof(uint8_t)) ||
+        !add_required(&total, sizeof(uint8_t) * count, alignof(uint8_t)) ||
+        !add_required(&total, sizeof(EntityId) * count, alignof(EntityId)) ||
+        !add_required(&total, sizeof(uint32_t) * count, alignof(uint32_t))) return 0u;
+    return total;
+}
+
+bool minion_pool_init(MinionPool* pool, Arena* arena, uint32_t entity_capacity, uint32_t capacity) {
+    size_t required = minion_pool_memory_required(entity_capacity, capacity);
+    if (!pool || required == 0u || !arena_has_budget(arena, required)) return false;
+
+    TempMemory temp = temp_begin(arena);
+    MinionPool staged{};
+    if (!component_pool_init(&staged.membership, arena, entity_capacity, capacity)) {
+        temp_end(temp);
+        return false;
+    }
+    size_t count = static_cast<size_t>(capacity);
+    staged.lane = static_cast<uint8_t*>(
+        arena_push_zero(arena, sizeof(uint8_t) * count, alignof(uint8_t)));
+    staged.waypoint_index = static_cast<uint8_t*>(
+        arena_push_zero(arena, sizeof(uint8_t) * count, alignof(uint8_t)));
+    staged.state = static_cast<uint8_t*>(
+        arena_push_zero(arena, sizeof(uint8_t) * count, alignof(uint8_t)));
+    staged.target = static_cast<EntityId*>(
+        arena_push_zero(arena, sizeof(EntityId) * count, alignof(EntityId)));
+    staged.attack_cooldown = static_cast<uint32_t*>(
+        arena_push_zero(arena, sizeof(uint32_t) * count, alignof(uint32_t)));
+    *pool = staged;
+    return true;
+}
+
+static bool minion_pool_storage_ok(const MinionPool* pool) {
+    return pool && pool->lane && pool->waypoint_index && pool->state && pool->target &&
+           pool->attack_cooldown;
+}
+
+static void minion_pool_clear_row(MinionPool* pool, uint32_t dense) {
+    pool->lane[dense] = 0u;
+    pool->waypoint_index[dense] = 0u;
+    pool->state[dense] = 0u;
+    pool->target[dense] = EntityId{HANDLE_NULL};
+    pool->attack_cooldown[dense] = 0u;
+}
+
+bool minion_pool_add(MinionPool* pool, EntityId entity, uint8_t lane, uint8_t waypoint_index) {
+    if (!minion_pool_storage_ok(pool)) return false;
+    uint32_t dense = 0u;
+    if (!component_pool_add(&pool->membership, entity, &dense)) return false;
+    minion_pool_clear_row(pool, dense);
+    pool->lane[dense] = lane;
+    pool->waypoint_index[dense] = waypoint_index;
+    pool->state[dense] = SIM_MINION_PUSH;
+    return true;
+}
+
+bool minion_pool_remove(MinionPool* pool, EntityId entity) {
+    if (!minion_pool_storage_ok(pool)) return false;
+    ComponentPoolRemoveResult result{};
+    if (!component_pool_remove(&pool->membership, entity, &result)) return false;
+    uint32_t removed = result.removed_dense;
+    uint32_t moved = result.moved_from_dense;
+    if (removed != moved) {
+        pool->lane[removed] = pool->lane[moved];
+        pool->waypoint_index[removed] = pool->waypoint_index[moved];
+        pool->state[removed] = pool->state[moved];
+        pool->target[removed] = pool->target[moved];
+        pool->attack_cooldown[removed] = pool->attack_cooldown[moved];
+    }
+    minion_pool_clear_row(pool, moved);
+    return true;
+}
+
+bool minion_pool_has(const MinionPool* pool, EntityId entity) {
+    return pool && component_pool_has(&pool->membership, entity);
+}
+
+bool minion_pool_get(MinionPool* pool, EntityId entity, MinionView* view) {
+    if (!pool || !view || !minion_pool_storage_ok(pool)) return false;
+    uint32_t dense = component_pool_dense_index(&pool->membership, entity);
+    if (dense == COMPONENT_POOL_INVALID_DENSE) return false;
+    MinionView staged{&pool->lane[dense], &pool->waypoint_index[dense], &pool->state[dense],
+                      &pool->target[dense], &pool->attack_cooldown[dense]};
+    *view = staged;
+    return true;
+}
+
+size_t objective_pool_memory_required(uint32_t entity_capacity, uint32_t capacity) {
+    if (!valid_pool_shape(entity_capacity, capacity)) return 0u;
+    size_t total = component_pool_memory_required(entity_capacity, capacity);
+    if (total == 0u) return 0u;
+    size_t count = static_cast<size_t>(capacity);
+    if (!add_required(&total, sizeof(uint16_t) * count, alignof(uint16_t)) ||
+        !add_required(&total, sizeof(uint8_t) * count, alignof(uint8_t)) ||
+        !add_required(&total, sizeof(uint8_t) * count, alignof(uint8_t)) ||
+        !add_required(&total, sizeof(uint32_t) * count, alignof(uint32_t)) ||
+        !add_required(&total, sizeof(uint8_t) * count, alignof(uint8_t))) return 0u;
+    return total;
+}
+
+bool objective_pool_init(ObjectivePool* pool, Arena* arena,
+                         uint32_t entity_capacity, uint32_t capacity) {
+    size_t required = objective_pool_memory_required(entity_capacity, capacity);
+    if (!pool || required == 0u || !arena_has_budget(arena, required)) return false;
+
+    TempMemory temp = temp_begin(arena);
+    ObjectivePool staged{};
+    if (!component_pool_init(&staged.membership, arena, entity_capacity, capacity)) {
+        temp_end(temp);
+        return false;
+    }
+    size_t count = static_cast<size_t>(capacity);
+    staged.def_index = static_cast<uint16_t*>(
+        arena_push_zero(arena, sizeof(uint16_t) * count, alignof(uint16_t)));
+    staged.owner_team = static_cast<uint8_t*>(
+        arena_push_zero(arena, sizeof(uint8_t) * count, alignof(uint8_t)));
+    staged.kind = static_cast<uint8_t*>(
+        arena_push_zero(arena, sizeof(uint8_t) * count, alignof(uint8_t)));
+    staged.attack_cooldown = static_cast<uint32_t*>(
+        arena_push_zero(arena, sizeof(uint32_t) * count, alignof(uint32_t)));
+    staged.state = static_cast<uint8_t*>(
+        arena_push_zero(arena, sizeof(uint8_t) * count, alignof(uint8_t)));
+    *pool = staged;
+    return true;
+}
+
+static bool objective_pool_storage_ok(const ObjectivePool* pool) {
+    return pool && pool->def_index && pool->owner_team && pool->kind &&
+           pool->attack_cooldown && pool->state;
+}
+
+static void objective_pool_clear_row(ObjectivePool* pool, uint32_t dense) {
+    pool->def_index[dense] = 0u;
+    pool->owner_team[dense] = 0u;
+    pool->kind[dense] = 0u;
+    pool->attack_cooldown[dense] = 0u;
+    pool->state[dense] = 0u;
+}
+
+bool objective_pool_add(ObjectivePool* pool, EntityId entity, uint16_t def_index,
+                        uint8_t owner_team, uint8_t kind) {
+    if (!objective_pool_storage_ok(pool) || owner_team >= SIM_MAX_TEAMS ||
+        (kind != SIM_OBJECTIVE_TOWER && kind != SIM_OBJECTIVE_CORE)) return false;
+    uint32_t dense = 0u;
+    if (!component_pool_add(&pool->membership, entity, &dense)) return false;
+    objective_pool_clear_row(pool, dense);
+    pool->def_index[dense] = def_index;
+    pool->owner_team[dense] = owner_team;
+    pool->kind[dense] = kind;
+    pool->state[dense] = SIM_OBJECTIVE_ALIVE;
+    return true;
+}
+
+bool objective_pool_remove(ObjectivePool* pool, EntityId entity) {
+    if (!objective_pool_storage_ok(pool)) return false;
+    ComponentPoolRemoveResult result{};
+    if (!component_pool_remove(&pool->membership, entity, &result)) return false;
+    uint32_t removed = result.removed_dense;
+    uint32_t moved = result.moved_from_dense;
+    if (removed != moved) {
+        pool->def_index[removed] = pool->def_index[moved];
+        pool->owner_team[removed] = pool->owner_team[moved];
+        pool->kind[removed] = pool->kind[moved];
+        pool->attack_cooldown[removed] = pool->attack_cooldown[moved];
+        pool->state[removed] = pool->state[moved];
+    }
+    objective_pool_clear_row(pool, moved);
+    return true;
+}
+
+bool objective_pool_has(const ObjectivePool* pool, EntityId entity) {
+    return pool && component_pool_has(&pool->membership, entity);
+}
+
+bool objective_pool_get(ObjectivePool* pool, EntityId entity, ObjectiveView* view) {
+    if (!pool || !view || !objective_pool_storage_ok(pool)) return false;
+    uint32_t dense = component_pool_dense_index(&pool->membership, entity);
+    if (dense == COMPONENT_POOL_INVALID_DENSE) return false;
+    ObjectiveView staged{&pool->def_index[dense], &pool->owner_team[dense], &pool->kind[dense],
+                         &pool->attack_cooldown[dense], &pool->state[dense]};
     *view = staged;
     return true;
 }

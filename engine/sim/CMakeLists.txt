@@ -9,11 +9,14 @@ add_library(eng_sim STATIC
     src/events.cpp
     src/hero.cpp
     src/map.cpp
+    src/match.cpp
+    src/objectives.cpp
     src/oracle.cpp
     src/replay.cpp
     src/sim.cpp
     src/sim_hash.cpp
-    src/systems.cpp)
+    src/systems.cpp
+    src/team.cpp)
 add_library(eng::sim ALIAS eng_sim)
 
 target_include_directories(eng_sim
