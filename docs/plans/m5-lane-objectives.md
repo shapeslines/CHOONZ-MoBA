@@ -134,7 +134,7 @@ typedef struct SimEconomyRule {      // mirrors EconomyRule, field for field
 typedef struct SimMinionDef {        // no §3.2/§3.3 counterpart; the creep archetype
     uint64_t archetype_id;           // must equal MapLane.creep_archetype_id of its lane
     int32_t  max_health;             // > 0
-    mm::fix  move_speed;             // > 0, Q16.16 world units per tick
+    mm::fix  move_speed;             // > 0, Q16.16 world units per SECOND (see below)
     mm::fix  attack_range;           // > 0
     int32_t  attack_magnitude;       // > 0
     uint16_t attack_cooldown_ticks;  // > 0
@@ -171,6 +171,18 @@ static_assert(sizeof(SimMinionDef)    == 32u, ...);
 static_assert(sizeof(SimTeamDef)      == 20u, ...);
 static_assert(sizeof(SimMatchDef)     == 336u, ...);
 
+```
+
+**Correction (S5).** `move_speed` is a **velocity**, not a per-tick displacement. S2 writes it
+straight into the Velocity row, and `sys_movement` is the sole integrator: it multiplies by
+`SIM_DT_FIXED`, so the per-tick step is `fix_mul(move_speed, SIM_DT_FIXED)`. At 30 Hz
+`SIM_DT_FIXED` is 2184, so a `move_speed` of `fix_from_int(15)` steps 32760, not 32768 — a
+creep never lands exactly on a lane cell centre, and any range authored as *exactly* the
+perpendicular distance to an objective cell will miss forever. Author creep ranges with slack.
+(`match.h`'s field comment still reads "per tick"; it is out of this slice's fence and is
+corrected in the M5.6 pointer sweep.)
+
+```c
 bool sim_objective_def_valid(const SimObjectiveDef* def);
 bool sim_economy_rule_valid(const SimEconomyRule* rule);
 bool sim_minion_def_valid(const SimMinionDef* def);
@@ -390,8 +402,14 @@ free room) before creating the first entity.
 
 **`sys_tower_ai`** — §4 step 4/5. For each ALIVE objective with `target_policy == TOWER`, in
 ordered-view order, when `attack_cooldown == 0`: pick a target by ROADMAP M5.5 priority —
-(1) an enemy hero whose `last_damage_source` names an allied hero, i.e. an enemy currently
-attacking one of ours; (2) the nearest enemy minion; (3) the nearest enemy hero — each tier
+(1) an enemy unit that is **attacking an allied hero**, i.e. an enemy `E` for which some live
+hero `H` on the tower's own team carries `health(H).last_damage_source == E`. The ROADMAP
+phrases the tier as "enemy attacking allied hero" and that direction is what this plan pins:
+the predicate is read off the **ally's** kill-credit slot, not off the candidate's. `E` need
+not itself be a hero — a creep beating on our carry is exactly what a tower punishes. The
+allied-hero scan is `component_pool_ordered_view` over `HeroPool` and decides **membership
+only**, never order, so the caller's nearest-then-`EntityId` rule stays the total order;
+(2) the nearest enemy minion; (3) the nearest enemy hero — each tier
 restricted to entities within the tower's range, and each tier's internal order nearest-first,
 tie-broken by ascending `EntityId`. Tier 1 falls through to tier 2 when empty. Firing routes a
 `projectile_damage` `SimEffectDef` through `resolve_effect` and arms `attack_cooldown`. **A
@@ -650,16 +668,28 @@ inside `sim_tick` (M6.0, ADR-0014); any RNG draw.
 | `tests/CMakeLists.txt:148` | `sim_oracle ticks=10000 commands=923 final=0xac06a80d7f71b503 stream=0x4209159b82890bcb logic=0x46e9e287878ba88c` | whole line |
 | `tests/CMakeLists.txt:222` | `logic_hash=0x46e9e287878ba88c` | new key |
 | `tests/sim/check_sim_binary_parity.cmake:40` | `final=0xac06a80d7f71b503` | new final |
-| `tests/sim/check_sim_binary_parity.cmake:41` | `stream=0x4209159b82890bcb` | **re-verify**; expected unchanged |
+| `tests/sim/check_sim_binary_parity.cmake:41` | `stream=0x4209159b82890bcb` | new stream (it is a digest **over** the canonical hash — see below) |
 | `tests/sim/check_sim_binary_parity.cmake:42` | `logic=0x46e9e287878ba88c` | new key |
 | `tools/check-clang-cl-determinism.ps1:132` | full oracle line | whole line |
 | `.github/PULL_REQUEST_TEMPLATE.md:9` | `0xac06a80d7f71b503`, logic `0x46e9e287878ba88c` | both |
 | `README.md:26` | `0xac06a80d7f71b503` | new final |
 | `tests/sim/replay_tests.cpp:122` | `{12, 0xcef8548df2b2a518ULL, …}` | **add** a row for `0x46e9e287878ba88c` |
 
-The RNG stream `0x4209159b82890bcb` is expected to be **unchanged**: this slice draws zero RNG
-values and the oracle world configures no match, so only the canonical-hash surface moves. If
-the stream moves, that is `rng-drift` — stop, do not re-pin.
+**Correction (S5, verified in code).** An earlier draft of this plan called the oracle
+`stream=` field an RNG stream and expected it to hold still across S4. It is not an RNG
+stream. `engine/sim/src/oracle.cpp:44` folds **every per-tick `sim_hash_state`** into
+`hash_stream_digest` with `hash_u64_le`, so `stream` is a digest *over* the canonical state
+hash and therefore moves with **every** canonical-hash bump — as it did at M5.0 and again at
+M5.2. Re-pinning it at S4 is correct and expected, not drift.
+
+The real `rng-drift` rule, which this slice does obey: `mm::pcg32_next` has **exactly one call
+site** in the engine, `sys_rng_advance` in `engine/sim/src/systems.cpp`, and it is advanced
+unconditionally once per tick (ADR-0007, ADR-0013). The RNG state after N ticks is therefore a
+function of the seed and N alone — independent of any lane-objectives config, of whether a
+match is installed, and of how many minions or awards a tick produced. `rng-drift` means a
+**second** `pcg32_next` call site appears, or `world->rng` after N ticks differs between two
+worlds that share a seed. Acceptance test §7.2 item 4 asserts exactly that, by comparing
+`world->rng` fields directly rather than by reading the oracle `stream=` field.
 
 Not pins — do **not** rewrite: `docs/ROADMAP.md` and `docs/JOURNAL.md` historical values, and
 the M3.x / M5.0 / M5.2 slates, which record past-tense narrative.
@@ -678,8 +708,11 @@ the M3.x / M5.0 / M5.2 slates, which record past-tense narrative.
    whole death, or a whole award fails the **source operation** and therefore the tick; no
    event is dropped and no wave is partially spawned; the arena offset and the state hash are
    unchanged after the rejection.
-4. **§7.2 item 4** — two worlds differing only by an extra `SimEconomyRule` row produce the
-   same `sys_rng_advance` count and the identical RNG stream over 3,000 ticks.
+4. **§7.2 item 4** — two worlds differing only by an extra `SimEconomyRule` row run 3,000 ticks
+   of the acceptance match: their ledgers differ (the extra rule pays), their `world->rng`
+   fields are **identical** at the end, and a second pair sharing the identical config hashes
+   equal. The RNG comparison is made against `world->rng` directly, never against the oracle
+   `stream=` field, which is a digest over the canonical hash rather than an RNG trace.
 5. Ledger saturation: an award that would exceed `INT32_MAX` clamps, and the clamped world
    still hashes deterministically.
 6. Kill credit: a hero killed by an enemy minion credits the minion's team; an unattributed
@@ -723,7 +756,7 @@ the M3.x / M5.0 / M5.2 slates, which record past-tense narrative.
 | `stale-entity` | An AI target or a killer handle not alive at the exact generation | Treated as absent; the FSM re-acquires or awards nothing. Never a tick failure |
 | `event-overflow` | Any queue's write phase cannot hold a whole wave, death, or award | Source operation fails, `sim_tick` returns false, world and arena unchanged; nothing dropped (ADR-0014) |
 | `hash-drift` | Oracle final hash moves in any slice other than S4 | Stop; the bump is a single reviewed change |
-| `rng-drift` | Any new `pcg32_next` call, or the oracle **stream** moving at S4 | Forbidden by ADR-0013; this slice draws zero. Stop, do not re-pin |
+| `rng-drift` | A second `mm::pcg32_next` call site, or `world->rng` after N ticks differing between two worlds sharing a seed | Forbidden by ADR-0013; this slice draws zero. (The oracle `stream=` field is **not** this signal — it is a digest over the canonical hash and moves with every hash bump) |
 | `pipeline-bypass` | A `health.current`, ledger, or match-state write outside its owner file | `check_sim_pipeline_owner` fails the build |
 | `map-coupling` | `sys_waves` / `sys_minion_ai` calling `map_*` outside `map_find_spawn`, `map_cell_to_world`, `map_lane_waypoints`, and `map_cell_coords` | Out of contract; navigation stays waypoint-only |
 | `replay-mismatch` | Header, command, event, or state hash differs on replay | Stop at the first mismatch and report tick/field |

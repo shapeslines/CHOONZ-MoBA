@@ -812,7 +812,7 @@ taxonomy needs enumeration once real abilities exist. **Exercises:** Gameplay (a
 
 ---
 
-### M5.4 — Event-driven combat resolution  · M  🟡 SINGLE-RESOLUTION-POINT LANDED 2026-09-03 (`m5-hero-combat`; mitigation, shields, lifesteal, gold/XP, and respawn still open)
+### M5.4 — Event-driven combat resolution  · M  🟡 SINGLE-RESOLUTION-POINT LANDED 2026-09-03 (`m5-hero-combat`; kill credit and gold/XP on death landed 2026-09-04 in `m5-lane-objectives`; mitigation, shields, lifesteal, and respawn still open)
 **Execution note (2026-09-03):** the single-resolution-point invariant is no longer "enforced by
 convention" — it is enforced by a gate. `resolve_effect` is the only appender and
 `sys_combat_resolve`/`sys_effects_resolve` in `combat.cpp` are the only committers of `health.current`;
@@ -820,8 +820,18 @@ convention" — it is enforced by a gate. `resolve_effect` is the only appender 
 health, resource, or cooldown write in `engine/sim`. Alongside the frozen 12-byte `DamageEvent` wire
 there is now one 32-byte `SimEvent` envelope queue (heal, status applied/expired, death), fixed
 capacity and reject-at-source per ADR-0014. Deaths route through `sim_destroy_deferred`. Still open
-here: armor mitigation as real data (v1 mitigation is a constant 0), shields, lifesteal, kill credit,
-gold/XP on death, and hero respawn timers.
+here: armor mitigation as real data (v1 mitigation is a constant 0), shields, lifesteal, and hero
+respawn timers.
+**Execution note (2026-09-04, `m5-lane-objectives`):** kill credit and gold/XP on death are no longer
+open. `HealthPool.last_damage_source` is the sole kill-credit input — written only in `combat.cpp` on
+the damage commit, cleared by `health_pool_remove` so a recycled index cannot inherit a stale killer,
+and hashed inside the Health block. The hero-only death walk moved out of `sys_effects_resolve` into
+`sys_death` (`engine/sim/objectives.cpp`), generalized over heroes, minions, and objectives, and
+`SIM_EVENT_DEATH` now carries that killer in its existing 8-byte payload (no format change).
+`sys_economy` pays every authored `SimEconomyRule` whose `source_kind` matches, in authored order,
+into a saturating per-team gold/XP ledger, emitting one `SIM_EVENT_ECONOMY` per award. An
+unattributed death is legal and awards nothing. XP is an observable ledger only — no level-up, no
+stat effect, no spend.
 **Goal:** one central deterministic damage pipeline.
 **Deliverables:** systems emit `DamageEvent`s into a per-tick queue; a single `combat_resolve` drains
 them in deterministic order — mitigation (`amount * 100/(100+armor)` in fixed-point), shields,
@@ -833,7 +843,25 @@ enforce by convention. **Exercises:** Gameplay (combat), ECS (events).
 
 ---
 
-### M5.5 — Minion/tower AI (tiny state machines)  · M
+### M5.5 — Minion/tower AI (tiny state machines)  · M  ✅ SIM CORE COMPLETE 2026-09-04 (`m5-lane-objectives`, slate `slate-moba-phase5-m5-lane-objectives.md`; flow-field pathing and hero/bot AI deferred)
+**Execution note (2026-09-04):** the sim half landed on the `m5-lane-objectives` lane, which also
+closed the proto-design §2.2 vertical slice (teams, waves, towers and cores, ledgers, and a
+core-destruction win). `engine/sim/objectives.cpp` owns `sys_waves`, `sys_minion_ai`, `sys_tower_ai`,
+`sys_death`, and `sys_economy`; `engine/sim/match.h` carries the sim-owned POD mirror of §3.2/§3.3
+(`SimMatchDef`, `SimTeamDef`, `SimObjectiveDef`, `SimEconomyRule`, `SimMinionDef`) and the v1 tower
+offensive constants, since §3.3's `ObjectiveDef` has no offensive fields. The minion FSM is
+`PUSH -> ATTACK -> RETURN`, and `RETURN` is a distinct hashed state that lasts exactly one tick so
+"lost its target" is observable. Acquisition is **nearest-first with ascending `EntityId` as the
+tie-break** — the deliverable line below phrases it as "by `EntityId` then distance"; nearest-first
+is the operative order and the plan pins that reading. Tower priority is the line below, read in the
+ROADMAP's own direction: tier 1 is an enemy unit that is **attacking an allied hero**, i.e. some live
+hero on the tower's team carries `health.last_damage_source == candidate` — the predicate is read off
+the ally's kill-credit slot, and the candidate need not itself be a hero. Every walk is
+`component_pool_ordered_view` (ascending entity index) and **zero** RNG is drawn (ADR-0013), which is
+what makes the whole slice replayable without touching the tick stream. **Still deferred here:**
+lane-push via a flow field (minions follow authored `MapLane` waypoints only — flow fields and A\*
+stay M5.1 navigation's own milestone and must not pre-empt its hash surface) and hero/bot AI. Also
+still open: hero and minion respawn, armor mitigation as real data, and neutral objectives.
 **Goal:** lane life — deterministic, no behavior trees/GOAP.
 **Deliverables:** minion FSM (lane-push via flow field → attack-nearest, tie-break by `EntityId` then
 distance → return); tower target priority (enemy attacking allied hero > nearest minion > nearest
