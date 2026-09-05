@@ -8,6 +8,48 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 20 — 2026-09-04 — M5.5 lane objectives (the last slice of the minimum vertical path)
+
+**Scope:** execute `m5-lane-objectives` stacked on the hero-combat lane through Opus 5 subagents (Agent A
+plan + slate, Agent B S1–S4, Agent C S5–S6) so a whole two-team, one-lane match runs from seed to core
+destruction inside `sim_tick` with a replayable, hashed result (proto-design §7.2 item 6).
+
+**Outcome:** PR #72 (`lane/moba-m5-lane-objectives/20260904`, stacked on #68 → #69 → #71). The sim gains
+`TeamPool`, a POD `SimMatchDef` (team, objective, economy, creep defs mirroring §3.2/§3.3), `MinionPool` and
+`ObjectivePool`, saturating gold/XP ledgers, `SimMatchState`, four new `SimEvent` kinds (objective damaged /
+destroyed, economy, match over), and `HealthPool.last_damage_source` for kill credit. New systems: `sys_waves`
+on the `MapLane` clock, `sys_minion_ai` (push along lane waypoints, attack nearest, return), `sys_tower_ai`
+(enemy hitting an allied hero > nearest minion > nearest hero, firing through `resolve_effect`), a generalized
+`sys_death`, and `sys_economy`. Intake honours match-over and team ownership. One `SIM_LOGIC_HASH` bump
+(`…|lane-objectives-v1` → `0x5b47e648953a63fc`); oracle `0x36e6de56cb662dba` / `0xb6067f3f0955b292`.
+
+### What changed
+
+- Authored `assets/maps/lane_slice.mapdesc` (two spawns, two towers, two cores on one lane) with a Python golden.
+- `sim_pipeline_owner` lint gained ledger / match-state rules and `objectives.cpp` as an owner; it now also runs
+  in the clang-cl subset.
+- Corrections of record: the oracle `stream` value is a digest over every per-tick canonical hash and moves
+  with every bump, so the rng-drift rule is the single `pcg32_next` call site plus `world->rng` equality;
+  Agent B's inverted tower tier-1 rule was fixed before close; `move_speed` is per-second velocity and a
+  creep step at 30 Hz is 32760 not 32768, so objective cells must sit inside `attack_range` with slack.
+- The acceptance match is deliberately asymmetric (team 1's tower has no target policy) because a mirror
+  match on a mirror map is a permanent stalemate; it ends at tick 46 with one `MATCH_OVER`.
+
+### Verification
+
+- `sim_lane_objectives` 28 tests / 1,109 checks; CTest 53/53 in Debug, RelWithDebInfo, Release, and
+  `debug-asan` (MSVC 14.44); clang-cl/UBSan PASS 7/7 with the new oracle; boundary, compiler-policy,
+  binary-parity, pipeline-owner lints green; mutation `tick=4321 field=position_x entity=7`; replay size 134812.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 → #70 → #71 → #72. The minimum vertical path's sim half is then complete;
+the next claim is the game-layer translation slice (`HeroDef` / `ObjectiveDef` / `EconomyRule` bytes from `.mba`
+records → `SimHeroDef` / `SimMatchDef` in `eng_game`, with the `content.h` static_assert bridge), which makes the
+first playable local match a presentation task.
+
+---
+
 ## Session 19 — 2026-09-03 — M5.2 hero combat (unified effect pipeline)
 
 **Scope:** execute `m5-hero-combat` on an integration branch (`main` + #68 + #69) through Opus 5
