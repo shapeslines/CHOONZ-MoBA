@@ -150,32 +150,47 @@ static bool entity_position(const SimWorld* world, EntityId entity, mm::fix* out
 }
 
 // Acquisition tiers. ANY is the creep rule; the other three are the ROADMAP M5.5
-// tower priority, tried in order. HERO_ATTACKER is exactly what the plan pins: an
-// enemy hero whose last_damage_source names a hero on the tower's own team.
+// tower priority, tried in order. ATTACKS_ALLIED_HERO is the ROADMAP reading, in the
+// direction the ROADMAP states it: the candidate is an enemy unit that is ATTACKING
+// one of our heroes, i.e. some live allied hero H carries
+// health(H).last_damage_source == candidate. The candidate need not be a hero - a
+// creep beating on our carry is exactly the thing a tower is supposed to punish.
 typedef enum TargetTier : uint8_t {
     TARGET_TIER_ANY = 0,
-    TARGET_TIER_HERO_ATTACKER = 1,
+    TARGET_TIER_ATTACKS_ALLIED_HERO = 1,
     TARGET_TIER_MINION = 2,
     TARGET_TIER_HERO = 3,
 } TargetTier;
 
+// True when some live hero on `actor`'s team was last damaged by `candidate`. The
+// walk is component_pool_ordered_view over the hero pool, so it reads the same set
+// in the same order on every machine; it decides membership only, never order, so
+// the caller's nearest-then-EntityId tie-break stays the total order.
+static bool attacks_allied_hero(SimWorld* world, EntityId actor, EntityId candidate) {
+    if (world->config.hero_capacity == 0u) return false;
+    uint8_t actor_team = SIM_TEAM_NONE;
+    if (!team_pool_team(&world->teams, actor, &actor_team)) return false;
+    if (actor_team == SIM_TEAM_NONE) return false;
+    ComponentPoolOrderedView ordered{};
+    if (!component_pool_ordered_view(&world->heroes.membership, &ordered)) return false;
+    for (uint32_t i = 0u; i < ordered.count; ++i) {
+        EntityId hero = ordered.entities[i];
+        uint8_t hero_team = SIM_TEAM_NONE;
+        if (!team_pool_team(&world->teams, hero, &hero_team)) continue;
+        if (hero_team != actor_team) continue;
+        if (!target_is_live(world, hero)) continue;
+        HealthView health{};
+        if (!health_pool_get(&world->health, hero, &health)) continue;
+        if (health.last_damage_source->h == candidate.h) return true;
+    }
+    return false;
+}
+
 static bool tier_accepts(SimWorld* world, EntityId actor, EntityId candidate, uint8_t tier) {
     if (tier == TARGET_TIER_ANY) return true;
     if (tier == TARGET_TIER_MINION) return minion_pool_has(&world->minions, candidate);
-    if (!hero_pool_has(&world->heroes, candidate)) return false;
-    if (tier == TARGET_TIER_HERO) return true;
-
-    HealthView health{};
-    uint8_t actor_team = SIM_TEAM_NONE;
-    if (!health_pool_get(&world->health, candidate, &health)) return false;
-    EntityId attacker = *health.last_damage_source;
-    if (attacker.h == HANDLE_NULL || !entity_manager_is_alive(&world->entities, attacker))
-        return false;
-    if (!hero_pool_has(&world->heroes, attacker)) return false;
-    uint8_t attacker_team = SIM_TEAM_NONE;
-    if (!team_pool_team(&world->teams, actor, &actor_team) ||
-        !team_pool_team(&world->teams, attacker, &attacker_team)) return false;
-    return actor_team != SIM_TEAM_NONE && actor_team == attacker_team;
+    if (tier == TARGET_TIER_HERO) return hero_pool_has(&world->heroes, candidate);
+    return attacks_allied_hero(world, actor, candidate);
 }
 
 // Nearest live enemy of `actor` within range_squared, tie-broken by ascending
@@ -427,8 +442,8 @@ bool sys_tower_ai(SimWorld* world) {
         // ordered nearest-first with ascending EntityId as the tie-break; an empty
         // tier falls through to the next.
         EntityId target{HANDLE_NULL};
-        if (!acquire_nearest_enemy(world, tower, range_squared, TARGET_TIER_HERO_ATTACKER,
-                                   &target) &&
+        if (!acquire_nearest_enemy(world, tower, range_squared,
+                                   TARGET_TIER_ATTACKS_ALLIED_HERO, &target) &&
             !acquire_nearest_enemy(world, tower, range_squared, TARGET_TIER_MINION, &target) &&
             !acquire_nearest_enemy(world, tower, range_squared, TARGET_TIER_HERO, &target))
             continue;

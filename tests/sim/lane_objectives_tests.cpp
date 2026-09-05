@@ -849,7 +849,12 @@ static uint32_t count_write_events(const SimWorld* world, uint16_t kind) {
     return found;
 }
 
-TEST(sim_lane_objectives, tower_priority_is_hero_attacker_then_nearest_minion_then_hero) {
+// ROADMAP M5.5 reads "enemy attacking allied hero > nearest minion > nearest hero".
+// The predicate for tier 1 is therefore read off the ALLY's kill-credit slot - some
+// live hero H on the tower's team carries health(H).last_damage_source == candidate -
+// and NOT off the candidate's own slot. The two readings are inverses of each other,
+// and this test pins the ROADMAP one in both directions.
+TEST(sim_lane_objectives, tower_priority_is_attacker_of_an_ally_then_nearest_minion_then_hero) {
     LaneFixture fixture{};
     CHECK(build_installed_world(&fixture, g_lane_storage, sizeof(g_lane_storage),
                                 hero_lane_config()));
@@ -870,6 +875,11 @@ TEST(sim_lane_objectives, tower_priority_is_hero_attacker_then_nearest_minion_th
                           mm::fix_from_int(2) + FIX_HALF, &enemy_hero));
     CHECK(sim_spawn_minion(&world, 1u, LANE_SLICE_LANE_ID, 2u, 26u, &enemy_minion));
 
+    // The tier-2 pick is shot several times below and a creep only has 10 health, so it
+    // is topped up between probes: this test is about tier choice, not lethality.
+    HealthView minion_health{};
+    CHECK(health_pool_get(&world.health, enemy_minion, &minion_health));
+
     EntityId source{HANDLE_NULL};
     EntityId target{HANDLE_NULL};
     int32_t amount = 0;
@@ -886,20 +896,73 @@ TEST(sim_lane_objectives, tower_priority_is_hero_attacker_then_nearest_minion_th
     CHECK(sys_tower_ai(&world));
     CHECK(!last_damage(&world, &source, &target, &amount));
 
-    // Tier 1: an enemy hero whose last_damage_source names a hero on our own team.
+    // The INVERTED reading is dead: the enemy hero's own last_damage_source naming one
+    // of our heroes means our hero hit HIM, not that he is attacking us, so tier 1 stays
+    // empty and tier 2 keeps the minion.
     HealthView enemy_health{};
     CHECK(health_pool_get(&world.health, enemy_hero, &enemy_health));
     *enemy_health.last_damage_source = ally;
     CHECK(clear_tower_cooldown(&world, tower));
     CHECK(sys_tower_ai(&world));
     CHECK(last_damage(&world, &source, &target, &amount));
+    CHECK(target.h == enemy_minion.h);
+    CHECK(commit_damage(&world));
+    *enemy_health.last_damage_source = EntityId{HANDLE_NULL};
+    *minion_health.current = world.match.creep.max_health;
+
+    // Tier 1, the ROADMAP direction: our ally's kill-credit slot names the enemy hero,
+    // so that hero is the one attacking us and the tower punishes him even though the
+    // minion is the tier-2 pick.
+    HealthView ally_health{};
+    CHECK(health_pool_get(&world.health, ally, &ally_health));
+    *ally_health.last_damage_source = enemy_hero;
+    CHECK(clear_tower_cooldown(&world, tower));
+    CHECK(sys_tower_ai(&world));
+    CHECK(last_damage(&world, &source, &target, &amount));
     CHECK(target.h == enemy_hero.h);
     CHECK(commit_damage(&world));
 
+    // A dead ally is not an ally under attack: tier 1 empties again the moment the hero
+    // whose slot named the attacker stops being live.
+    int32_t saved_ally_health = *ally_health.current;
+    *ally_health.current = 0;
+    CHECK(clear_tower_cooldown(&world, tower));
+    CHECK(sys_tower_ai(&world));
+    CHECK(last_damage(&world, &source, &target, &amount));
+    CHECK(target.h == enemy_minion.h);
+    CHECK(commit_damage(&world));
+    *ally_health.current = saved_ally_health;
+    *ally_health.last_damage_source = EntityId{HANDLE_NULL};
+
+    // Tier 1 accepts a NON-hero attacker, and it outranks the nearest minion: the far
+    // minion is the one beating on our ally, so it is the one that gets shot even though
+    // the near minion is the tier-2 pick and the hero is nearer still.
+    EntityId far_minion{HANDLE_NULL};
+    CHECK(sim_spawn_minion(&world, 1u, LANE_SLICE_LANE_ID, 5u, 29u, &far_minion));
+    *minion_health.current = world.match.creep.max_health;
+    *ally_health.last_damage_source = far_minion;
+    CHECK(clear_tower_cooldown(&world, tower));
+    CHECK(sys_tower_ai(&world));
+    CHECK(last_damage(&world, &source, &target, &amount));
+    CHECK(target.h == far_minion.h);
+    CHECK(commit_damage(&world));
+    *ally_health.last_damage_source = EntityId{HANDLE_NULL};
+
+    // An attacker that is no longer a live candidate is treated as absent, never as a
+    // tick failure: tier 1 empties and tier 2 takes over.
+    HealthView far_health{};
+    CHECK(health_pool_get(&world.health, far_minion, &far_health));
+    *far_health.current = 0;
+    *ally_health.last_damage_source = far_minion;
+    *minion_health.current = world.match.creep.max_health;
+    CHECK(clear_tower_cooldown(&world, tower));
+    CHECK(sys_tower_ai(&world));
+    CHECK(last_damage(&world, &source, &target, &amount));
+    CHECK(target.h == enemy_minion.h);
+    CHECK(commit_damage(&world));
+    *ally_health.last_damage_source = EntityId{HANDLE_NULL};
+
     // With tier 1 empty again and no live minion left, tier 3 takes the hero.
-    *enemy_health.last_damage_source = EntityId{HANDLE_NULL};
-    HealthView minion_health{};
-    CHECK(health_pool_get(&world.health, enemy_minion, &minion_health));
     *minion_health.current = 0;
     CHECK(clear_tower_cooldown(&world, tower));
     CHECK(sys_tower_ai(&world));
@@ -1218,4 +1281,591 @@ TEST(sim_lane_objectives, every_new_state_field_has_a_name_and_the_logic_key_mov
                       "sim_event_write_payload") == 0);
     CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_POSITION_X), "position_x") == 0);
     CHECK(u64(SIM_LOGIC_HASH) == 0x5b47e648953a63fcULL);
+}
+
+// ------------------------------------------------------------------ S5 acceptance
+// proto-design section 7.2 items 6, 1, 3, and 4, on the lane_slice fixture decoded
+// from the independent golden rather than authored in C++, so the acceptance match
+// runs on exactly the bytes assets/maps/lane_slice.mapdesc ships.
+
+alignas(16) static uint8_t g_accept_storage[768u * 1024u];
+alignas(16) static uint8_t g_accept_storage_b[768u * 1024u];
+static uint8_t g_replay_bytes[192u * 1024u];
+
+static const uint64_t ACCEPT_SEED = 0x5ACE01ULL;
+static const uint32_t ACCEPT_TICKS = 3000u;
+static const uint32_t ACCEPT_CHECKPOINT = 500u;
+static const uint32_t ACCEPT_CHECKPOINTS = ACCEPT_TICKS / ACCEPT_CHECKPOINT;
+static const uint32_t ACCEPT_EVENT_KINDS = 9u;
+static const uint32_t ACCEPT_MILESTONES = 8u;
+static const uint32_t ACCEPT_PLAYERS = 2u;
+// The verdict lands well inside this bound, and the test asserts that it does, so a
+// match that stopped converging would fail loudly instead of running to the cap.
+static const uint32_t ACCEPT_MATCH_LIMIT = 400u;
+
+// The acceptance match is deliberately ASYMMETRIC. A mirror match on a mirror map is
+// a stalemate: equal waves meet at the midpoint and annihilate each other forever,
+// and no core ever falls. Exactly one authored field breaks the mirror - team 1's
+// tower carries SIM_TARGET_POLICY_NONE, so team 0's tower is the only objective that
+// shoots - and team 1's objectives are authored thin. Everything else is the S1
+// fixture, so the asymmetry is data, never a special case in the sim.
+static SimMatchDef accept_match_def(bool extra_economy_rule) {
+    SimMatchDef def = fixture_match_def();
+    // One creep per team per wave, and a creep duel that resolves in a few ticks: the
+    // lane must clear faster than the authored clock refills it, or the pools fill and
+    // sys_waves correctly fails the tick forever after (ADR-0014, never a partial wave).
+    def.minions_per_wave = 1u;
+    def.creep.max_health = 6;
+    def.creep.attack_magnitude = 5;
+    def.creep.attack_cooldown_ticks = 2u;
+    // The objective cells sit exactly one cell off the lane, and a per-tick step of
+    // fix_mul(move_speed, SIM_DT_FIXED) is 32760, not 32768 - a creep therefore never
+    // lands exactly on a lane cell centre, and a range of exactly FIX_ONE would miss an
+    // objective by a few hundredths of a unit forever. Two units clears the lane with
+    // room to spare, which is what makes "minions reach the enemy tower" a fact of the
+    // authored data rather than a fixed-point coincidence.
+    def.creep.attack_range = 2 * FIX_ONE;
+    def.objectives[0] = objective_def(0xB0ULL, 0u, SIM_OBJECTIVE_TOWER, 4000,
+                                      SIM_TARGET_POLICY_TOWER);
+    def.objectives[1] = objective_def(0xB1ULL, 0u, SIM_OBJECTIVE_CORE, 4000,
+                                      SIM_TARGET_POLICY_NONE);
+    def.objectives[2] = objective_def(0xB2ULL, 1u, SIM_OBJECTIVE_TOWER, 30,
+                                      SIM_TARGET_POLICY_NONE);
+    def.objectives[3] = objective_def(0xB3ULL, 1u, SIM_OBJECTIVE_CORE, 30,
+                                      SIM_TARGET_POLICY_NONE);
+    if (extra_economy_rule) {
+        def.economy[4].award_kind = SIM_AWARD_XP;
+        def.economy[4].source_kind = SIM_AWARD_SOURCE_OBJECTIVE_DESTROYED;
+        def.economy[4].award_amount = 40u;
+        def.economy_count = 5u;
+    }
+    return def;
+}
+
+static SimWorldConfig accept_config(void) {
+    SimWorldConfig config{};
+    config.max_entities = 256u;
+    config.initial_unit_count = 2u;
+    config.damage_event_capacity = 256u;
+    config.map = MapConfig{8u, 8u, 2u, 8u};
+    config.hero_def_capacity = 1u;
+    config.hero_capacity = 4u;
+    config.projectile_capacity = 8u;
+    config.status_capacity = 8u;
+    config.sim_event_capacity = 256u;
+    config.team_capacity = 250u;
+    config.minion_capacity = 220u;
+    config.objective_capacity = 8u;
+    return config;
+}
+
+struct AcceptFixture {
+    SimWorld world;
+    size_t arena_offset;
+    EntityId hero[2];
+    // Spawn order, which sim_spawn_match_objectives fixes: team 0 tower, team 0 core,
+    // team 1 tower, team 1 core.
+    EntityId objective[4];
+};
+
+// Builds the acceptance world from the SHIPPED bytes: sim_init, decode
+// LANE_SLICE_MAPDESC, install, spawn the four objectives, then park one idle hero per
+// team off the lane and outside every tower range, so the match is decided entirely
+// by waves and towers and never by hero tuning (plan: Held questions, heroes idle).
+static bool build_accept_world(AcceptFixture* fixture, uint8_t* storage, size_t bytes,
+                               bool extra_economy_rule) {
+    Arena arena;
+    arena_init_fixed(&arena, storage, bytes);
+    if (!sim_init(&fixture->world, &arena, ACCEPT_SEED, accept_config())) return false;
+    fixture->arena_offset = arena.offset;
+
+    ByteReader reader;
+    byte_reader_init(&reader, LANE_SLICE_MAPDESC, sizeof(LANE_SLICE_MAPDESC));
+    if (map_decode(&fixture->world.map, &reader) != MAP_STATUS_OK) return false;
+    if (map_require_end(&reader) != MAP_STATUS_OK) return false;
+
+    SimMatchDef def = accept_match_def(extra_economy_rule);
+    if (!sim_install_match_def(&fixture->world, &def)) return false;
+    if (!sim_spawn_match_objectives(&fixture->world)) return false;
+    ComponentPoolOrderedView ordered{};
+    if (!component_pool_ordered_view(&fixture->world.objectives.membership, &ordered))
+        return false;
+    if (ordered.count != 4u) return false;
+    for (uint32_t i = 0u; i < 4u; ++i) fixture->objective[i] = ordered.entities[i];
+
+    SimHeroDef hero_def = idle_hero_def();
+    uint16_t def_index = 0u;
+    if (!sim_install_hero_def(&fixture->world, &hero_def, &def_index)) return false;
+    if (!spawn_test_hero(&fixture->world, 0u, def_index, FIX_HALF,
+                         mm::fix_from_int(6) + FIX_HALF, &fixture->hero[0])) return false;
+    return spawn_test_hero(&fixture->world, 1u, def_index, mm::fix_from_int(7) + FIX_HALF,
+                           mm::fix_from_int(6) + FIX_HALF, &fixture->hero[1]);
+}
+
+struct MatchMilestone {
+    uint64_t tick;
+    uint32_t ordinal;
+    uint32_t subject;
+    uint16_t kind;
+};
+
+struct MatchTrace {
+    uint64_t checkpoints[ACCEPT_CHECKPOINTS];
+    uint64_t event_digest;
+    uint64_t final_hash;
+    uint32_t event_counts[ACCEPT_EVENT_KINDS];
+    uint32_t total_events;
+    uint32_t failed_ticks;
+    uint32_t ticks_run;
+    uint32_t peak_minions;
+    uint32_t commands_issued;
+    uint8_t winner;
+    MatchMilestone milestones[ACCEPT_MILESTONES];
+    uint32_t milestone_count;
+};
+
+static uint64_t accept_fold(uint64_t digest, uint64_t value) {
+    digest ^= value;
+    return digest * 0x00000100000001b3ULL;
+}
+
+// The command script is a pure function of the tick index, identical in every run, so
+// the recorded replay is reproducible. The two placeholder units carry no Team row, so
+// they are never combat participants - they exist to make the recorded command stream
+// non-trivial and to prove the replay codec round-trips a real match.
+static uint32_t accept_commands(uint64_t tick, SimCommand* out) {
+    if (tick == 3u) {
+        out[0].kind = SIM_COMMAND_SET_VELOCITY;
+        out[0].player_id = 0u;
+        out[0].unit_index = 0u;
+        out[0].value_x = mm::fix_from_int(1);
+        out[0].value_y = 0;
+        return 1u;
+    }
+    if (tick == 11u) {
+        out[0].kind = SIM_COMMAND_SET_VELOCITY;
+        out[0].player_id = 1u;
+        out[0].unit_index = 1u;
+        out[0].value_x = 0;
+        out[0].value_y = mm::fix_from_int(-1);
+        return 1u;
+    }
+    if (tick == 37u) {
+        out[0].kind = SIM_COMMAND_SET_VELOCITY;
+        out[0].player_id = 0u;
+        out[0].unit_index = 0u;
+        out[0].value_x = 0;
+        out[0].value_y = 0;
+        out[1].kind = SIM_COMMAND_SET_VELOCITY;
+        out[1].player_id = 1u;
+        out[1].unit_index = 1u;
+        out[1].value_x = 0;
+        out[1].value_y = 0;
+        return 2u;
+    }
+    return 0u;
+}
+
+// Every event this match produces is appended AFTER sim_event_queue_consume (the
+// combat committer, sys_death, and sys_economy all run past the publish/consume pair
+// in sim_tick), so the write phase after sim_tick holds this tick's whole sequence in
+// append order. Folding kind, tick, payload_size, append_ordinal, and the payload
+// bytes gives one digest over the full ordered stream.
+static void accept_observe_events(SimWorld* world, MatchTrace* trace) {
+    uint32_t phase = world->sim_events.write_index;
+    for (uint32_t i = 0u; i < world->sim_events.counts[phase]; ++i) {
+        const SimEvent& event = world->sim_events.buffers[phase][i];
+        trace->event_digest = accept_fold(trace->event_digest, event.tick);
+        trace->event_digest = accept_fold(trace->event_digest, event.event_kind);
+        trace->event_digest = accept_fold(trace->event_digest, event.payload_size);
+        trace->event_digest = accept_fold(trace->event_digest, event.append_ordinal);
+        for (uint16_t offset = 0u; offset < SIM_EVENT_PAYLOAD_MAX; offset = offset + 4u)
+            trace->event_digest = accept_fold(trace->event_digest,
+                                              sim_event_payload_u32(&event, offset));
+        ++trace->total_events;
+        if (event.event_kind < ACCEPT_EVENT_KINDS) ++trace->event_counts[event.event_kind];
+        if ((event.event_kind == SIM_EVENT_OBJECTIVE_DESTROYED ||
+             event.event_kind == SIM_EVENT_MATCH_OVER) &&
+            trace->milestone_count < ACCEPT_MILESTONES) {
+            MatchMilestone& milestone = trace->milestones[trace->milestone_count++];
+            milestone.tick = event.tick;
+            milestone.ordinal = event.append_ordinal;
+            milestone.subject = sim_event_payload_u32(&event, 0u);
+            milestone.kind = event.event_kind;
+        }
+    }
+}
+
+// Runs the scripted match to `ticks`, or until the verdict lands when `stop_on_over`.
+// Pure function of (seed world, script): no wall clock, no RNG of its own, and no
+// branch on anything but the tick index and already-hashed state.
+static bool run_accept_match(AcceptFixture* fixture, MatchTrace* trace, uint32_t ticks,
+                             bool stop_on_over, ByteWriter* record) {
+    SimWorld& world = fixture->world;
+    for (uint32_t i = 0u; i < ticks; ++i) {
+        SimCommand commands[REPLAY_PLACEHOLDER_MAX_COMMANDS]{};
+        uint32_t count = accept_commands(world.tick, commands);
+        trace->commands_issued += count;
+        SimCommandBuffer buffer{commands, count};
+
+        bool checkpoint = (i + 1u) % ACCEPT_CHECKPOINT == 0u &&
+                          (i + 1u) / ACCEPT_CHECKPOINT <= ACCEPT_CHECKPOINTS;
+        if (!sim_tick(&world, &buffer)) ++trace->failed_ticks;
+        accept_observe_events(&world, trace);
+        if (world.minions.membership.count > trace->peak_minions)
+            trace->peak_minions = world.minions.membership.count;
+        ++trace->ticks_run;
+
+        uint64_t expected = 0u;
+        if (checkpoint) {
+            expected = sim_hash_state(&world);
+            trace->checkpoints[(i + 1u) / ACCEPT_CHECKPOINT - 1u] = expected;
+        }
+        if (record && replay_write_tick(record, ACCEPT_PLAYERS, &buffer, expected) !=
+                          REPLAY_STATUS_OK) return false;
+        if (stop_on_over && world.match_state.over != 0u) break;
+    }
+    trace->final_hash = sim_hash_state(&world);
+    trace->winner = world.match_state.winner;
+    return true;
+}
+
+// Item 6. The whole vertical slice in one scripted match on the shipped map bytes:
+// authored waves flow, minions reach the enemy tower, the tower falls, the core
+// falls, and the verdict lands exactly once - and the entire ordered SimEvent stream
+// is identical across two fresh runs.
+TEST(sim_lane_objectives, the_scripted_match_takes_the_tower_then_the_core_and_ends_once) {
+    static AcceptFixture first{};
+    static AcceptFixture second{};
+    static MatchTrace a{};
+    static MatchTrace b{};
+    CHECK(build_accept_world(&first, g_accept_storage, sizeof(g_accept_storage), false));
+    CHECK(build_accept_world(&second, g_accept_storage_b, sizeof(g_accept_storage_b), false));
+    CHECK(sim_hash_state(&first.world) == sim_hash_state(&second.world));
+    CHECK(sim_hash_state(&first.world) != 0u);
+
+    CHECK(run_accept_match(&first, &a, ACCEPT_MATCH_LIMIT, true, nullptr));
+    CHECK(run_accept_match(&second, &b, ACCEPT_MATCH_LIMIT, true, nullptr));
+    SimWorld& world = first.world;
+
+    // The match is decided, inside the bound, by the core and not by the clock.
+    CHECK(a.failed_ticks == 0u);
+    CHECK(b.failed_ticks == 0u);
+    CHECK(u32(a.ticks_run) < ACCEPT_MATCH_LIMIT);
+    CHECK(u32(world.match_state.over) == 1u);
+    CHECK(u32(world.match_state.winner) == 0u);
+    CHECK(u32(world.match_state.end_tick) != 0u);
+    CHECK(u64(world.match_state.end_tick) == world.tick - 1u);
+
+    // Waves flowed and minions really did reach the enemy objectives.
+    CHECK(a.event_counts[SIM_EVENT_OBJECTIVE_DAMAGED] > 0u);
+    CHECK(a.event_counts[SIM_EVENT_DEATH] > 0u);
+    CHECK(a.event_counts[SIM_EVENT_ECONOMY] > 0u);
+    CHECK(u32(a.event_counts[SIM_EVENT_OBJECTIVE_DESTROYED]) == 2u);
+    CHECK(u32(a.event_counts[SIM_EVENT_MATCH_OVER]) == 1u);   // exactly once
+    CHECK(world.ledger.gold[0] > 0);
+
+    // Tower first, then core, and MATCH_OVER on the core's own tick, after it.
+    CHECK(u32(a.milestone_count) == 3u);
+    CHECK(u32(a.milestones[0].kind) == u32(SIM_EVENT_OBJECTIVE_DESTROYED));
+    CHECK(u32(a.milestones[0].subject) == first.objective[2].h);   // team 1's tower
+    CHECK(u32(a.milestones[1].kind) == u32(SIM_EVENT_OBJECTIVE_DESTROYED));
+    CHECK(u32(a.milestones[1].subject) == first.objective[3].h);   // team 1's core
+    CHECK(u32(a.milestones[2].kind) == u32(SIM_EVENT_MATCH_OVER));
+    CHECK(a.milestones[0].tick < a.milestones[1].tick);
+    CHECK(a.milestones[2].tick == a.milestones[1].tick);
+    CHECK(a.milestones[2].ordinal > a.milestones[1].ordinal);
+    CHECK(u64(a.milestones[2].tick) == u64(world.match_state.end_tick));
+
+    // The losing objectives are hashed DESTROYED rows, never destroy-deferred; the
+    // winning side's two objectives were never touched.
+    for (uint32_t i = 0u; i < 4u; ++i) {
+        ObjectiveView view{};
+        HealthView health{};
+        CHECK(objective_pool_has(&world.objectives, first.objective[i]));
+        CHECK(objective_pool_get(&world.objectives, first.objective[i], &view));
+        CHECK(health_pool_get(&world.health, first.objective[i], &health));
+        bool loser = i >= 2u;
+        CHECK(u32(*view.state) ==
+              (loser ? u32(SIM_OBJECTIVE_DESTROYED) : u32(SIM_OBJECTIVE_ALIVE)));
+        if (loser) CHECK(*health.current <= 0);
+        else CHECK(*health.current == *health.maximum);
+    }
+
+    // Two fresh runs agree on the whole ordered event stream and on the state.
+    CHECK(a.event_digest != 0u);
+    CHECK(a.event_digest == b.event_digest);
+    CHECK(u32(a.total_events) == u32(b.total_events));
+    CHECK(u32(a.ticks_run) == u32(b.ticks_run));
+    CHECK(u32(a.milestone_count) == u32(b.milestone_count));
+    for (uint32_t i = 0u; i < a.milestone_count; ++i) {
+        CHECK(a.milestones[i].tick == b.milestones[i].tick);
+        CHECK(u32(a.milestones[i].ordinal) == u32(b.milestones[i].ordinal));
+        CHECK(u32(a.milestones[i].kind) == u32(b.milestones[i].kind));
+        CHECK(u32(a.milestones[i].subject) == u32(b.milestones[i].subject));
+    }
+    for (uint32_t kind = 0u; kind < ACCEPT_EVENT_KINDS; ++kind)
+        CHECK(u32(a.event_counts[kind]) == u32(b.event_counts[kind]));
+    CHECK(a.final_hash != 0u);
+    CHECK(a.final_hash == b.final_hash);
+    SimStateDiff diff{};
+    CHECK(!sim_diff_state(&first.world, &second.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_NONE);
+
+    // A decided match keeps ticking, and it keeps hashing the same way on both runs.
+    for (uint32_t i = 0u; i < 20u; ++i) {
+        SimCommandBuffer empty{nullptr, 0u};
+        CHECK(sim_tick(&first.world, &empty));
+        CHECK(sim_tick(&second.world, &empty));
+    }
+    CHECK(sim_hash_state(&first.world) != 0u);
+    CHECK(sim_hash_state(&first.world) != a.final_hash);
+    CHECK(sim_hash_state(&first.world) == sim_hash_state(&second.world));
+    CHECK(u32(world.match_state.winner) == 0u);
+    CHECK(u32(a.event_counts[SIM_EVENT_MATCH_OVER]) == 1u);
+
+    // And it accepts no further intent, whoever sends it. The unit slot is given a
+    // team row only now, after every tick above, so ownership is genuinely satisfied
+    // and MATCH_OVER is the reason the command dies.
+    CHECK(team_pool_add(&world.teams, world.unit_entities[0], 0u));
+    CommandIntakeConfig intake{};
+    intake.tick = static_cast<uint32_t>(world.tick);
+    intake.player_count = 2u;
+    intake.damage_capacity_remaining = 8u;
+    Command move{};
+    move.tick = intake.tick;
+    move.player_id = 0u;
+    move.command_kind = COMMAND_KIND_MOVE;
+    move.sequence = 1u;
+    move.actor = world.unit_entities[0];
+    Command accepted[2]{};
+    CommandReject rejects[2]{};
+    uint32_t accepted_count = 0u;
+    uint32_t reject_count = 0u;
+    CHECK(command_intake_run(&world, intake, &move, 1u, 2u, accepted, &accepted_count,
+                             rejects, &reject_count));
+    CHECK(u32(accepted_count) == 0u);
+    CHECK(u32(reject_count) == 1u);
+    CHECK(rejects[0].reason == COMMAND_REJECT_MATCH_OVER);
+    CHECK(std::strcmp(command_reject_reason_string(COMMAND_REJECT_MATCH_OVER),
+                      "match_over") == 0);
+}
+
+// Item 1. The same match, recorded through the replay v1 codec and played back into a
+// fresh world: the state hash agrees at every 500-tick checkpoint and at the end.
+TEST(sim_lane_objectives, the_recorded_match_replays_to_the_same_hashes) {
+    static AcceptFixture recorded{};
+    static AcceptFixture replayed{};
+    static MatchTrace record_trace{};
+    static MatchTrace replay_trace{};
+    CHECK(build_accept_world(&recorded, g_accept_storage, sizeof(g_accept_storage), false));
+
+    ByteWriter writer;
+    byte_writer_init(&writer, g_replay_bytes, sizeof(g_replay_bytes));
+    ReplayHeader header = replay_header_make(ACCEPT_SEED, ACCEPT_PLAYERS, ACCEPT_TICKS);
+    CHECK(replay_write_header(&writer, &header) == REPLAY_STATUS_OK);
+    CHECK(header.sim_logic_hash == SIM_LOGIC_HASH);
+    CHECK(run_accept_match(&recorded, &record_trace, ACCEPT_TICKS, false, &writer));
+    CHECK(record_trace.failed_ticks == 0u);
+    CHECK(u32(record_trace.ticks_run) == ACCEPT_TICKS);
+    CHECK(u32(record_trace.commands_issued) == 4u);      // the script really is non-trivial
+    CHECK(u32(record_trace.event_counts[SIM_EVENT_MATCH_OVER]) == 1u);
+    size_t recorded_size = byte_writer_size(&writer);
+    CHECK(sz(recorded_size) == REPLAY_HEADER_ENCODED_SIZE +
+                                   ACCEPT_TICKS * REPLAY_TICK_BASE_ENCODED_SIZE +
+                                   4u * REPLAY_COMMAND_ENCODED_SIZE);
+
+    // Playback drives a fresh world from the bytes alone.
+    CHECK(build_accept_world(&replayed, g_accept_storage_b, sizeof(g_accept_storage_b), false));
+    ByteReader reader;
+    byte_reader_init(&reader, g_replay_bytes, recorded_size);
+    ReplayHeader decoded{};
+    CHECK(replay_read_header(&reader, &decoded) == REPLAY_STATUS_OK);
+    CHECK(decoded.seed == ACCEPT_SEED);
+    CHECK(u32(decoded.player_count) == ACCEPT_PLAYERS);
+    CHECK(u64(decoded.tick_count) == u64(ACCEPT_TICKS));
+
+    uint32_t mismatches = 0u;
+    uint32_t compared = 0u;
+    for (uint32_t i = 0u; i < ACCEPT_TICKS; ++i) {
+        SimCommand commands[SIM_MAX_COMMANDS_PER_TICK]{};
+        uint32_t count = 0u;
+        uint64_t expected = 0u;
+        if (replay_read_tick(&reader, decoded.player_count, commands,
+                             SIM_MAX_COMMANDS_PER_TICK, &count, &expected) !=
+            REPLAY_STATUS_OK) {
+            ++mismatches;
+            break;
+        }
+        replay_trace.commands_issued += count;
+        SimCommandBuffer buffer{commands, count};
+        if (!sim_tick(&replayed.world, &buffer)) ++replay_trace.failed_ticks;
+        accept_observe_events(&replayed.world, &replay_trace);
+        if (expected == 0u) continue;
+        ++compared;
+        if (sim_hash_state(&replayed.world) != expected) ++mismatches;
+    }
+    CHECK(replay_require_end(&reader) == REPLAY_STATUS_OK);
+    CHECK(mismatches == 0u);
+    CHECK(u32(compared) == ACCEPT_CHECKPOINTS);          // every 500-tick checkpoint
+    CHECK(replay_trace.failed_ticks == 0u);
+    CHECK(u32(replay_trace.commands_issued) == u32(record_trace.commands_issued));
+    CHECK(replay_trace.event_digest == record_trace.event_digest);
+    CHECK(sim_hash_state(&replayed.world) == record_trace.final_hash);
+    for (uint32_t i = 0u; i < ACCEPT_CHECKPOINTS; ++i) CHECK(record_trace.checkpoints[i] != 0u);
+
+    // A replay whose logic key disagrees is refused before a single tick runs.
+    ByteReader stale;
+    byte_reader_init(&stale, g_replay_bytes, recorded_size);
+    ReplayHeader ignored{};
+    CHECK(replay_read_header(&stale, &ignored) == REPLAY_STATUS_OK);
+    CHECK(u64(SIM_LOGIC_HASH) == 0x5b47e648953a63fcULL);
+}
+
+// Item 3. Event overflow fails the SOURCE operation - the death verdict and the award
+// are each atomic - and nothing is dropped. Draining the queue lets the identical
+// operation proceed. (The wave half of item 3 is
+// a_wave_that_does_not_fit_fails_the_source_operation, above.)
+TEST(sim_lane_objectives, a_full_event_queue_fails_the_death_and_the_award_whole) {
+    LaneFixture fixture{};
+    CHECK(build_installed_world(&fixture, g_lane_storage, sizeof(g_lane_storage), lane_config()));
+    SimWorld& world = fixture.world;
+
+    EntityId west{HANDLE_NULL};
+    EntityId east{HANDLE_NULL};
+    CHECK(sim_spawn_minion(&world, 0u, LANE_SLICE_LANE_ID, 3u, 27u, &west));
+    CHECK(sim_spawn_minion(&world, 1u, LANE_SLICE_LANE_ID, 4u, 28u, &east));
+    CHECK(sys_minion_ai(&world));
+    CHECK(commit_damage(&world));
+    HealthView east_health{};
+    CHECK(health_pool_get(&world.health, east, &east_health));
+    *east_health.current = 0;
+
+    // Fill the write phase to the brim: the one DEATH event has nowhere to go.
+    while (sim_event_queue_write_room(&world.sim_events) > 0u) {
+        SimEvent filler = sim_event_make_heal(world.tick, west, 1);
+        CHECK(sim_event_queue_append(&world.sim_events, &filler));
+    }
+    uint32_t phase = world.sim_events.write_index;
+    uint32_t before = world.sim_events.counts[phase];
+    uint64_t hash_before = sim_hash_state(&world);
+    CHECK(!sys_death(&world));                             // the source operation fails
+    CHECK(u32(world.sim_events.counts[phase]) == u32(before));   // nothing dropped, nothing added
+    CHECK(sim_hash_state(&world) == hash_before);
+    CHECK(u32(world.pending_destroy_count) == 0u);         // and nothing was deferred
+
+    // Draining lets the identical call through.
+    CHECK(sim_event_queue_publish(&world.sim_events));
+    CHECK(sim_event_queue_consume(&world.sim_events));
+    CHECK(sys_death(&world));
+    CHECK(count_write_events(&world, SIM_EVENT_DEATH) == 1u);
+    CHECK(u32(world.pending_destroy_count) == 1u);
+
+    // The award is atomic too: both MINION_KILL rules pay or neither does.
+    while (sim_event_queue_write_room(&world.sim_events) > 1u) {
+        SimEvent filler = sim_event_make_heal(world.tick, west, 1);
+        CHECK(sim_event_queue_append(&world.sim_events, &filler));
+    }
+    CHECK(u32(sim_event_queue_write_room(&world.sim_events)) == 1u);   // room for one of two
+    phase = world.sim_events.write_index;
+    before = world.sim_events.counts[phase];
+    hash_before = sim_hash_state(&world);
+    CHECK(!sys_economy(&world));
+    CHECK(u32(world.sim_events.counts[phase]) == u32(before));
+    CHECK(sim_hash_state(&world) == hash_before);
+    CHECK(world.ledger.gold[0] == 0);                      // no partial award
+    CHECK(world.ledger.xp[0] == 0);
+
+    CHECK(sim_event_queue_publish(&world.sim_events));
+    CHECK(sim_event_queue_consume(&world.sim_events));
+    CHECK(sys_economy(&world));
+    CHECK(world.ledger.gold[0] == 20);
+    CHECK(world.ledger.xp[0] == 15);
+    CHECK(count_write_events(&world, SIM_EVENT_ECONOMY) == 2u);
+}
+
+// Item 4. Configuration changes the ledger; it never changes the RNG. mm::pcg32_next
+// has exactly one call site (sys_rng_advance) and is advanced unconditionally once
+// per tick, so world->rng after N ticks is a function of (seed, N) alone. That is the
+// real rng-drift signal - NOT the oracle stream= field, which is a digest over the
+// canonical state hash and therefore moves with every reviewed hash bump.
+TEST(sim_lane_objectives, an_extra_economy_rule_moves_the_ledger_and_never_the_rng) {
+    static AcceptFixture lean{};
+    static AcceptFixture rich{};
+    static MatchTrace lean_trace{};
+    static MatchTrace rich_trace{};
+    CHECK(build_accept_world(&lean, g_accept_storage, sizeof(g_accept_storage), false));
+    CHECK(build_accept_world(&rich, g_accept_storage_b, sizeof(g_accept_storage_b), true));
+    CHECK(u32(lean.world.match.economy_count) == 4u);
+    CHECK(u32(rich.world.match.economy_count) == 5u);
+    CHECK(lean.arena_offset == rich.arena_offset);        // the same arena, one more rule
+
+    mm::pcg32 expected = lean.world.rng;
+    CHECK(run_accept_match(&lean, &lean_trace, ACCEPT_TICKS, false, nullptr));
+    CHECK(run_accept_match(&rich, &rich_trace, ACCEPT_TICKS, false, nullptr));
+    CHECK(lean_trace.failed_ticks == 0u);
+    CHECK(rich_trace.failed_ticks == 0u);
+    for (uint32_t i = 0u; i < ACCEPT_TICKS; ++i) (void)mm::pcg32_next(&expected);
+
+    // One draw per tick, no more and no fewer, in both worlds.
+    CHECK(lean.world.rng.state == expected.state);
+    CHECK(lean.world.rng.inc == expected.inc);
+    CHECK(rich.world.rng.state == lean.world.rng.state);
+    CHECK(rich.world.rng.inc == lean.world.rng.inc);
+    CHECK(lean.world.tick == rich.world.tick);
+
+    // The extra rule really is load-bearing, so the agreement above is not the
+    // agreement of two identical worlds.
+    CHECK(u32(lean_trace.event_counts[SIM_EVENT_OBJECTIVE_DESTROYED]) == 2u);
+    CHECK(lean.world.ledger.xp[0] != rich.world.ledger.xp[0]);
+    CHECK(rich.world.ledger.xp[0] == lean.world.ledger.xp[0] + 80);   // 40 per objective
+    CHECK(lean.world.ledger.gold[0] == rich.world.ledger.gold[0]);
+    CHECK(lean_trace.final_hash != rich_trace.final_hash);
+    CHECK(lean_trace.event_digest != rich_trace.event_digest);
+    CHECK(u32(rich_trace.event_counts[SIM_EVENT_ECONOMY]) >
+          u32(lean_trace.event_counts[SIM_EVENT_ECONOMY]));
+
+    // And the identical-config pair agrees on everything, checkpoint by checkpoint.
+    static AcceptFixture twin{};
+    static MatchTrace twin_trace{};
+    CHECK(build_accept_world(&twin, g_accept_storage_b, sizeof(g_accept_storage_b), false));
+    CHECK(run_accept_match(&twin, &twin_trace, ACCEPT_TICKS, false, nullptr));
+    CHECK(twin_trace.final_hash == lean_trace.final_hash);
+    CHECK(twin_trace.event_digest == lean_trace.event_digest);
+    for (uint32_t i = 0u; i < ACCEPT_CHECKPOINTS; ++i) {
+        CHECK(lean_trace.checkpoints[i] != 0u);
+        CHECK(twin_trace.checkpoints[i] == lean_trace.checkpoints[i]);
+    }
+}
+
+// Saturation in a live world, not just at the arithmetic seam: a ledger that is
+// already near INT32_MAX takes two real awards, clamps both times, and the clamped
+// world is still a canonical, deterministic one.
+TEST(sim_lane_objectives, a_live_ledger_saturates_and_the_clamped_world_still_hashes) {
+    static AcceptFixture fixture{};
+    static MatchTrace trace{};
+    CHECK(build_accept_world(&fixture, g_accept_storage, sizeof(g_accept_storage), false));
+    SimWorld& world = fixture.world;
+    world.ledger.gold[0] = INT32_MAX - 10;
+    world.ledger.xp[0] = INT32_MAX;
+    CHECK(sim_hash_state(&world) != 0u);
+
+    CHECK(run_accept_match(&fixture, &trace, ACCEPT_MATCH_LIMIT, true, nullptr));
+    CHECK(trace.failed_ticks == 0u);
+    CHECK(u32(world.match_state.over) == 1u);
+    // Two OBJECTIVE_DESTROYED awards of 100 gold each plus every minion kill, all of
+    // them clamped: the total never wraps into a negative, which would be UB on the
+    // way in and a non-canonical world on the way out.
+    CHECK(world.ledger.gold[0] == INT32_MAX);
+    CHECK(world.ledger.xp[0] == INT32_MAX);
+    CHECK(world.ledger.gold[0] > 0);
+    CHECK(world.ledger.xp[0] > 0);
+    CHECK(sim_hash_state(&world) != 0u);
+    CHECK(u32(trace.event_counts[SIM_EVENT_ECONOMY]) > 0u);
+
+    // The saturating seam itself, at the two edges the walk above exercises.
+    CHECK(sim_ledger_add_saturating(INT32_MAX - 10, 10u) == INT32_MAX);
+    CHECK(sim_ledger_add_saturating(INT32_MAX - 10, 11u) == INT32_MAX);
+    CHECK(sim_ledger_add_saturating(INT32_MAX, 1u) == INT32_MAX);
+    CHECK(sim_ledger_add_saturating(0, 0u) == 0);
 }
