@@ -602,7 +602,7 @@ TEST(sim_lane_objectives, the_wave_clock_is_the_authored_lane_clock) {
         CHECK(sim_wave_tick_due(&world) == due);
     }
     world.tick = 0u;
-    CHECK(u64(SIM_LOGIC_HASH) == 0x46e9e287878ba88cULL);
+    CHECK(u64(SIM_LOGIC_HASH) == 0x5b47e648953a63fcULL);
 }
 
 // ------------------------------------------------------------------ S2 waves + FSM
@@ -1069,4 +1069,153 @@ TEST(sim_lane_objectives, ownership_is_by_team_and_a_decided_match_rejects_every
     CHECK(u32(accepted_count) == 0u);
     CHECK(u32(reject_count) == 1u);
     CHECK(rejects[0].reason == COMMAND_REJECT_MATCH_OVER);
+}
+
+// ------------------------------------------------------------------ S4 hash and diff
+
+TEST(sim_lane_objectives, every_new_field_is_load_bearing_in_the_canonical_hash) {
+    LaneFixture a{};
+    LaneFixture b{};
+    CHECK(build_match_world(&a, g_lane_storage, sizeof(g_lane_storage)));
+    CHECK(build_match_world(&b, g_lane_storage_b, sizeof(g_lane_storage_b)));
+    uint64_t base = sim_hash_state(&a.world);
+    CHECK(base != 0u);
+    CHECK(sim_hash_state(&b.world) == base);
+    SimStateDiff diff{};
+    CHECK(!sim_diff_state(&a.world, &b.world, &diff));
+
+    ComponentPoolOrderedView ordered{};
+    CHECK(component_pool_ordered_view(&a.world.objectives.membership, &ordered));
+    EntityId tower = ordered.entities[0];
+
+    // last_damage_source is hashed INSIDE the Health block, so it diffs there.
+    HealthView health{};
+    CHECK(health_pool_get(&a.world.health, tower, &health));
+    *health.last_damage_source = tower;
+    CHECK(sim_hash_state(&a.world) != base);
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_HEALTH_LAST_DAMAGE_SOURCE);
+    *health.last_damage_source = EntityId{HANDLE_NULL};
+    CHECK(sim_hash_state(&a.world) == base);
+
+    // The match def diffs per record, after the SimEvent block.
+    SimMatchDef tweaked = fixture_match_def();
+    tweaked.economy[0].award_amount = 21u;
+    CHECK(sim_install_match_def(&b.world, &tweaked));
+    CHECK(sim_hash_state(&b.world) != base);
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_MATCH_ECONOMY_RECORD);
+    CHECK(u32(diff.index) == 0u);
+    SimMatchDef restored = fixture_match_def();
+    CHECK(sim_install_match_def(&b.world, &restored));
+    CHECK(sim_hash_state(&b.world) == base);
+
+    TeamView team{};
+    CHECK(team_pool_get(&a.world.teams, tower, &team));
+    uint8_t saved_team = *team.team;
+    *team.team = SIM_TEAM_NONE;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_TEAM_SIDE);
+    *team.team = saved_team;
+
+    ObjectiveView objective{};
+    CHECK(objective_pool_get(&a.world.objectives, tower, &objective));
+    *objective.attack_cooldown = 7u;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_OBJECTIVE_ATTACK_COOLDOWN);
+    *objective.attack_cooldown = 0u;
+    *objective.state = SIM_OBJECTIVE_DESTROYED;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_OBJECTIVE_STATE);
+    *objective.state = SIM_OBJECTIVE_ALIVE;
+
+    a.world.ledger.gold[1] = 9;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_LEDGER_GOLD);
+    CHECK(u32(diff.index) == 1u);
+    a.world.ledger.gold[1] = 0;
+    a.world.ledger.xp[0] = 4;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_LEDGER_XP);
+    a.world.ledger.xp[0] = 0;
+
+    a.world.match_state.over = 1u;
+    a.world.match_state.winner = 1u;
+    a.world.match_state.end_tick = 3u;
+    CHECK(sim_diff_state(&a.world, &b.world, &diff));
+    CHECK(diff.field == SIM_STATE_FIELD_MATCH_STATE_OVER);
+    a.world.match_state = sim_match_state_initial();
+    CHECK(sim_hash_state(&a.world) == base);
+
+    // A minion row is canonical state too.
+    EntityId minion{HANDLE_NULL};
+    CHECK(sim_spawn_minion(&a.world, 0u, LANE_SLICE_LANE_ID, 0u, 24u, &minion));
+    CHECK(sim_hash_state(&a.world) != base);
+    MinionView view{};
+    CHECK(minion_pool_get(&a.world.minions, minion, &view));
+    uint64_t with_minion = sim_hash_state(&a.world);
+    *view.state = SIM_MINION_ATTACK;
+    CHECK(sim_hash_state(&a.world) != with_minion);
+}
+
+TEST(sim_lane_objectives, a_row_that_disagrees_with_its_def_is_not_a_canonical_world) {
+    LaneFixture fixture{};
+    CHECK(build_match_world(&fixture, g_lane_storage, sizeof(g_lane_storage)));
+    SimWorld& world = fixture.world;
+    CHECK(sim_hash_state(&world) != 0u);
+
+    ComponentPoolOrderedView ordered{};
+    CHECK(component_pool_ordered_view(&world.objectives.membership, &ordered));
+    ObjectiveView objective{};
+    CHECK(objective_pool_get(&world.objectives, ordered.entities[0], &objective));
+
+    uint8_t saved_kind = *objective.kind;
+    *objective.kind = SIM_OBJECTIVE_CORE;                 // the def says TOWER
+    CHECK(sim_hash_state(&world) == 0u);
+    *objective.kind = saved_kind;
+    CHECK(sim_hash_state(&world) != 0u);
+
+    uint16_t saved_index = *objective.def_index;
+    *objective.def_index = 9u;                            // past objective_count
+    CHECK(sim_hash_state(&world) == 0u);
+    *objective.def_index = saved_index;
+
+    // A verdict that contradicts itself is not canonical either.
+    world.match_state.winner = 1u;                        // over is still 0
+    CHECK(sim_hash_state(&world) == 0u);
+    world.match_state = sim_match_state_initial();
+    CHECK(sim_hash_state(&world) != 0u);
+
+    world.ledger.gold[0] = -1;
+    CHECK(sim_hash_state(&world) == 0u);
+    world.ledger.gold[0] = 0;
+
+    // And an installed def that no longer matches the map fails the whole world.
+    world.match.teams[0].tower_cell = 0u;
+    CHECK(sim_hash_state(&world) == 0u);
+    world.match.teams[0].tower_cell = LANE_SLICE_TOWER_CELL[0];
+    CHECK(sim_hash_state(&world) != 0u);
+}
+
+TEST(sim_lane_objectives, every_new_state_field_has_a_name_and_the_logic_key_moved_once) {
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_HEALTH_LAST_DAMAGE_SOURCE),
+                      "health_last_damage_source") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_MATCH_TEAM_COUNT),
+                      "match_team_count") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_MATCH_ECONOMY_RECORD),
+                      "match_economy_record") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_TEAM_SIDE), "team_side") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_MINION_WAYPOINT_INDEX),
+                      "minion_waypoint_index") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_OBJECTIVE_STATE),
+                      "objective_state") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_LEDGER_GOLD), "ledger_gold") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_MATCH_STATE_END_TICK),
+                      "match_state_end_tick") == 0);
+    // Every earlier block still reports the same names, so old divergence reports
+    // read exactly as they did before the append.
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_SIM_EVENT_WRITE_PAYLOAD),
+                      "sim_event_write_payload") == 0);
+    CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_POSITION_X), "position_x") == 0);
+    CHECK(u64(SIM_LOGIC_HASH) == 0x5b47e648953a63fcULL);
 }

@@ -23,7 +23,7 @@ RTS-class game engine.
 > unit slots, derived ascending-entity query caches, phase-buffered typed damage events, a literal
 > plain-function schedule, deferred boundary destruction, canonical ECS state hashing/diffing, and the
 > `moba_replay` record/inspect/verify CLI. Its 10,000-tick self-check is bit-identical in Debug and
-> Release at `0xac06a80d7f71b503`, and the mutation proof reports exactly
+> Release at `0x36e6de56cb662dba`, and the mutation proof reports exactly
 > `tick=4321 field=position_x entity=7`.
 > M3.3 adds a platform-owned fixed-step accumulator, fresh same-tick commands for every owed tick,
 > and arena-backed previous/current presentation snapshots. `eng_game` is the sole interpolation and

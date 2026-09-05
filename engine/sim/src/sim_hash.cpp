@@ -133,6 +133,48 @@ static bool damage_queue_valid_for_world(const SimWorld* world) {
     return true;
 }
 
+// M5.3 structural agreement: the installed match matches the map, every stored team
+// byte is in range, every minion names a lane waypoint that exists, every objective
+// row agrees with the def it names, the verdict is self-consistent, and no ledger is
+// negative. Duplication between a row and its def can therefore never drift.
+static bool match_state_valid(const SimWorld* world) {
+    if (!sim_match_def_valid_against_map(&world->match, &world->map)) return false;
+    if (world->match_state.reserved != 0u) return false;
+    if (world->match_state.over > 1u) return false;
+    if (world->match_state.over == 0u) {
+        if (world->match_state.winner != SIM_TEAM_NONE || world->match_state.end_tick != 0u)
+            return false;
+    } else if (world->match_state.winner >= world->match.team_count) {
+        return false;
+    }
+    for (uint32_t team = 0u; team < SIM_MAX_TEAMS; ++team) {
+        if (world->ledger.gold[team] < 0 || world->ledger.xp[team] < 0) return false;
+    }
+
+    for (uint32_t dense = 0u; dense < world->teams.membership.count; ++dense) {
+        uint8_t team = world->teams.team[dense];
+        if (team >= SIM_MAX_TEAMS && team != SIM_TEAM_NONE) return false;
+    }
+    for (uint32_t dense = 0u; dense < world->minions.membership.count; ++dense) {
+        if (world->minions.state[dense] > SIM_MINION_RETURN) return false;
+        const MapLane* lane = nullptr;
+        for (uint16_t index = 0u; index < world->map.lane_count; ++index) {
+            if (world->map.lanes[index].lane_id == world->minions.lane[dense])
+                lane = &world->map.lanes[index];
+        }
+        if (!lane || world->minions.waypoint_index[dense] >= lane->waypoint_count) return false;
+    }
+    for (uint32_t dense = 0u; dense < world->objectives.membership.count; ++dense) {
+        uint16_t def_index = world->objectives.def_index[dense];
+        if (def_index >= world->match.objective_count) return false;
+        const SimObjectiveDef& def = world->match.objectives[def_index];
+        if (world->objectives.owner_team[dense] != def.owner_team) return false;
+        if (world->objectives.kind[dense] != def.kind) return false;
+        if (world->objectives.state[dense] > SIM_OBJECTIVE_DESTROYED) return false;
+    }
+    return true;
+}
+
 static bool canonical_world_valid(const SimWorld* world) {
     if (!world || !config_valid(world->config) ||
         !entity_manager_valid(&world->entities, world->config.max_entities) ||
@@ -156,7 +198,16 @@ static bool canonical_world_valid(const SimWorld* world) {
                                    world->config.projectile_capacity) ||
         !optional_membership_valid(&world->statuses.membership, &world->entities,
                                    world->config.max_entities, world->config.status_capacity) ||
-        !sim_event_queue_valid_for_world(world))
+        !sim_event_queue_valid_for_world(world) ||
+        !world->health.last_damage_source ||
+        !optional_membership_valid(&world->teams.membership, &world->entities,
+                                   world->config.max_entities, world->config.team_capacity) ||
+        !optional_membership_valid(&world->minions.membership, &world->entities,
+                                   world->config.max_entities, world->config.minion_capacity) ||
+        !optional_membership_valid(&world->objectives.membership, &world->entities,
+                                   world->config.max_entities,
+                                   world->config.objective_capacity) ||
+        !match_state_valid(world))
         return false;
 
     // Every hero row must name an installed def, and every projectile must name a
@@ -234,6 +285,8 @@ static uint64_t hash_health(uint64_t hash, const SimWorld* world) {
         hash = hash_u32_le(hash, i32_bits(world->health.current[dense]));
         hash = hash_u32_le(hash, i32_bits(world->health.maximum[dense]));
         hash = hash_u32_le(hash, world->health.damage_cooldown[dense]);
+        // M5.3 kill credit is a Health field, so it is hashed inside this block.
+        hash = hash_u32_le(hash, world->health.last_damage_source[dense].h);
     }
     return hash;
 }
@@ -412,6 +465,122 @@ static uint64_t hash_sim_events(uint64_t hash, const SimWorld* world) {
     return hash;
 }
 
+// ------------------------------------------------------------------ M5.3 lane objectives
+
+// Explicit fields only, never the struct image, and never a trailing unused slot:
+// the canonical hash must not read a byte the compiler chose.
+static uint64_t hash_minion_def(uint64_t hash, const SimMinionDef& creep) {
+    hash = hash_u64_le(hash, creep.archetype_id);
+    hash = hash_u32_le(hash, i32_bits(creep.max_health));
+    hash = hash_u32_le(hash, i32_bits(creep.move_speed));
+    hash = hash_u32_le(hash, i32_bits(creep.attack_range));
+    hash = hash_u32_le(hash, i32_bits(creep.attack_magnitude));
+    return hash_u16_le(hash, creep.attack_cooldown_ticks);
+}
+
+static uint64_t hash_team_def(uint64_t hash, const SimTeamDef& team) {
+    hash = hash_u8(hash, team.team_id);
+    hash = hash_u8(hash, team.lane_id);
+    hash = hash_u16_le(hash, team.spawn_ordinal);
+    hash = hash_u16_le(hash, team.tower_objective_index);
+    hash = hash_u16_le(hash, team.core_objective_index);
+    hash = hash_u32_le(hash, team.tower_cell);
+    hash = hash_u32_le(hash, team.core_cell);
+    return hash_u8(hash, team.waypoint_reverse);
+}
+
+static uint64_t hash_objective_def(uint64_t hash, const SimObjectiveDef& def) {
+    hash = hash_u64_le(hash, def.objective_id);
+    hash = hash_u8(hash, def.owner_team);
+    hash = hash_u8(hash, def.kind);
+    hash = hash_u32_le(hash, i32_bits(def.max_health));
+    hash = hash_u32_le(hash, i32_bits(def.armor));
+    return hash_u8(hash, def.target_policy);
+}
+
+static uint64_t hash_economy_rule(uint64_t hash, const SimEconomyRule& rule) {
+    hash = hash_u8(hash, rule.award_kind);
+    hash = hash_u8(hash, rule.source_kind);
+    return hash_u32_le(hash, rule.award_amount);
+}
+
+static uint64_t hash_match_def(uint64_t hash, const SimWorld* world) {
+    const SimMatchDef& match = world->match;
+    hash = hash_u16_le(hash, match.team_count);
+    hash = hash_u16_le(hash, match.objective_count);
+    hash = hash_u16_le(hash, match.economy_count);
+    hash = hash_u16_le(hash, match.minions_per_wave);
+    hash = hash_minion_def(hash, match.creep);
+    for (uint16_t i = 0u; i < match.team_count; ++i)
+        hash = hash_team_def(hash, match.teams[i]);
+    for (uint16_t i = 0u; i < match.objective_count; ++i)
+        hash = hash_objective_def(hash, match.objectives[i]);
+    for (uint16_t i = 0u; i < match.economy_count; ++i)
+        hash = hash_economy_rule(hash, match.economy[i]);
+    return hash;
+}
+
+static uint64_t hash_teams(uint64_t hash, const SimWorld* world) {
+    hash = hash_u32_le(hash, world->teams.membership.count);
+    for (uint32_t index = 0u; index < world->entities.next_fresh; ++index) {
+        EntityId entity = entity_at(&world->entities, index);
+        bool present = team_pool_has(&world->teams, entity);
+        hash = hash_u8(hash, present ? 1u : 0u);
+        if (!present) continue;
+        uint32_t dense = component_pool_dense_index(&world->teams.membership, entity);
+        hash = hash_u32_le(hash, entity.h);
+        hash = hash_u8(hash, world->teams.team[dense]);
+    }
+    return hash;
+}
+
+static uint64_t hash_minions(uint64_t hash, const SimWorld* world) {
+    hash = hash_u32_le(hash, world->minions.membership.count);
+    for (uint32_t index = 0u; index < world->entities.next_fresh; ++index) {
+        EntityId entity = entity_at(&world->entities, index);
+        bool present = minion_pool_has(&world->minions, entity);
+        hash = hash_u8(hash, present ? 1u : 0u);
+        if (!present) continue;
+        uint32_t dense = component_pool_dense_index(&world->minions.membership, entity);
+        hash = hash_u32_le(hash, entity.h);
+        hash = hash_u8(hash, world->minions.lane[dense]);
+        hash = hash_u8(hash, world->minions.waypoint_index[dense]);
+        hash = hash_u8(hash, world->minions.state[dense]);
+        hash = hash_u32_le(hash, world->minions.target[dense].h);
+        hash = hash_u32_le(hash, world->minions.attack_cooldown[dense]);
+    }
+    return hash;
+}
+
+static uint64_t hash_objectives(uint64_t hash, const SimWorld* world) {
+    hash = hash_u32_le(hash, world->objectives.membership.count);
+    for (uint32_t index = 0u; index < world->entities.next_fresh; ++index) {
+        EntityId entity = entity_at(&world->entities, index);
+        bool present = objective_pool_has(&world->objectives, entity);
+        hash = hash_u8(hash, present ? 1u : 0u);
+        if (!present) continue;
+        uint32_t dense = component_pool_dense_index(&world->objectives.membership, entity);
+        hash = hash_u32_le(hash, entity.h);
+        hash = hash_u16_le(hash, world->objectives.def_index[dense]);
+        hash = hash_u8(hash, world->objectives.owner_team[dense]);
+        hash = hash_u8(hash, world->objectives.kind[dense]);
+        hash = hash_u32_le(hash, world->objectives.attack_cooldown[dense]);
+        hash = hash_u8(hash, world->objectives.state[dense]);
+    }
+    return hash;
+}
+
+// reserved is not hashed: validity already pins it to zero.
+static uint64_t hash_ledger_and_verdict(uint64_t hash, const SimWorld* world) {
+    for (uint32_t team = 0u; team < SIM_MAX_TEAMS; ++team)
+        hash = hash_u32_le(hash, i32_bits(world->ledger.gold[team]));
+    for (uint32_t team = 0u; team < SIM_MAX_TEAMS; ++team)
+        hash = hash_u32_le(hash, i32_bits(world->ledger.xp[team]));
+    hash = hash_u8(hash, world->match_state.over);
+    hash = hash_u8(hash, world->match_state.winner);
+    return hash_u32_le(hash, world->match_state.end_tick);
+}
+
 uint64_t sim_hash_state(const SimWorld* world) {
     if (!canonical_world_valid(world)) return 0u;
 
@@ -451,7 +620,13 @@ uint64_t sim_hash_state(const SimWorld* world) {
     hash = hash_heroes(hash, world);
     hash = hash_projectiles(hash, world);
     hash = hash_statuses(hash, world);
-    return hash_sim_events(hash, world);
+    hash = hash_sim_events(hash, world);
+
+    hash = hash_match_def(hash, world);
+    hash = hash_teams(hash, world);
+    hash = hash_minions(hash, world);
+    hash = hash_objectives(hash, world);
+    return hash_ledger_and_verdict(hash, world);
 }
 
 static void set_diff(SimStateDiff* diff, SimStateField field, uint32_t index,
@@ -645,6 +820,13 @@ static bool diff_health(const SimWorld* expected, const SimWorld* actual,
         if (expected->health.damage_cooldown[ed] != actual->health.damage_cooldown[ad]) {
             set_diff(out_diff, SIM_STATE_FIELD_DAMAGE_COOLDOWN, index,
                      expected->health.damage_cooldown[ed], actual->health.damage_cooldown[ad]);
+            return true;
+        }
+        if (expected->health.last_damage_source[ed].h !=
+            actual->health.last_damage_source[ad].h) {
+            set_diff(out_diff, SIM_STATE_FIELD_HEALTH_LAST_DAMAGE_SOURCE, index,
+                     expected->health.last_damage_source[ed].h,
+                     actual->health.last_damage_source[ad].h);
             return true;
         }
     }
@@ -909,6 +1091,163 @@ static bool diff_sim_events(const SimWorld* expected, const SimWorld* actual,
                                 SIM_STATE_FIELD_SIM_EVENT_WRITE_PAYLOAD, out_diff);
 }
 
+// The M5.3 block walks the identical order sim_hash_state does. The match def is
+// installed whole and immutable while ticking, so it diffs per record.
+static bool diff_match_def(const SimWorld* expected, const SimWorld* actual,
+                           SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->match.team_count, actual->match.team_count,
+                SIM_STATE_FIELD_MATCH_TEAM_COUNT);
+    DIFF_SCALAR(expected->match.objective_count, actual->match.objective_count,
+                SIM_STATE_FIELD_MATCH_OBJECTIVE_COUNT);
+    DIFF_SCALAR(expected->match.economy_count, actual->match.economy_count,
+                SIM_STATE_FIELD_MATCH_ECONOMY_COUNT);
+    DIFF_SCALAR(expected->match.minions_per_wave, actual->match.minions_per_wave,
+                SIM_STATE_FIELD_MATCH_MINIONS_PER_WAVE);
+    {
+        uint64_t e = hash_minion_def(FNV1A64_OFFSET, expected->match.creep);
+        uint64_t a = hash_minion_def(FNV1A64_OFFSET, actual->match.creep);
+        DIFF_SCALAR(e, a, SIM_STATE_FIELD_MATCH_CREEP_RECORD);
+    }
+    for (uint16_t i = 0u; i < expected->match.team_count; ++i) {
+        uint64_t e = hash_team_def(FNV1A64_OFFSET, expected->match.teams[i]);
+        uint64_t a = hash_team_def(FNV1A64_OFFSET, actual->match.teams[i]);
+        if (e != a) {
+            set_diff(out_diff, SIM_STATE_FIELD_MATCH_TEAM_RECORD, i, e, a);
+            return true;
+        }
+    }
+    for (uint16_t i = 0u; i < expected->match.objective_count; ++i) {
+        uint64_t e = hash_objective_def(FNV1A64_OFFSET, expected->match.objectives[i]);
+        uint64_t a = hash_objective_def(FNV1A64_OFFSET, actual->match.objectives[i]);
+        if (e != a) {
+            set_diff(out_diff, SIM_STATE_FIELD_MATCH_OBJECTIVE_RECORD, i, e, a);
+            return true;
+        }
+    }
+    for (uint16_t i = 0u; i < expected->match.economy_count; ++i) {
+        uint64_t e = hash_economy_rule(FNV1A64_OFFSET, expected->match.economy[i]);
+        uint64_t a = hash_economy_rule(FNV1A64_OFFSET, actual->match.economy[i]);
+        if (e != a) {
+            set_diff(out_diff, SIM_STATE_FIELD_MATCH_ECONOMY_RECORD, i, e, a);
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool diff_teams(const SimWorld* expected, const SimWorld* actual,
+                       SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->teams.membership.count, actual->teams.membership.count,
+                SIM_STATE_FIELD_TEAM_COUNT);
+    for (uint32_t index = 0u; index < expected->entities.next_fresh; ++index) {
+        EntityId ee = entity_at(&expected->entities, index);
+        EntityId ae = entity_at(&actual->entities, index);
+        bool ep = team_pool_has(&expected->teams, ee);
+        bool ap = team_pool_has(&actual->teams, ae);
+        if (ep != ap || (ep && ee.h != ae.h)) {
+            set_diff(out_diff, SIM_STATE_FIELD_TEAM_ENTITY, index, ep ? ee.h : 0u,
+                     ap ? ae.h : 0u);
+            return true;
+        }
+        if (!ep) continue;
+        uint32_t ed = component_pool_dense_index(&expected->teams.membership, ee);
+        uint32_t ad = component_pool_dense_index(&actual->teams.membership, ae);
+        DIFF_POOL_FIELD(expected->teams.team[ed], actual->teams.team[ad],
+                        SIM_STATE_FIELD_TEAM_SIDE);
+    }
+    return false;
+}
+
+static bool diff_minions(const SimWorld* expected, const SimWorld* actual,
+                         SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->minions.membership.count, actual->minions.membership.count,
+                SIM_STATE_FIELD_MINION_COUNT);
+    for (uint32_t index = 0u; index < expected->entities.next_fresh; ++index) {
+        EntityId ee = entity_at(&expected->entities, index);
+        EntityId ae = entity_at(&actual->entities, index);
+        bool ep = minion_pool_has(&expected->minions, ee);
+        bool ap = minion_pool_has(&actual->minions, ae);
+        if (ep != ap || (ep && ee.h != ae.h)) {
+            set_diff(out_diff, SIM_STATE_FIELD_MINION_ENTITY, index, ep ? ee.h : 0u,
+                     ap ? ae.h : 0u);
+            return true;
+        }
+        if (!ep) continue;
+        uint32_t ed = component_pool_dense_index(&expected->minions.membership, ee);
+        uint32_t ad = component_pool_dense_index(&actual->minions.membership, ae);
+        DIFF_POOL_FIELD(expected->minions.lane[ed], actual->minions.lane[ad],
+                        SIM_STATE_FIELD_MINION_LANE);
+        DIFF_POOL_FIELD(expected->minions.waypoint_index[ed],
+                        actual->minions.waypoint_index[ad],
+                        SIM_STATE_FIELD_MINION_WAYPOINT_INDEX);
+        DIFF_POOL_FIELD(expected->minions.state[ed], actual->minions.state[ad],
+                        SIM_STATE_FIELD_MINION_STATE);
+        DIFF_POOL_FIELD(expected->minions.target[ed].h, actual->minions.target[ad].h,
+                        SIM_STATE_FIELD_MINION_TARGET);
+        DIFF_POOL_FIELD(expected->minions.attack_cooldown[ed],
+                        actual->minions.attack_cooldown[ad],
+                        SIM_STATE_FIELD_MINION_ATTACK_COOLDOWN);
+    }
+    return false;
+}
+
+static bool diff_objectives(const SimWorld* expected, const SimWorld* actual,
+                            SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->objectives.membership.count, actual->objectives.membership.count,
+                SIM_STATE_FIELD_OBJECTIVE_COUNT);
+    for (uint32_t index = 0u; index < expected->entities.next_fresh; ++index) {
+        EntityId ee = entity_at(&expected->entities, index);
+        EntityId ae = entity_at(&actual->entities, index);
+        bool ep = objective_pool_has(&expected->objectives, ee);
+        bool ap = objective_pool_has(&actual->objectives, ae);
+        if (ep != ap || (ep && ee.h != ae.h)) {
+            set_diff(out_diff, SIM_STATE_FIELD_OBJECTIVE_ENTITY, index, ep ? ee.h : 0u,
+                     ap ? ae.h : 0u);
+            return true;
+        }
+        if (!ep) continue;
+        uint32_t ed = component_pool_dense_index(&expected->objectives.membership, ee);
+        uint32_t ad = component_pool_dense_index(&actual->objectives.membership, ae);
+        DIFF_POOL_FIELD(expected->objectives.def_index[ed], actual->objectives.def_index[ad],
+                        SIM_STATE_FIELD_OBJECTIVE_DEF_INDEX);
+        DIFF_POOL_FIELD(expected->objectives.owner_team[ed], actual->objectives.owner_team[ad],
+                        SIM_STATE_FIELD_OBJECTIVE_OWNER_TEAM);
+        DIFF_POOL_FIELD(expected->objectives.kind[ed], actual->objectives.kind[ad],
+                        SIM_STATE_FIELD_OBJECTIVE_KIND);
+        DIFF_POOL_FIELD(expected->objectives.attack_cooldown[ed],
+                        actual->objectives.attack_cooldown[ad],
+                        SIM_STATE_FIELD_OBJECTIVE_ATTACK_COOLDOWN);
+        DIFF_POOL_FIELD(expected->objectives.state[ed], actual->objectives.state[ad],
+                        SIM_STATE_FIELD_OBJECTIVE_STATE);
+    }
+    return false;
+}
+
+static bool diff_ledger_and_verdict(const SimWorld* expected, const SimWorld* actual,
+                                    SimStateDiff* out_diff) {
+    for (uint32_t team = 0u; team < SIM_MAX_TEAMS; ++team) {
+        if (expected->ledger.gold[team] != actual->ledger.gold[team]) {
+            set_diff(out_diff, SIM_STATE_FIELD_LEDGER_GOLD, team,
+                     i32_bits(expected->ledger.gold[team]), i32_bits(actual->ledger.gold[team]));
+            return true;
+        }
+    }
+    for (uint32_t team = 0u; team < SIM_MAX_TEAMS; ++team) {
+        if (expected->ledger.xp[team] != actual->ledger.xp[team]) {
+            set_diff(out_diff, SIM_STATE_FIELD_LEDGER_XP, team,
+                     i32_bits(expected->ledger.xp[team]), i32_bits(actual->ledger.xp[team]));
+            return true;
+        }
+    }
+    DIFF_SCALAR(expected->match_state.over, actual->match_state.over,
+                SIM_STATE_FIELD_MATCH_STATE_OVER);
+    DIFF_SCALAR(expected->match_state.winner, actual->match_state.winner,
+                SIM_STATE_FIELD_MATCH_STATE_WINNER);
+    DIFF_SCALAR(expected->match_state.end_tick, actual->match_state.end_tick,
+                SIM_STATE_FIELD_MATCH_STATE_END_TICK);
+    return false;
+}
+
 bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDiff* out_diff) {
     if (!out_diff) return false;
     set_diff(out_diff, SIM_STATE_FIELD_NONE, SIM_STATE_DIFF_NO_INDEX, 0u, 0u);
@@ -983,7 +1322,12 @@ bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDi
         diff_heroes(expected, actual, out_diff) ||
         diff_projectiles(expected, actual, out_diff) ||
         diff_statuses(expected, actual, out_diff) ||
-        diff_sim_events(expected, actual, out_diff)) return true;
+        diff_sim_events(expected, actual, out_diff) ||
+        diff_match_def(expected, actual, out_diff) ||
+        diff_teams(expected, actual, out_diff) ||
+        diff_minions(expected, actual, out_diff) ||
+        diff_objectives(expected, actual, out_diff) ||
+        diff_ledger_and_verdict(expected, actual, out_diff)) return true;
     return false;
 }
 
@@ -1085,6 +1429,37 @@ const char* sim_state_field_name(SimStateField field) {
         case SIM_STATE_FIELD_SIM_EVENT_WRITE_TICK: return "sim_event_write_tick";
         case SIM_STATE_FIELD_SIM_EVENT_WRITE_KIND: return "sim_event_write_kind";
         case SIM_STATE_FIELD_SIM_EVENT_WRITE_PAYLOAD: return "sim_event_write_payload";
+        case SIM_STATE_FIELD_HEALTH_LAST_DAMAGE_SOURCE: return "health_last_damage_source";
+        case SIM_STATE_FIELD_MATCH_TEAM_COUNT: return "match_team_count";
+        case SIM_STATE_FIELD_MATCH_OBJECTIVE_COUNT: return "match_objective_count";
+        case SIM_STATE_FIELD_MATCH_ECONOMY_COUNT: return "match_economy_count";
+        case SIM_STATE_FIELD_MATCH_MINIONS_PER_WAVE: return "match_minions_per_wave";
+        case SIM_STATE_FIELD_MATCH_CREEP_RECORD: return "match_creep_record";
+        case SIM_STATE_FIELD_MATCH_TEAM_RECORD: return "match_team_record";
+        case SIM_STATE_FIELD_MATCH_OBJECTIVE_RECORD: return "match_objective_record";
+        case SIM_STATE_FIELD_MATCH_ECONOMY_RECORD: return "match_economy_record";
+        case SIM_STATE_FIELD_TEAM_COUNT: return "team_count";
+        case SIM_STATE_FIELD_TEAM_ENTITY: return "team_entity";
+        case SIM_STATE_FIELD_TEAM_SIDE: return "team_side";
+        case SIM_STATE_FIELD_MINION_COUNT: return "minion_count";
+        case SIM_STATE_FIELD_MINION_ENTITY: return "minion_entity";
+        case SIM_STATE_FIELD_MINION_LANE: return "minion_lane";
+        case SIM_STATE_FIELD_MINION_WAYPOINT_INDEX: return "minion_waypoint_index";
+        case SIM_STATE_FIELD_MINION_STATE: return "minion_state";
+        case SIM_STATE_FIELD_MINION_TARGET: return "minion_target";
+        case SIM_STATE_FIELD_MINION_ATTACK_COOLDOWN: return "minion_attack_cooldown";
+        case SIM_STATE_FIELD_OBJECTIVE_COUNT: return "objective_count";
+        case SIM_STATE_FIELD_OBJECTIVE_ENTITY: return "objective_entity";
+        case SIM_STATE_FIELD_OBJECTIVE_DEF_INDEX: return "objective_def_index";
+        case SIM_STATE_FIELD_OBJECTIVE_OWNER_TEAM: return "objective_owner_team";
+        case SIM_STATE_FIELD_OBJECTIVE_KIND: return "objective_kind";
+        case SIM_STATE_FIELD_OBJECTIVE_ATTACK_COOLDOWN: return "objective_attack_cooldown";
+        case SIM_STATE_FIELD_OBJECTIVE_STATE: return "objective_state";
+        case SIM_STATE_FIELD_LEDGER_GOLD: return "ledger_gold";
+        case SIM_STATE_FIELD_LEDGER_XP: return "ledger_xp";
+        case SIM_STATE_FIELD_MATCH_STATE_OVER: return "match_state_over";
+        case SIM_STATE_FIELD_MATCH_STATE_WINNER: return "match_state_winner";
+        case SIM_STATE_FIELD_MATCH_STATE_END_TICK: return "match_state_end_tick";
         default: return "invalid";
     }
 }

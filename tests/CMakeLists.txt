@@ -147,7 +147,7 @@ if(MOBA_UBSAN)
         COMMAND sim_oracle_probe --sim-self-check)
     set_tests_properties(sim_ubsan_oracle PROPERTIES
         PASS_REGULAR_EXPRESSION
-            "sim_oracle ticks=10000 commands=923 final=0xac06a80d7f71b503 stream=0x4209159b82890bcb logic=0x46e9e287878ba88c")
+            "sim_oracle ticks=10000 commands=923 final=0x36e6de56cb662dba stream=0xb6067f3f0955b292 logic=0x5b47e648953a63fc")
     add_test(NAME sim_ubsan_tripwire
         COMMAND ${CMAKE_COMMAND}
                 -DTRIPWIRE_EXE=$<TARGET_FILE:sim_ubsan_tripwire>
@@ -221,7 +221,7 @@ add_test(NAME replay_inspect
     COMMAND $<TARGET_FILE:moba_replay> inspect "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_inspect PROPERTIES
     FIXTURES_REQUIRED replay_file
-    PASS_REGULAR_EXPRESSION "logic_hash=0x46e9e287878ba88c")
+    PASS_REGULAR_EXPRESSION "logic_hash=0x5b47e648953a63fc")
 
 add_test(NAME replay_verify
     COMMAND $<TARGET_FILE:moba_replay> verify "${REPLAY_FIXTURE_FILE}")

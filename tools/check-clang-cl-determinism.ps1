@@ -129,7 +129,7 @@ if ($LASTEXITCODE -ne 0) { Fail "clang-cl oracle exited $LASTEXITCODE" }
 $oracle = [System.IO.File]::ReadAllText(
     $probeLog, [System.Text.Encoding]::UTF8).Trim()
 $expected =
-    'sim_oracle ticks=10000 commands=923 final=0xac06a80d7f71b503 stream=0x4209159b82890bcb logic=0x46e9e287878ba88c'
+    'sim_oracle ticks=10000 commands=923 final=0x36e6de56cb662dba stream=0xb6067f3f0955b292 logic=0x5b47e648953a63fc'
 if ($oracle -ne $expected) { Fail "unexpected oracle output: $oracle" }
 Write-Output $oracle
 

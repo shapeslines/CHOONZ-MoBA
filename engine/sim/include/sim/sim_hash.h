@@ -104,6 +104,43 @@ typedef enum SimStateField : uint8_t {
     SIM_STATE_FIELD_SIM_EVENT_WRITE_TICK,
     SIM_STATE_FIELD_SIM_EVENT_WRITE_KIND,
     SIM_STATE_FIELD_SIM_EVENT_WRITE_PAYLOAD,
+    // M5.3 lane-objective block, appended after the SimEvent block for the same
+    // reason every earlier block was appended: every existing first-divergence
+    // report keeps its meaning. SIM_STATE_FIELD_HEALTH_LAST_DAMAGE_SOURCE is the one
+    // exception to "enum order is hash order" - it is hashed INSIDE the Health block
+    // because it is a Health field, but its enum position is appended here. Enum
+    // position is an ABI-ish detail; hash position is the contract.
+    SIM_STATE_FIELD_HEALTH_LAST_DAMAGE_SOURCE,
+    SIM_STATE_FIELD_MATCH_TEAM_COUNT,
+    SIM_STATE_FIELD_MATCH_OBJECTIVE_COUNT,
+    SIM_STATE_FIELD_MATCH_ECONOMY_COUNT,
+    SIM_STATE_FIELD_MATCH_MINIONS_PER_WAVE,
+    SIM_STATE_FIELD_MATCH_CREEP_RECORD,
+    SIM_STATE_FIELD_MATCH_TEAM_RECORD,
+    SIM_STATE_FIELD_MATCH_OBJECTIVE_RECORD,
+    SIM_STATE_FIELD_MATCH_ECONOMY_RECORD,
+    SIM_STATE_FIELD_TEAM_COUNT,
+    SIM_STATE_FIELD_TEAM_ENTITY,
+    SIM_STATE_FIELD_TEAM_SIDE,
+    SIM_STATE_FIELD_MINION_COUNT,
+    SIM_STATE_FIELD_MINION_ENTITY,
+    SIM_STATE_FIELD_MINION_LANE,
+    SIM_STATE_FIELD_MINION_WAYPOINT_INDEX,
+    SIM_STATE_FIELD_MINION_STATE,
+    SIM_STATE_FIELD_MINION_TARGET,
+    SIM_STATE_FIELD_MINION_ATTACK_COOLDOWN,
+    SIM_STATE_FIELD_OBJECTIVE_COUNT,
+    SIM_STATE_FIELD_OBJECTIVE_ENTITY,
+    SIM_STATE_FIELD_OBJECTIVE_DEF_INDEX,
+    SIM_STATE_FIELD_OBJECTIVE_OWNER_TEAM,
+    SIM_STATE_FIELD_OBJECTIVE_KIND,
+    SIM_STATE_FIELD_OBJECTIVE_ATTACK_COOLDOWN,
+    SIM_STATE_FIELD_OBJECTIVE_STATE,
+    SIM_STATE_FIELD_LEDGER_GOLD,
+    SIM_STATE_FIELD_LEDGER_XP,
+    SIM_STATE_FIELD_MATCH_STATE_OVER,
+    SIM_STATE_FIELD_MATCH_STATE_WINNER,
+    SIM_STATE_FIELD_MATCH_STATE_END_TICK,
 } SimStateField;
 
 static const uint32_t SIM_STATE_DIFF_NO_INDEX = UINT32_MAX;
@@ -125,7 +162,12 @@ typedef struct SimStateDiff {
 //   then the M5.2 hero block: the def table (count, then each def's scalars and each
 //   action's and effect's scalars), HeroPool, ProjectilePool, StatusPool, and the
 //   SimEvent read then write phase (count, then per event tick, kind, payload_size,
-//   append_ordinal, and exactly payload_size payload bytes - never the tail padding).
+//   append_ordinal, and exactly payload_size payload bytes - never the tail padding);
+//   then the M5.3 lane-objective block: the SimMatchDef's explicit fields (never the
+//   struct image and never a trailing unused slot), TeamPool, MinionPool,
+//   ObjectivePool, the SimLedger, and the SimMatchState. HealthPool's
+//   last_damage_source is hashed INSIDE the Health block, appended after
+//   damage_cooldown per row, because it is a Health field.
 // Each component pool encodes count, then a membership byte per allocated entity
 // index and, when present, exact EntityId plus its SoA fields. This makes entity
 // index the semantic order and excludes pointers, padding, unused capacity,

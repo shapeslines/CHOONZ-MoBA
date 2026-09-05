@@ -934,7 +934,7 @@ TEST(sim_hero_combat, every_new_state_field_has_a_name_and_the_logic_key_moved_o
     CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_MAP_LANE_WAYPOINT),
                       "map_lane_waypoint") == 0);
     CHECK(std::strcmp(sim_state_field_name(SIM_STATE_FIELD_POSITION_X), "position_x") == 0);
-    CHECK(u64(SIM_LOGIC_HASH) == 0x46e9e287878ba88cULL);
+    CHECK(u64(SIM_LOGIC_HASH) == 0x5b47e648953a63fcULL);
 }
 
 TEST(sim_hero_combat, a_hero_row_naming_an_absent_def_is_not_a_canonical_world) {
