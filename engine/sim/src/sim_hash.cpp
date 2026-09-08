@@ -60,10 +60,10 @@ static bool entity_manager_valid(const EntityManager* manager, uint32_t capacity
     return true;
 }
 
-static bool membership_valid(const ComponentPool* pool, const EntityManager* manager,
-                             uint32_t capacity) {
+static bool membership_valid_sized(const ComponentPool* pool, const EntityManager* manager,
+                                   uint32_t entity_capacity, uint32_t capacity) {
     if (!pool || !pool->sparse || !pool->dense_entities ||
-        pool->entity_capacity != capacity || pool->capacity != capacity ||
+        pool->entity_capacity != entity_capacity || pool->capacity != capacity ||
         pool->count > capacity) return false;
 
     for (uint32_t dense = 0u; dense < pool->count; ++dense) {
@@ -83,6 +83,30 @@ static bool membership_valid(const ComponentPool* pool, const EntityManager* man
         ++observed;
     }
     return observed == pool->count;
+}
+
+static bool membership_valid(const ComponentPool* pool, const EntityManager* manager,
+                             uint32_t capacity) {
+    return membership_valid_sized(pool, manager, capacity, capacity);
+}
+
+// A zero-capacity M5.2 pool is the whole feature being absent: no storage, no rows.
+static bool optional_membership_valid(const ComponentPool* pool, const EntityManager* manager,
+                                      uint32_t entity_capacity, uint32_t capacity) {
+    if (capacity == 0u) {
+        return pool && !pool->sparse && !pool->dense_entities && pool->capacity == 0u &&
+               pool->entity_capacity == 0u && pool->count == 0u;
+    }
+    return membership_valid_sized(pool, manager, entity_capacity, capacity);
+}
+
+static bool sim_event_queue_valid_for_world(const SimWorld* world) {
+    if (world->config.sim_event_capacity == 0u) {
+        return !world->sim_events.buffers[0] && !world->sim_events.buffers[1] &&
+               world->sim_events.capacity == 0u;
+    }
+    return sim_event_queue_is_valid(&world->sim_events) &&
+           world->sim_events.capacity == world->config.sim_event_capacity;
 }
 
 static bool damage_event_valid_for_world(const SimWorld* world, const DamageEvent& event) {
@@ -121,9 +145,28 @@ static bool canonical_world_valid(const SimWorld* world) {
         !world->transforms.position_x || !world->transforms.position_y || !world->transforms.facing ||
         !world->velocities.velocity_x || !world->velocities.velocity_y ||
         !world->health.current || !world->health.maximum || !world->health.damage_cooldown ||
-        !damage_queue_valid_for_world(world) ||
-        !world->pending_destroy || world->pending_destroy_count > world->config.max_entities)
+        !damage_queue_valid_for_world(world) || !map_valid(&world->map) ||
+        !world->pending_destroy || world->pending_destroy_count > world->config.max_entities ||
+        !sim_hero_def_table_valid(&world->hero_defs) ||
+        world->hero_defs.capacity != world->config.hero_def_capacity ||
+        !optional_membership_valid(&world->heroes.membership, &world->entities,
+                                   world->config.max_entities, world->config.hero_capacity) ||
+        !optional_membership_valid(&world->projectiles.membership, &world->entities,
+                                   world->config.max_entities,
+                                   world->config.projectile_capacity) ||
+        !optional_membership_valid(&world->statuses.membership, &world->entities,
+                                   world->config.max_entities, world->config.status_capacity) ||
+        !sim_event_queue_valid_for_world(world))
         return false;
+
+    // Every hero row must name an installed def, and every projectile must name a
+    // live source and an installed def slot.
+    for (uint32_t dense = 0u; dense < world->heroes.membership.count; ++dense) {
+        uint16_t def_index = 0u;
+        if (!hero_pool_def_index(&world->heroes, world->heroes.membership.dense_entities[dense],
+                                 &def_index) ||
+            !sim_hero_def_table_get(&world->hero_defs, def_index)) return false;
+    }
 
     for (uint32_t unit = 0u; unit < SIM_MAX_UNITS; ++unit) {
         EntityId entity = world->unit_entities[unit];
@@ -214,6 +257,161 @@ static uint64_t hash_damage_events(uint64_t hash, const SimWorld* world) {
     return hash;
 }
 
+static uint64_t hash_map(uint64_t hash, const SimWorld* world) {
+    const MapGrid* map = &world->map;
+    hash = hash_u64_le(hash, map->map_id);
+    hash = hash_u16_le(hash, map->width_cells);
+    hash = hash_u16_le(hash, map->height_cells);
+    hash = hash_u32_le(hash, i32_bits(map->cell_size_q16));
+    for (uint32_t cell = 0u; cell < map->cell_count; ++cell) {
+        hash = hash_u8(hash, map->flags[cell]);
+        hash = hash_u8(hash, map->movement_cost[cell]);
+        hash = hash_u16_le(hash, static_cast<uint16_t>(map->height_cell[cell]));
+    }
+    hash = hash_u16_le(hash, map->lane_count);
+    for (uint32_t lane = 0u; lane < map->lane_count; ++lane) {
+        const MapLane& def = map->lanes[lane];
+        const uint16_t* waypoints = map_lane_waypoints(map, static_cast<uint16_t>(lane));
+        hash = hash_u8(hash, def.lane_id);
+        hash = hash_u8(hash, def.waypoint_count);
+        hash = hash_u16_le(hash, def.wave_interval_ticks);
+        hash = hash_u32_le(hash, def.first_wave_tick);
+        hash = hash_u64_le(hash, def.creep_archetype_id);
+        for (uint32_t i = 0u; i < def.waypoint_count; ++i)
+            hash = hash_u16_le(hash, waypoints[i]);
+    }
+    return hash;
+}
+
+// ------------------------------------------------------------------ M5.2 hero block
+
+static uint64_t hash_hero_def(uint64_t hash, const SimHeroDef* def) {
+    hash = hash_u64_le(hash, def->hero_def_id);
+    hash = hash_u32_le(hash, i32_bits(def->max_health));
+    hash = hash_u32_le(hash, i32_bits(def->move_speed));
+    hash = hash_u32_le(hash, i32_bits(def->attack_range));
+    hash = hash_u16_le(hash, def->action_count);
+    for (uint16_t a = 0u; a < def->action_count; ++a) {
+        const SimActionDef& action = def->actions[a];
+        hash = hash_u64_le(hash, action.action_id);
+        hash = hash_u8(hash, action.slot);
+        hash = hash_u8(hash, action.target_mode);
+        hash = hash_u16_le(hash, action.effect_count);
+        hash = hash_u32_le(hash, action.cooldown_ticks);
+        hash = hash_u32_le(hash, action.cast_time_ticks);
+        hash = hash_u32_le(hash, action.resource_cost);
+        hash = hash_u32_le(hash, i32_bits(action.range));
+        hash = hash_u32_le(hash, i32_bits(action.projectile_speed));
+        for (uint16_t e = 0u; e < action.effect_count; ++e) {
+            const SimEffectDef& effect = action.effects[e];
+            hash = hash_u8(hash, effect.effect_type);
+            hash = hash_u8(hash, effect.damage_type);
+            hash = hash_u16_le(hash, effect.duration_ticks);
+            hash = hash_u32_le(hash, i32_bits(effect.magnitude));
+            hash = hash_u32_le(hash, i32_bits(effect.radius));
+            hash = hash_u32_le(hash, i32_bits(effect.scalar));
+        }
+    }
+    return hash;
+}
+
+static uint64_t hash_hero_defs(uint64_t hash, const SimWorld* world) {
+    hash = hash_u16_le(hash, world->hero_defs.count);
+    for (uint16_t i = 0u; i < world->hero_defs.count; ++i)
+        hash = hash_hero_def(hash, &world->hero_defs.defs[i]);
+    return hash;
+}
+
+static uint64_t hash_heroes(uint64_t hash, const SimWorld* world) {
+    hash = hash_u32_le(hash, world->heroes.membership.count);
+    for (uint32_t index = 0u; index < world->entities.next_fresh; ++index) {
+        EntityId entity = entity_at(&world->entities, index);
+        bool present = hero_pool_has(&world->heroes, entity);
+        hash = hash_u8(hash, present ? 1u : 0u);
+        if (!present) continue;
+        uint32_t dense = component_pool_dense_index(&world->heroes.membership, entity);
+        hash = hash_u32_le(hash, entity.h);
+        hash = hash_u16_le(hash, world->heroes.def_index[dense]);
+        hash = hash_u32_le(hash, i32_bits(world->heroes.resource[dense]));
+        hash = hash_u32_le(hash, world->heroes.basic_attack_cooldown[dense]);
+        for (uint32_t slot = 0u; slot < SIM_MAX_ACTION_SLOTS; ++slot) {
+            hash = hash_u32_le(
+                hash, world->heroes.action_cooldown[dense * SIM_MAX_ACTION_SLOTS + slot]);
+        }
+        hash = hash_u8(hash, world->heroes.pending_kind[dense]);
+        hash = hash_u8(hash, world->heroes.pending_slot[dense]);
+        hash = hash_u32_le(hash, world->heroes.pending_target[dense].h);
+        hash = hash_u32_le(hash, i32_bits(world->heroes.pending_point_x[dense]));
+        hash = hash_u32_le(hash, i32_bits(world->heroes.pending_point_y[dense]));
+    }
+    return hash;
+}
+
+static uint64_t hash_projectiles(uint64_t hash, const SimWorld* world) {
+    hash = hash_u32_le(hash, world->projectiles.membership.count);
+    for (uint32_t index = 0u; index < world->entities.next_fresh; ++index) {
+        EntityId entity = entity_at(&world->entities, index);
+        bool present = projectile_pool_has(&world->projectiles, entity);
+        hash = hash_u8(hash, present ? 1u : 0u);
+        if (!present) continue;
+        uint32_t dense = component_pool_dense_index(&world->projectiles.membership, entity);
+        hash = hash_u32_le(hash, entity.h);
+        hash = hash_u32_le(hash, world->projectiles.source[dense].h);
+        hash = hash_u32_le(hash, world->projectiles.target[dense].h);
+        hash = hash_u16_le(hash, world->projectiles.def_index[dense]);
+        hash = hash_u8(hash, world->projectiles.action_slot[dense]);
+        hash = hash_u8(hash, world->projectiles.effect_index[dense]);
+        hash = hash_u32_le(hash, i32_bits(world->projectiles.position_x[dense]));
+        hash = hash_u32_le(hash, i32_bits(world->projectiles.position_y[dense]));
+        hash = hash_u32_le(hash, i32_bits(world->projectiles.speed[dense]));
+        hash = hash_u16_le(hash, world->projectiles.remaining_ticks[dense]);
+    }
+    return hash;
+}
+
+static uint64_t hash_statuses(uint64_t hash, const SimWorld* world) {
+    hash = hash_u32_le(hash, world->statuses.membership.count);
+    for (uint32_t index = 0u; index < world->entities.next_fresh; ++index) {
+        EntityId entity = entity_at(&world->entities, index);
+        bool present = status_pool_has(&world->statuses, entity);
+        hash = hash_u8(hash, present ? 1u : 0u);
+        if (!present) continue;
+        uint32_t dense = component_pool_dense_index(&world->statuses.membership, entity);
+        hash = hash_u32_le(hash, entity.h);
+        hash = hash_u8(hash, world->statuses.effect_type[dense]);
+        hash = hash_u8(hash, world->statuses.stack_count[dense]);
+        hash = hash_u16_le(hash, world->statuses.remaining_ticks[dense]);
+        hash = hash_u32_le(hash, i32_bits(world->statuses.magnitude[dense]));
+        hash = hash_u32_le(hash, i32_bits(world->statuses.scalar[dense]));
+    }
+    return hash;
+}
+
+// Exactly payload_size bytes: the tail padding is storage, not state.
+static uint64_t hash_sim_event(uint64_t hash, const SimEvent& event) {
+    hash = hash_u64_le(hash, event.tick);
+    hash = hash_u16_le(hash, event.event_kind);
+    hash = hash_u16_le(hash, event.payload_size);
+    hash = hash_u32_le(hash, event.append_ordinal);
+    for (uint16_t i = 0u; i < event.payload_size; ++i) hash = hash_u8(hash, event.payload[i]);
+    return hash;
+}
+
+static uint64_t hash_sim_events(uint64_t hash, const SimWorld* world) {
+    if (world->config.sim_event_capacity == 0u) {
+        hash = hash_u32_le(hash, 0u);
+        return hash_u32_le(hash, 0u);
+    }
+    const uint32_t phases[] = {world->sim_events.read_index, world->sim_events.write_index};
+    for (uint32_t phase = 0u; phase < 2u; ++phase) {
+        uint32_t buffer = phases[phase];
+        hash = hash_u32_le(hash, world->sim_events.counts[buffer]);
+        for (uint32_t ordinal = 0u; ordinal < world->sim_events.counts[buffer]; ++ordinal)
+            hash = hash_sim_event(hash, world->sim_events.buffers[buffer][ordinal]);
+    }
+    return hash;
+}
+
 uint64_t sim_hash_state(const SimWorld* world) {
     if (!canonical_world_valid(world)) return 0u;
 
@@ -246,7 +444,14 @@ uint64_t sim_hash_state(const SimWorld* world) {
 
     hash = hash_transform(hash, world);
     hash = hash_velocity(hash, world);
-    return hash_health(hash, world);
+    hash = hash_health(hash, world);
+    hash = hash_map(hash, world);
+
+    hash = hash_hero_defs(hash, world);
+    hash = hash_heroes(hash, world);
+    hash = hash_projectiles(hash, world);
+    hash = hash_statuses(hash, world);
+    return hash_sim_events(hash, world);
 }
 
 static void set_diff(SimStateDiff* diff, SimStateField field, uint32_t index,
@@ -446,6 +651,264 @@ static bool diff_health(const SimWorld* expected, const SimWorld* actual,
     return false;
 }
 
+static bool diff_map(const SimWorld* expected, const SimWorld* actual, SimStateDiff* out_diff) {
+    const MapGrid* e = &expected->map;
+    const MapGrid* a = &actual->map;
+    DIFF_SCALAR(e->map_id, a->map_id, SIM_STATE_FIELD_MAP_ID);
+    DIFF_SCALAR(e->width_cells, a->width_cells, SIM_STATE_FIELD_MAP_WIDTH);
+    DIFF_SCALAR(e->height_cells, a->height_cells, SIM_STATE_FIELD_MAP_HEIGHT);
+    if (e->cell_size_q16 != a->cell_size_q16) {
+        set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_SIZE, SIM_STATE_DIFF_NO_INDEX,
+                 i32_bits(e->cell_size_q16), i32_bits(a->cell_size_q16));
+        return true;
+    }
+    for (uint32_t cell = 0u; cell < e->cell_count; ++cell) {
+        if (e->flags[cell] != a->flags[cell]) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_FLAGS, cell, e->flags[cell], a->flags[cell]);
+            return true;
+        }
+        if (e->movement_cost[cell] != a->movement_cost[cell]) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_COST, cell,
+                     e->movement_cost[cell], a->movement_cost[cell]);
+            return true;
+        }
+        if (e->height_cell[cell] != a->height_cell[cell]) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_CELL_HEIGHT, cell,
+                     static_cast<uint16_t>(e->height_cell[cell]),
+                     static_cast<uint16_t>(a->height_cell[cell]));
+            return true;
+        }
+    }
+    DIFF_SCALAR(e->lane_count, a->lane_count, SIM_STATE_FIELD_MAP_LANE_COUNT);
+    for (uint32_t lane = 0u; lane < e->lane_count; ++lane) {
+        const MapLane& el = e->lanes[lane];
+        const MapLane& al = a->lanes[lane];
+        if (el.lane_id != al.lane_id) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_ID, lane, el.lane_id, al.lane_id);
+            return true;
+        }
+        if (el.waypoint_count != al.waypoint_count) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_WAYPOINT_COUNT, lane,
+                     el.waypoint_count, al.waypoint_count);
+            return true;
+        }
+        if (el.wave_interval_ticks != al.wave_interval_ticks) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_WAVE_INTERVAL, lane,
+                     el.wave_interval_ticks, al.wave_interval_ticks);
+            return true;
+        }
+        if (el.first_wave_tick != al.first_wave_tick) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_FIRST_WAVE, lane,
+                     el.first_wave_tick, al.first_wave_tick);
+            return true;
+        }
+        if (el.creep_archetype_id != al.creep_archetype_id) {
+            set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_ARCHETYPE, lane,
+                     el.creep_archetype_id, al.creep_archetype_id);
+            return true;
+        }
+        const uint16_t* ew = map_lane_waypoints(e, static_cast<uint16_t>(lane));
+        const uint16_t* aw = map_lane_waypoints(a, static_cast<uint16_t>(lane));
+        for (uint32_t i = 0u; i < el.waypoint_count; ++i) {
+            if (ew[i] != aw[i]) {
+                set_diff(out_diff, SIM_STATE_FIELD_MAP_LANE_WAYPOINT,
+                         lane * SIM_MAP_MAX_WAYPOINTS + i, ew[i], aw[i]);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// The hero block walks the identical order sim_hash_state does. The def table is
+// installed whole and immutable while ticking, so it diffs per record.
+static bool diff_hero_defs(const SimWorld* expected, const SimWorld* actual,
+                           SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->hero_defs.count, actual->hero_defs.count,
+                SIM_STATE_FIELD_HERO_DEF_COUNT);
+    for (uint16_t i = 0u; i < expected->hero_defs.count; ++i) {
+        uint64_t e = hash_hero_def(FNV1A64_OFFSET, &expected->hero_defs.defs[i]);
+        uint64_t a = hash_hero_def(FNV1A64_OFFSET, &actual->hero_defs.defs[i]);
+        if (e != a) {
+            set_diff(out_diff, SIM_STATE_FIELD_HERO_DEF_RECORD, i, e, a);
+            return true;
+        }
+    }
+    return false;
+}
+
+#define DIFF_POOL_FIELD(expected_value, actual_value, field_name) do {                   \
+    if ((expected_value) != (actual_value)) {                                            \
+        set_diff(out_diff, field_name, index, static_cast<uint64_t>(expected_value),      \
+                 static_cast<uint64_t>(actual_value));                                    \
+        return true;                                                                      \
+    }                                                                                     \
+} while (0)
+
+static bool diff_heroes(const SimWorld* expected, const SimWorld* actual,
+                        SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->heroes.membership.count, actual->heroes.membership.count,
+                SIM_STATE_FIELD_HERO_COUNT);
+    for (uint32_t index = 0u; index < expected->entities.next_fresh; ++index) {
+        EntityId ee = entity_at(&expected->entities, index);
+        EntityId ae = entity_at(&actual->entities, index);
+        bool ep = hero_pool_has(&expected->heroes, ee);
+        bool ap = hero_pool_has(&actual->heroes, ae);
+        if (ep != ap || (ep && ee.h != ae.h)) {
+            set_diff(out_diff, SIM_STATE_FIELD_HERO_ENTITY, index, ep ? ee.h : 0u,
+                     ap ? ae.h : 0u);
+            return true;
+        }
+        if (!ep) continue;
+        uint32_t ed = component_pool_dense_index(&expected->heroes.membership, ee);
+        uint32_t ad = component_pool_dense_index(&actual->heroes.membership, ae);
+        DIFF_POOL_FIELD(expected->heroes.def_index[ed], actual->heroes.def_index[ad],
+                        SIM_STATE_FIELD_HERO_DEF_INDEX);
+        DIFF_POOL_FIELD(i32_bits(expected->heroes.resource[ed]),
+                        i32_bits(actual->heroes.resource[ad]), SIM_STATE_FIELD_HERO_RESOURCE);
+        DIFF_POOL_FIELD(expected->heroes.basic_attack_cooldown[ed],
+                        actual->heroes.basic_attack_cooldown[ad],
+                        SIM_STATE_FIELD_HERO_BASIC_ATTACK_COOLDOWN);
+        for (uint32_t slot = 0u; slot < SIM_MAX_ACTION_SLOTS; ++slot) {
+            DIFF_POOL_FIELD(
+                expected->heroes.action_cooldown[ed * SIM_MAX_ACTION_SLOTS + slot],
+                actual->heroes.action_cooldown[ad * SIM_MAX_ACTION_SLOTS + slot],
+                SIM_STATE_FIELD_HERO_ACTION_COOLDOWN);
+        }
+        DIFF_POOL_FIELD(expected->heroes.pending_kind[ed], actual->heroes.pending_kind[ad],
+                        SIM_STATE_FIELD_HERO_PENDING_KIND);
+        DIFF_POOL_FIELD(expected->heroes.pending_slot[ed], actual->heroes.pending_slot[ad],
+                        SIM_STATE_FIELD_HERO_PENDING_SLOT);
+        DIFF_POOL_FIELD(expected->heroes.pending_target[ed].h,
+                        actual->heroes.pending_target[ad].h,
+                        SIM_STATE_FIELD_HERO_PENDING_TARGET);
+        DIFF_POOL_FIELD(i32_bits(expected->heroes.pending_point_x[ed]),
+                        i32_bits(actual->heroes.pending_point_x[ad]),
+                        SIM_STATE_FIELD_HERO_PENDING_POINT_X);
+        DIFF_POOL_FIELD(i32_bits(expected->heroes.pending_point_y[ed]),
+                        i32_bits(actual->heroes.pending_point_y[ad]),
+                        SIM_STATE_FIELD_HERO_PENDING_POINT_Y);
+    }
+    return false;
+}
+
+static bool diff_projectiles(const SimWorld* expected, const SimWorld* actual,
+                             SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->projectiles.membership.count, actual->projectiles.membership.count,
+                SIM_STATE_FIELD_PROJECTILE_COUNT);
+    for (uint32_t index = 0u; index < expected->entities.next_fresh; ++index) {
+        EntityId ee = entity_at(&expected->entities, index);
+        EntityId ae = entity_at(&actual->entities, index);
+        bool ep = projectile_pool_has(&expected->projectiles, ee);
+        bool ap = projectile_pool_has(&actual->projectiles, ae);
+        if (ep != ap || (ep && ee.h != ae.h)) {
+            set_diff(out_diff, SIM_STATE_FIELD_PROJECTILE_ENTITY, index, ep ? ee.h : 0u,
+                     ap ? ae.h : 0u);
+            return true;
+        }
+        if (!ep) continue;
+        uint32_t ed = component_pool_dense_index(&expected->projectiles.membership, ee);
+        uint32_t ad = component_pool_dense_index(&actual->projectiles.membership, ae);
+        DIFF_POOL_FIELD(expected->projectiles.source[ed].h, actual->projectiles.source[ad].h,
+                        SIM_STATE_FIELD_PROJECTILE_SOURCE);
+        DIFF_POOL_FIELD(expected->projectiles.target[ed].h, actual->projectiles.target[ad].h,
+                        SIM_STATE_FIELD_PROJECTILE_TARGET);
+        DIFF_POOL_FIELD(expected->projectiles.def_index[ed], actual->projectiles.def_index[ad],
+                        SIM_STATE_FIELD_PROJECTILE_DEF_INDEX);
+        DIFF_POOL_FIELD(expected->projectiles.action_slot[ed],
+                        actual->projectiles.action_slot[ad],
+                        SIM_STATE_FIELD_PROJECTILE_ACTION_SLOT);
+        DIFF_POOL_FIELD(expected->projectiles.effect_index[ed],
+                        actual->projectiles.effect_index[ad],
+                        SIM_STATE_FIELD_PROJECTILE_EFFECT_INDEX);
+        DIFF_POOL_FIELD(i32_bits(expected->projectiles.position_x[ed]),
+                        i32_bits(actual->projectiles.position_x[ad]),
+                        SIM_STATE_FIELD_PROJECTILE_POSITION_X);
+        DIFF_POOL_FIELD(i32_bits(expected->projectiles.position_y[ed]),
+                        i32_bits(actual->projectiles.position_y[ad]),
+                        SIM_STATE_FIELD_PROJECTILE_POSITION_Y);
+        DIFF_POOL_FIELD(i32_bits(expected->projectiles.speed[ed]),
+                        i32_bits(actual->projectiles.speed[ad]),
+                        SIM_STATE_FIELD_PROJECTILE_SPEED);
+        DIFF_POOL_FIELD(expected->projectiles.remaining_ticks[ed],
+                        actual->projectiles.remaining_ticks[ad],
+                        SIM_STATE_FIELD_PROJECTILE_REMAINING_TICKS);
+    }
+    return false;
+}
+
+static bool diff_statuses(const SimWorld* expected, const SimWorld* actual,
+                          SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->statuses.membership.count, actual->statuses.membership.count,
+                SIM_STATE_FIELD_STATUS_COUNT);
+    for (uint32_t index = 0u; index < expected->entities.next_fresh; ++index) {
+        EntityId ee = entity_at(&expected->entities, index);
+        EntityId ae = entity_at(&actual->entities, index);
+        bool ep = status_pool_has(&expected->statuses, ee);
+        bool ap = status_pool_has(&actual->statuses, ae);
+        if (ep != ap || (ep && ee.h != ae.h)) {
+            set_diff(out_diff, SIM_STATE_FIELD_STATUS_ENTITY, index, ep ? ee.h : 0u,
+                     ap ? ae.h : 0u);
+            return true;
+        }
+        if (!ep) continue;
+        uint32_t ed = component_pool_dense_index(&expected->statuses.membership, ee);
+        uint32_t ad = component_pool_dense_index(&actual->statuses.membership, ae);
+        DIFF_POOL_FIELD(expected->statuses.effect_type[ed], actual->statuses.effect_type[ad],
+                        SIM_STATE_FIELD_STATUS_EFFECT_TYPE);
+        DIFF_POOL_FIELD(expected->statuses.stack_count[ed], actual->statuses.stack_count[ad],
+                        SIM_STATE_FIELD_STATUS_STACK_COUNT);
+        DIFF_POOL_FIELD(expected->statuses.remaining_ticks[ed],
+                        actual->statuses.remaining_ticks[ad],
+                        SIM_STATE_FIELD_STATUS_REMAINING_TICKS);
+        DIFF_POOL_FIELD(i32_bits(expected->statuses.magnitude[ed]),
+                        i32_bits(actual->statuses.magnitude[ad]),
+                        SIM_STATE_FIELD_STATUS_MAGNITUDE);
+        DIFF_POOL_FIELD(i32_bits(expected->statuses.scalar[ed]),
+                        i32_bits(actual->statuses.scalar[ad]),
+                        SIM_STATE_FIELD_STATUS_SCALAR);
+    }
+    return false;
+}
+
+static bool diff_sim_event_phase(const SimEventQueue* expected, const SimEventQueue* actual,
+                                 uint32_t expected_buffer, uint32_t actual_buffer,
+                                 SimStateField count_field, SimStateField tick_field,
+                                 SimStateField kind_field, SimStateField payload_field,
+                                 SimStateDiff* out_diff) {
+    DIFF_SCALAR(expected->counts[expected_buffer], actual->counts[actual_buffer], count_field);
+    for (uint32_t index = 0u; index < expected->counts[expected_buffer]; ++index) {
+        const SimEvent& e = expected->buffers[expected_buffer][index];
+        const SimEvent& a = actual->buffers[actual_buffer][index];
+        DIFF_POOL_FIELD(e.tick, a.tick, tick_field);
+        DIFF_POOL_FIELD(e.event_kind, a.event_kind, kind_field);
+        DIFF_POOL_FIELD(e.payload_size, a.payload_size, payload_field);
+        for (uint16_t byte = 0u; byte < e.payload_size; ++byte) {
+            DIFF_POOL_FIELD(e.payload[byte], a.payload[byte], payload_field);
+        }
+    }
+    return false;
+}
+
+static bool diff_sim_events(const SimWorld* expected, const SimWorld* actual,
+                            SimStateDiff* out_diff) {
+    if (expected->config.sim_event_capacity == 0u ||
+        actual->config.sim_event_capacity == 0u) return false;
+    if (diff_sim_event_phase(&expected->sim_events, &actual->sim_events,
+                             expected->sim_events.read_index, actual->sim_events.read_index,
+                             SIM_STATE_FIELD_SIM_EVENT_READ_COUNT,
+                             SIM_STATE_FIELD_SIM_EVENT_READ_TICK,
+                             SIM_STATE_FIELD_SIM_EVENT_READ_KIND,
+                             SIM_STATE_FIELD_SIM_EVENT_READ_PAYLOAD, out_diff)) return true;
+    return diff_sim_event_phase(&expected->sim_events, &actual->sim_events,
+                                expected->sim_events.write_index,
+                                actual->sim_events.write_index,
+                                SIM_STATE_FIELD_SIM_EVENT_WRITE_COUNT,
+                                SIM_STATE_FIELD_SIM_EVENT_WRITE_TICK,
+                                SIM_STATE_FIELD_SIM_EVENT_WRITE_KIND,
+                                SIM_STATE_FIELD_SIM_EVENT_WRITE_PAYLOAD, out_diff);
+}
+
 bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDiff* out_diff) {
     if (!out_diff) return false;
     set_diff(out_diff, SIM_STATE_FIELD_NONE, SIM_STATE_DIFF_NO_INDEX, 0u, 0u);
@@ -514,10 +977,17 @@ bool sim_diff_state(const SimWorld* expected, const SimWorld* actual, SimStateDi
 
     if (diff_transform(expected, actual, out_diff) ||
         diff_velocity(expected, actual, out_diff) ||
-        diff_health(expected, actual, out_diff)) return true;
+        diff_health(expected, actual, out_diff) ||
+        diff_map(expected, actual, out_diff) ||
+        diff_hero_defs(expected, actual, out_diff) ||
+        diff_heroes(expected, actual, out_diff) ||
+        diff_projectiles(expected, actual, out_diff) ||
+        diff_statuses(expected, actual, out_diff) ||
+        diff_sim_events(expected, actual, out_diff)) return true;
     return false;
 }
 
+#undef DIFF_POOL_FIELD
 #undef DIFF_SCALAR
 
 const char* sim_state_field_name(SimStateField field) {
@@ -562,6 +1032,59 @@ const char* sim_state_field_name(SimStateField field) {
         case SIM_STATE_FIELD_HEALTH_CURRENT: return "health_current";
         case SIM_STATE_FIELD_HEALTH_MAXIMUM: return "health_maximum";
         case SIM_STATE_FIELD_DAMAGE_COOLDOWN: return "damage_cooldown";
+        case SIM_STATE_FIELD_MAP_ID: return "map_id";
+        case SIM_STATE_FIELD_MAP_WIDTH: return "map_width";
+        case SIM_STATE_FIELD_MAP_HEIGHT: return "map_height";
+        case SIM_STATE_FIELD_MAP_CELL_SIZE: return "map_cell_size";
+        case SIM_STATE_FIELD_MAP_CELL_FLAGS: return "map_cell_flags";
+        case SIM_STATE_FIELD_MAP_CELL_COST: return "map_cell_cost";
+        case SIM_STATE_FIELD_MAP_CELL_HEIGHT: return "map_cell_height";
+        case SIM_STATE_FIELD_MAP_LANE_COUNT: return "map_lane_count";
+        case SIM_STATE_FIELD_MAP_LANE_ID: return "map_lane_id";
+        case SIM_STATE_FIELD_MAP_LANE_WAYPOINT_COUNT: return "map_lane_waypoint_count";
+        case SIM_STATE_FIELD_MAP_LANE_WAVE_INTERVAL: return "map_lane_wave_interval";
+        case SIM_STATE_FIELD_MAP_LANE_FIRST_WAVE: return "map_lane_first_wave";
+        case SIM_STATE_FIELD_MAP_LANE_ARCHETYPE: return "map_lane_archetype";
+        case SIM_STATE_FIELD_MAP_LANE_WAYPOINT: return "map_lane_waypoint";
+        case SIM_STATE_FIELD_HERO_DEF_COUNT: return "hero_def_count";
+        case SIM_STATE_FIELD_HERO_DEF_RECORD: return "hero_def_record";
+        case SIM_STATE_FIELD_HERO_COUNT: return "hero_count";
+        case SIM_STATE_FIELD_HERO_ENTITY: return "hero_entity";
+        case SIM_STATE_FIELD_HERO_DEF_INDEX: return "hero_def_index";
+        case SIM_STATE_FIELD_HERO_RESOURCE: return "hero_resource";
+        case SIM_STATE_FIELD_HERO_BASIC_ATTACK_COOLDOWN: return "hero_basic_attack_cooldown";
+        case SIM_STATE_FIELD_HERO_ACTION_COOLDOWN: return "hero_action_cooldown";
+        case SIM_STATE_FIELD_HERO_PENDING_KIND: return "hero_pending_kind";
+        case SIM_STATE_FIELD_HERO_PENDING_SLOT: return "hero_pending_slot";
+        case SIM_STATE_FIELD_HERO_PENDING_TARGET: return "hero_pending_target";
+        case SIM_STATE_FIELD_HERO_PENDING_POINT_X: return "hero_pending_point_x";
+        case SIM_STATE_FIELD_HERO_PENDING_POINT_Y: return "hero_pending_point_y";
+        case SIM_STATE_FIELD_PROJECTILE_COUNT: return "projectile_count";
+        case SIM_STATE_FIELD_PROJECTILE_ENTITY: return "projectile_entity";
+        case SIM_STATE_FIELD_PROJECTILE_SOURCE: return "projectile_source";
+        case SIM_STATE_FIELD_PROJECTILE_TARGET: return "projectile_target";
+        case SIM_STATE_FIELD_PROJECTILE_DEF_INDEX: return "projectile_def_index";
+        case SIM_STATE_FIELD_PROJECTILE_ACTION_SLOT: return "projectile_action_slot";
+        case SIM_STATE_FIELD_PROJECTILE_EFFECT_INDEX: return "projectile_effect_index";
+        case SIM_STATE_FIELD_PROJECTILE_POSITION_X: return "projectile_position_x";
+        case SIM_STATE_FIELD_PROJECTILE_POSITION_Y: return "projectile_position_y";
+        case SIM_STATE_FIELD_PROJECTILE_SPEED: return "projectile_speed";
+        case SIM_STATE_FIELD_PROJECTILE_REMAINING_TICKS: return "projectile_remaining_ticks";
+        case SIM_STATE_FIELD_STATUS_COUNT: return "status_count";
+        case SIM_STATE_FIELD_STATUS_ENTITY: return "status_entity";
+        case SIM_STATE_FIELD_STATUS_EFFECT_TYPE: return "status_effect_type";
+        case SIM_STATE_FIELD_STATUS_STACK_COUNT: return "status_stack_count";
+        case SIM_STATE_FIELD_STATUS_REMAINING_TICKS: return "status_remaining_ticks";
+        case SIM_STATE_FIELD_STATUS_MAGNITUDE: return "status_magnitude";
+        case SIM_STATE_FIELD_STATUS_SCALAR: return "status_scalar";
+        case SIM_STATE_FIELD_SIM_EVENT_READ_COUNT: return "sim_event_read_count";
+        case SIM_STATE_FIELD_SIM_EVENT_READ_TICK: return "sim_event_read_tick";
+        case SIM_STATE_FIELD_SIM_EVENT_READ_KIND: return "sim_event_read_kind";
+        case SIM_STATE_FIELD_SIM_EVENT_READ_PAYLOAD: return "sim_event_read_payload";
+        case SIM_STATE_FIELD_SIM_EVENT_WRITE_COUNT: return "sim_event_write_count";
+        case SIM_STATE_FIELD_SIM_EVENT_WRITE_TICK: return "sim_event_write_tick";
+        case SIM_STATE_FIELD_SIM_EVENT_WRITE_KIND: return "sim_event_write_kind";
+        case SIM_STATE_FIELD_SIM_EVENT_WRITE_PAYLOAD: return "sim_event_write_payload";
         default: return "invalid";
     }
 }

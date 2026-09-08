@@ -12,9 +12,13 @@ static const uint32_t REPLAY_FORMAT_VERSION = 1;
 // Manually reviewed compatibility key. Bump whenever deterministic behavior or
 // command encoding changes. REPLAY_FORMAT_VERSION changes only when the container
 // layout changes. This separation makes incompatibility deliberate and visible.
-// M3.2 contract key: first 64 bits of SHA-256 over
-// "M3.2|ordered-cache|damage-event-v1|same-tick|explicit-schedule-v1".
-static const uint64_t SIM_LOGIC_HASH = 0xab96814425ba80a4ULL;
+// M5.2 contract key: first 64 bits of SHA-256 over
+// "M5.0|ordered-cache|damage-event-v1|same-tick|explicit-schedule-v1|map-grid-v1|hero-combat-v1".
+// (M3.2 key was 0xab96814425ba80a4 over the same string without the map or hero
+// terms; M5.0 was 0xcef8548df2b2a518 without the hero term. The canonical state
+// hash now covers the hero def table, HeroPool, ProjectilePool, StatusPool, and the
+// SimEvent queue, all appended after the MapGrid block.)
+static const uint64_t SIM_LOGIC_HASH = 0x46e9e287878ba88cULL;
 
 static const uint64_t REPLAY_MAX_TICKS = 1000000ULL; // >9 hours at 30 Hz
 static const size_t REPLAY_HEADER_ENCODED_SIZE = 44;
