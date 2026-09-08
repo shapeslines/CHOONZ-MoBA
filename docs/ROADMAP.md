@@ -763,6 +763,10 @@ sensitive). **Exercises:** Gameplay (movement), Math (fixed), ECS.
 ---
 
 ### M5.2 — Selection (client-only) + command/order system  🔴  · M
+**Execution note (2026-09-03):** the `Command`/`CommandReject` shapes and the deterministic intake
+(validate → key order → dedup → capacity, translated into the legacy `SimCommandBuffer`) landed in
+M5.1 `m5-command-replay` (`docs/slate-moba-phase5-m5.1.md`, `engine/sim/command.h`). M5.2 adds the
+client-side selection, order queues, and raw-input translation on top of that contract.
 **Goal:** the determinism boundary — player intent becomes ordered `Command`s.
 **Deliverables:** **client-side** `Selection` (box/click picking against rendered float positions — view
 concern, **never** in sim); per-entity `OrderQueue` (move/attack-move/attack-unit/cast/hold/stop,
@@ -868,6 +872,9 @@ the sim is bit-stable — which it is.
 ---
 
 ### M6.0 — Command source abstraction + replay parity  · S
+**Execution note (2026-09-03):** M5.1 already produces per-command reject reasons at intake without
+changing the seam or the oracle; M6.0 carries `Command` verbatim in replay v2 (new ADR) and turns the
+intake reasons into the per-command wire rejects, which is the reviewed logic-hash bump ADR-0014 names.
 **Goal:** make the sim's command input swappable (local ↔ replay ↔ network) with one seam.
 **Deliverables:** route `sim_tick`'s commands through a single source interface; confirm the
 **replay codec is the exact same wire codec** (one source of truth — `Cmd_Packet` shared by

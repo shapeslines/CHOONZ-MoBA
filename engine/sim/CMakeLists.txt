@@ -1,6 +1,7 @@
 # eng_sim — deterministic fixed-point simulation. Platform, renderer, wall-clock,
 # and presentation dependencies are forbidden by the link graph.
 add_library(eng_sim STATIC
+    src/command.cpp
     src/component_pool.cpp
     src/components.cpp
     src/entity.cpp
