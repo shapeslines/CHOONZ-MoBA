@@ -27,11 +27,15 @@ add_executable(engine_tests
     assets/mba_tests.cpp
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
+    sim/command_tests.cpp
     sim/component_pool_tests.cpp
     sim/components_tests.cpp
     sim/deferred_destroy_tests.cpp
     sim/entity_tests.cpp
+    sim/hero_combat_tests.cpp
+    sim/lane_objectives_tests.cpp
     sim/events_tests.cpp
+    sim/map_tests.cpp
     sim/sim_config_tests.cpp
     sim/sim_hash_tests.cpp
     sim/replay_tests.cpp
@@ -110,9 +114,13 @@ add_test(NAME platform    COMMAND engine_tests --suite platform)  # file I/O (M2
 add_test(NAME serialize   COMMAND engine_tests --suite serialize)
 add_test(NAME sim_component_pool COMMAND engine_tests --suite sim_component_pool)
 add_test(NAME sim_components COMMAND engine_tests --suite sim_components)
+add_test(NAME sim_command COMMAND engine_tests --suite sim_command)  # M5.1 command intake
 add_test(NAME sim_destroy COMMAND engine_tests --suite sim_destroy)
 add_test(NAME sim_entity  COMMAND engine_tests --suite sim_entity)
 add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
+add_test(NAME sim_hero_combat COMMAND engine_tests --suite sim_hero_combat)  # M5.2 hero combat
+add_test(NAME sim_lane_objectives COMMAND engine_tests --suite sim_lane_objectives)  # M5.3 lane objectives
+add_test(NAME sim_map     COMMAND engine_tests --suite sim_map)      # M5.0 map grid + .mapdesc
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
 add_test(NAME sim_systems COMMAND engine_tests --suite sim_systems)
@@ -139,7 +147,7 @@ if(MOBA_UBSAN)
         COMMAND sim_oracle_probe --sim-self-check)
     set_tests_properties(sim_ubsan_oracle PROPERTIES
         PASS_REGULAR_EXPRESSION
-            "sim_oracle ticks=10000 commands=923 final=0x637628abff59c823 stream=0x6f381609f7e59f0c logic=0xab96814425ba80a4")
+            "sim_oracle ticks=10000 commands=923 final=0x36e6de56cb662dba stream=0xb6067f3f0955b292 logic=0x5b47e648953a63fc")
     add_test(NAME sim_ubsan_tripwire
         COMMAND ${CMAKE_COMMAND}
                 -DTRIPWIRE_EXE=$<TARGET_FILE:sim_ubsan_tripwire>
@@ -149,6 +157,12 @@ endif()
 add_test(NAME sim_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_boundary.cmake")
+
+# M5.2: the unified-pipeline no-bypass scan. Absence of a second mutation path is a
+# source-level property, so it is a lint beside check_sim_boundary, not a unit test.
+add_test(NAME sim_pipeline_owner
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/sim/check_sim_pipeline_owner.cmake")
 
 add_test(NAME sim_compiler_policy
     COMMAND ${CMAKE_COMMAND}
@@ -207,7 +221,7 @@ add_test(NAME replay_inspect
     COMMAND $<TARGET_FILE:moba_replay> inspect "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_inspect PROPERTIES
     FIXTURES_REQUIRED replay_file
-    PASS_REGULAR_EXPRESSION "logic_hash=0xab96814425ba80a4")
+    PASS_REGULAR_EXPRESSION "logic_hash=0x5b47e648953a63fc")
 
 add_test(NAME replay_verify
     COMMAND $<TARGET_FILE:moba_replay> verify "${REPLAY_FIXTURE_FILE}")
