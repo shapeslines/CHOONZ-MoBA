@@ -634,12 +634,13 @@ fresh full exact-head reviews and GitHub checks subsequently passed before landi
 **Goal:** the path from source files to GPU/CPU memory behind stable handles, built bottom-up: direct
 trivial loaders first, then the offline cooker and the unified baked format, then glTF and hot-reload.
 
-> **Now:** close M4.0 PR #52 from synchronized security-hardened `main`. **Then:** M4.1 → M4.4.
-> **Next phase:** Phase 5 (gameplay needs real meshes/maps). **Later:** hot-reload polish.
+> **Complete:** M4.0 (`f30dbb7`, PR #52) and M4.1 (`6571ee4` PR #57 + `4f66af1` PR #63). **Now:** Phase 5
+> is open — M4.2 → M4.4 are pulled forward only when a Phase 5 slice needs them (see
+> `docs/plans/README.md`). **Later:** hot-reload polish.
 
 ---
 
-### M4.0 — Direct TGA / WAV / SPIR-V loaders + handle registry  · M  🟡 LOCAL ACCEPTANCE COMPLETE 2026-08-13
+### M4.0 — Direct TGA / WAV / SPIR-V loaders + handle registry  · M  ✅ COMPLETE 2026-08-13 (PR #52 → `f30dbb7`)
 **Goal:** the simplest runtime loaders + the SoA asset registry, replacing M2.2's hardcoded TGA.
 **Deliverables:** direct TGA (uncompressed/RLE) and WAV (header+PCM) parsers; SPIR-V already loaded as
 raw `.spv`; `AssetRegistry` (SoA, handle+generation per ADR-0003, `state` field reserving async later);
@@ -667,7 +668,7 @@ configuration. Exact-head hosted checks and owner landing remain the closing gat
 
 ---
 
-### M4.1 — The cooker + unified `.mba` container  · L
+### M4.1 — The cooker + unified `.mba` container  · L  ✅ COMPLETE 2026-09-02 (PR #57 → `6571ee4`, PR #63 → `4f66af1`; slate `slate-moba-phase4-m4.1.md`)
 **Goal:** move all heavy parsing offline into a separate tool; one runtime loader, one format.
 **Deliverables:** `cooker.exe` (separate target, links the shared `asset_parsers` lib — **POD C
 interface only**, identical exception flags per ADR-0009); `MbaHeader` (magic+version+type+id) + typed
@@ -730,7 +731,8 @@ last-good pipeline; editing a source PNG updates the texture live.
 mass-unit movement, the order/command model, abilities, combat, AI, fog — **all single-player and
 deterministic**, ready to drop the local command source into netcode in Phase 6.
 
-> **Now:** M5.0 → M5.6. **Next:** Phase 6 (netcode). **Later:** vertical-slice polish.
+> **Now:** M5.0 via `docs/plans/m5.0-map-navigation.md` (claimable; M4.1 gate met), then M5.1–M5.6 in the
+> proto-design slice order (`docs/plans/README.md`). **Next:** Phase 6 (netcode). **Later:** vertical-slice polish.
 > Everything here is fixed-point and runs inside `sim_tick`; the determinism self-check stays green
 > throughout (it is the regression net for all of this).
 
@@ -744,6 +746,10 @@ via the M4.2 parser) into `.gamedata`; a derived low-res heightfield mesh upload
 **DoD:** the map renders as ground geometry; cell flags queryable; sim never reads a float elevation.
 **Risks:** map dims/cell-size (256² @ 0.5u assumed) drive flow-field cost/memory — validate against real
 arena design. **Exercises:** Gameplay (map), Assets, Renderer (static mesh).
+**Execution note (2026-09-02):** the bake path is **not** the M4.2 PNG parser (unbuilt). The sim half
+ships as `m5-map-navigation` with a hand-authored little-endian `.mapdesc` golden
+(`docs/plans/m5.0-map-navigation.md`, schema `docs/slate-moba-proto-design.md` §3.2); the typed `.mba`
+wrapping is `content-typed-payloads`; the derived heightfield mesh moves to a presentation slice.
 
 ---
 

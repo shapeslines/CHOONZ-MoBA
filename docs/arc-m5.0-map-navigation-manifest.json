@@ -1,0 +1,199 @@
+{
+  "schema_version": "1.0",
+  "source": {
+    "plan": "docs/plans/m5.0-map-navigation.md",
+    "phase_pointer": "M5.0 m5-map-navigation S0 through S6"
+  },
+  "phase": {
+    "id": "m5-0-map-navigation",
+    "goal": "Give the deterministic simulation its authoritative integer map grid, lane definitions, cell/world conversions, passability, neighbor ordering, and a little-endian .mapdesc codec without changing the renderer or the .mba v1 container",
+    "in_scope": [
+      "MapGrid SoA storage in a caller-owned arena",
+      "MapCell flags, movement cost, integer height band",
+      "Q16.16 cell/world conversions with bounds status",
+      "Deterministic neighbor ordering and passability queries",
+      "LaneDef storage and waypoint validation",
+      ".mapdesc little-endian codec with fail-closed rejection",
+      "Canonical hash inclusion with one recorded SIM_LOGIC_HASH bump",
+      "Milestone acceptance and documentation"
+    ],
+    "out_of_scope": [
+      ".mba v1 changes or typed map payloads",
+      "Renderer, game, or presentation changes including the derived heightfield mesh",
+      "Flow fields, A*, avoidance, or unit movement",
+      "Command, event, or replay format changes",
+      "PNG authoring path",
+      "Owner-gated pull request merge"
+    ],
+    "dependencies": [
+      "Merged main at or after 4f66af17e9b8ad65c9b5238426775f656d2811fe (M4.1 accepted)",
+      "M3.4 oracle 0x637628abff59c823, stream 0x6f381609f7e59f0c",
+      "SIM_LOGIC_HASH 0xab96814425ba80a4 before S5",
+      "docs/slate-moba-proto-design.md section 3.2 schema"
+    ],
+    "done_condition": "Exact-head CI is green with new map tests in every configuration, the codec rejects every malformed fixture at the first invalid boundary, two identical map loads plus 10,000 ticks hash identically in Debug and Release, the controlled mutation still reports tick 4321 position_x entity 7, and the slate records the single logic-hash bump"
+  },
+  "tasks": [
+    {
+      "id": "s0-baseline",
+      "goal": "Record the untouched post-M4.1 build matrix, oracle, and logic hash before any map edit",
+      "context": "Every later slice must be able to show it did not change authoritative behavior until S5",
+      "inputs": ["Worktree on green main", "tools/local-ci.ps1", "docs/plans/m5.0-map-navigation.md"],
+      "output_contract": "The slate names the exact baseline commit and observed Debug, RelWithDebInfo, Release oracle and logic hashes",
+      "output_artifacts": [{"id": "m5-0-baseline-evidence", "description": "Recorded untouched baseline", "disposition": "consumed"}],
+      "done_check": "All three warning-as-error configurations pass every CTest entry and the controlled mutation reports tick 4321 position_x entity 7",
+      "out_of_scope": ["Any engine source edit"],
+      "model_tier": "Terra",
+      "depends_on": [],
+      "fence": {
+        "read_paths": ["Repository build and test files", "docs/plans/m5.0-map-navigation.md"],
+        "write_paths": ["docs/slate-moba-phase5-m5.0.md"],
+        "allowed_tools": ["cmake", "ctest", "git", "apply_patch"],
+        "effects": ["Build local targets", "Run local tests", "Record baseline evidence"]
+      },
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md S0", "docs/ROADMAP.md M5.0"],
+      "failure_states": [{"id": "baseline-red", "trigger": "Any untouched configuration oracle or boundary check fails", "expected_evidence": ["Failing command and first diagnostic are recorded"], "disposition": "blocked"}],
+      "verification_handoff": {"method": "Re-run the matrix from clean main", "expected_evidence": ["Every configuration reports all tests passed", "Oracle hashes match the recorded values"], "independent": true}
+    },
+    {
+      "id": "s1-storage-conversions",
+      "goal": "Implement MapGrid SoA storage, map_init validation, and Q16.16 cell/world conversions",
+      "context": "The map is the substrate every later gameplay slice reads; its representation and rounding must be fixed first",
+      "inputs": ["docs/slate-moba-proto-design.md section 3.2", "engine/sim/include/sim/sim_config.h", "engine/math fix.h"],
+      "output_contract": "map.h exposes MapGrid, map_init, map_cell_index, map_cell_to_world, map_world_to_cell returning status codes per ADR-0009 with no float and no STL",
+      "output_artifacts": [{"id": "map-storage", "description": "engine/sim map storage and conversions with tests", "disposition": "consumed"}],
+      "done_check": "map_tests round-trip every boundary cell, reject out-of-range world coordinates and overflowing dimensions without mutation, and pass in Debug and Release",
+      "out_of_scope": ["Neighbor queries", "Lanes", "Codec", "Hash inclusion"],
+      "model_tier": "Sol",
+      "depends_on": ["s0-baseline"],
+      "fence": {
+        "read_paths": ["engine/sim/", "engine/math/", "engine/core/", "tests/sim/"],
+        "write_paths": ["engine/sim/include/sim/map.h", "engine/sim/src/map.cpp", "engine/sim/include/sim/sim_config.h", "tests/sim/map_tests.cpp", "tests/CMakeLists.txt"],
+        "allowed_tools": ["cmake", "ctest", "git", "apply_patch"],
+        "effects": ["Add sim sources", "Register map test"]
+      },
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md S1", "docs/decisions/0002-fixed-point-sim-math.md", "docs/decisions/0009-error-handling.md"],
+      "failure_states": [{"id": "foreign-engine-assumption", "trigger": "A float, STL container, exception, or RNG draw appears in map sources", "expected_evidence": ["Isolation lint or compiler policy check names the file"], "disposition": "blocked"}],
+      "verification_handoff": {"method": "Independent run of map_tests plus check_sim_boundary and compiler policy checks", "expected_evidence": ["map_tests passes", "Boundary and policy checks green"], "independent": true}
+    },
+    {
+      "id": "s2-passability-neighbors",
+      "goal": "Implement passability, movement cost, and the fixed N E S W NE SE SW NW neighbor order with the diagonal corner rule",
+      "context": "Neighbor order is part of determinism; it must be a contract before any pathing exists",
+      "inputs": ["map-storage", "docs/plans/m5.0-map-navigation.md contract section"],
+      "output_contract": "map_is_walkable, map_cost, map_neighbors with bounded output and stable ordering",
+      "output_artifacts": [{"id": "map-queries", "description": "Passability and neighbor queries with golden tests", "disposition": "consumed"}],
+      "done_check": "A golden 8x8 map exercising every flag combination yields bit-identical neighbor lists in Debug and Release",
+      "out_of_scope": ["Pathfinding", "Unit movement"],
+      "model_tier": "Sol",
+      "depends_on": ["s1-storage-conversions"],
+      "fence": {
+        "read_paths": ["engine/sim/", "tests/sim/"],
+        "write_paths": ["engine/sim/include/sim/map.h", "engine/sim/src/map.cpp", "tests/sim/map_tests.cpp"],
+        "allowed_tools": ["cmake", "ctest", "git", "apply_patch"],
+        "effects": ["Extend map sources and tests"]
+      },
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md S2", "docs/slate-moba-proto-design.md section 4 row 4"],
+      "failure_states": [{"id": "order-drift", "trigger": "Neighbor order differs between configurations or from the documented order", "expected_evidence": ["Failing golden diff"], "disposition": "blocked"}],
+      "verification_handoff": {"method": "Independent golden comparison in Debug and Release", "expected_evidence": ["Identical neighbor lists"], "independent": true}
+    },
+    {
+      "id": "s3-lanes-spawns",
+      "goal": "Store LaneDef entries and validate waypoints and spawn cells against the grid",
+      "context": "Creep waves and objectives later read lanes; invalid lanes must fail closed at load",
+      "inputs": ["map-queries", "docs/slate-moba-proto-design.md LaneDef"],
+      "output_contract": "map_add_lane rejects off-grid, blocked, or too-short waypoint lists without mutation; spawn lookup by flag",
+      "output_artifacts": [{"id": "map-lanes", "description": "Lane and spawn storage with rejection tests", "disposition": "consumed"}],
+      "done_check": "Valid lane accepted; off-grid, blocked, and zero-waypoint lanes rejected with state hash unchanged",
+      "out_of_scope": ["Wave scheduling", "Creep archetypes"],
+      "model_tier": "Sol",
+      "depends_on": ["s2-passability-neighbors"],
+      "fence": {
+        "read_paths": ["engine/sim/", "tests/sim/"],
+        "write_paths": ["engine/sim/include/sim/map.h", "engine/sim/src/map.cpp", "tests/sim/map_tests.cpp"],
+        "allowed_tools": ["cmake", "ctest", "git", "apply_patch"],
+        "effects": ["Extend map sources and tests"]
+      },
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md S3"],
+      "failure_states": [{"id": "invalid-schema", "trigger": "LaneDef field order or types drift from section 3.2", "expected_evidence": ["Diff against the documented contract"], "disposition": "blocked"}],
+      "verification_handoff": {"method": "Independent run of lane rejection tests", "expected_evidence": ["All rejection cases leave the hash unchanged"], "independent": true}
+    },
+    {
+      "id": "s4-mapdesc-codec",
+      "goal": "Encode and decode .mapdesc through eng::serialize in the documented field order with fail-closed rejection",
+      "context": "Maps must be authorable offline and loadable by AssetId before any content lane exists",
+      "inputs": ["map-lanes", "engine/serialize bounded readers and writers", "assets/maps/ authored source"],
+      "output_contract": "map_encode and map_decode with magic MAPD and schema_version 1; rejects bad magic, version, count overflow, truncation, and trailing bytes at the first invalid boundary",
+      "output_artifacts": [{"id": "mapdesc-codec", "description": "Codec, golden file, and malformed-input matrix", "disposition": "consumed"}],
+      "done_check": "Golden lane_test.mapdesc round-trips byte-identically and every malformed fixture rejects at the documented boundary",
+      "out_of_scope": [".mba payload wrapping", "Cooker integration"],
+      "model_tier": "Sol",
+      "depends_on": ["s3-lanes-spawns"],
+      "fence": {
+        "read_paths": ["engine/sim/", "engine/serialize/", "tests/sim/", "tests/assets/"],
+        "write_paths": ["engine/sim/include/sim/map.h", "engine/sim/src/map.cpp", "tests/sim/map_tests.cpp", "assets/maps/"],
+        "allowed_tools": ["cmake", "ctest", "git", "apply_patch"],
+        "effects": ["Add golden map fixture", "Extend tests"]
+      },
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md S4", "docs/slate-moba-proto-design.md section 7.2 item 9"],
+      "failure_states": [{"id": "codec-nondeterminism", "trigger": "Two encodes of the same grid differ", "expected_evidence": ["Byte diff"], "disposition": "blocked"}],
+      "verification_handoff": {"method": "Independent round-trip and malformed matrix run", "expected_evidence": ["Byte-identical golden", "Every malformed case rejected"], "independent": true}
+    },
+    {
+      "id": "s5-hash-replay",
+      "goal": "Include the map in the canonical state hash with exactly one recorded SIM_LOGIC_HASH bump and prove replay parity",
+      "context": "This is the only slice allowed to move the oracle; it must be isolated and recorded",
+      "inputs": ["mapdesc-codec", "engine/sim/src/sim_hash.cpp", "tests/sim/sim_determinism_tests.cpp"],
+      "output_contract": "Map storage hashed in ascending cell order; old and new SIM_LOGIC_HASH recorded in the slate; identical loads plus 10,000 ticks hash identically in Debug and Release",
+      "output_artifacts": [{"id": "map-hash-evidence", "description": "Recorded hash bump and parity proof", "disposition": "consumed"}],
+      "done_check": "Debug and Release report the same new final and stream hashes and the controlled mutation reports tick 4321 position_x entity 7",
+      "out_of_scope": ["Replay format changes", "Command changes"],
+      "model_tier": "Sol",
+      "depends_on": ["s4-mapdesc-codec"],
+      "fence": {
+        "read_paths": ["engine/sim/", "tests/sim/"],
+        "write_paths": ["engine/sim/include/sim/sim.h", "engine/sim/src/sim.cpp", "engine/sim/include/sim/sim_hash.h", "engine/sim/src/sim_hash.cpp", "tests/sim/map_tests.cpp", "docs/slate-moba-phase5-m5.0.md"],
+        "allowed_tools": ["cmake", "ctest", "git", "apply_patch"],
+        "effects": ["Embed map in SimWorld", "Bump logic hash once"]
+      },
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md S5", "docs/slate-moba-proto-design.md section 7.2 item 1"],
+      "failure_states": [{"id": "replay-mismatch", "trigger": "Debug and Release disagree or the mutation report changes", "expected_evidence": ["First divergence tick, field, entity"], "disposition": "blocked"}],
+      "verification_handoff": {"method": "Independent oracle and mutation run in Debug and Release", "expected_evidence": ["Identical new hashes", "Mutation report unchanged"], "independent": true}
+    },
+    {
+      "id": "s6-gates-close",
+      "goal": "Run the full acceptance matrix and close the milestone paper",
+      "context": "The milestone is done only when every gate is green and the docs say so",
+      "inputs": ["map-hash-evidence", "tools/local-ci.ps1", "tools/check-clang-cl-determinism.ps1"],
+      "output_contract": "Slate complete, ROADMAP M5.0 status flipped, JOURNAL session prepended, PR opened against main",
+      "output_artifacts": [{"id": "m5-0-acceptance", "description": "Milestone acceptance record", "disposition": "consumed"}],
+      "done_check": "Debug, RelWithDebInfo, Release, debug-asan, and clang-cl UBSan all green; isolation lint green; PR checks green on the exact head",
+      "out_of_scope": ["Merge"],
+      "model_tier": "Terra",
+      "depends_on": ["s5-hash-replay"],
+      "fence": {
+        "read_paths": ["Repository"],
+        "write_paths": ["docs/slate-moba-phase5-m5.0.md", "docs/ROADMAP.md", "docs/JOURNAL.md", "docs/plans/m5.0-map-navigation.md", "docs/next-session.md"],
+        "allowed_tools": ["cmake", "ctest", "git", "gh", "apply_patch"],
+        "effects": ["Run full matrix", "Open PR"]
+      },
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md S6", "AGENTS.md section 2"],
+      "failure_states": [{"id": "gate-red", "trigger": "Any matrix or hosted check fails", "expected_evidence": ["Failing job and first diagnostic"], "disposition": "blocked"}],
+      "verification_handoff": {"method": "Independent reviewer traces every slate claim to a command or GitHub check", "expected_evidence": ["All plan clauses map to passing evidence", "No out-of-fence file in the diff"], "independent": true}
+    }
+  ],
+  "syntheses": [
+    {
+      "id": "m5-0-terminal",
+      "children": ["s0-baseline", "s1-storage-conversions", "s2-passability-neighbors", "s3-lanes-spawns", "s4-mapdesc-codec", "s5-hash-replay", "s6-gates-close"],
+      "input_artifacts": ["m5-0-baseline-evidence", "map-storage", "map-queries", "map-lanes", "mapdesc-codec", "map-hash-evidence", "m5-0-acceptance"],
+      "output_contract": "One evidence-backed deterministic map milestone ready for owner merge with the renderer, .mba v1, and command path untouched",
+      "output_artifacts": [{"id": "m5-0-terminal-record", "description": "Terminal M5.0 acceptance record", "disposition": "terminal"}],
+      "done_check": "Every child artifact is reconciled and no blocking gate or held question remains unrecorded",
+      "source_pointers": ["docs/plans/m5.0-map-navigation.md Acceptance", "docs/ROADMAP.md M5.0"],
+      "verification_handoff": {"method": "Independent reviewer traces every terminal claim to exact command or GitHub evidence", "expected_evidence": ["All M5.0 plan clauses map to passing evidence", "No renderer, .mba, or command change appears in the diff"], "independent": true},
+      "unresolved_questions": {"disposition": "escalate"}
+    }
+  ],
+  "terminal_synthesis_id": "m5-0-terminal"
+}
