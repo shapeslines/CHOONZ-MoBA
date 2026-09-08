@@ -32,6 +32,7 @@ add_executable(engine_tests
     sim/deferred_destroy_tests.cpp
     sim/entity_tests.cpp
     sim/events_tests.cpp
+    sim/map_tests.cpp
     sim/sim_config_tests.cpp
     sim/sim_hash_tests.cpp
     sim/replay_tests.cpp
@@ -113,6 +114,7 @@ add_test(NAME sim_components COMMAND engine_tests --suite sim_components)
 add_test(NAME sim_destroy COMMAND engine_tests --suite sim_destroy)
 add_test(NAME sim_entity  COMMAND engine_tests --suite sim_entity)
 add_test(NAME sim_events  COMMAND engine_tests --suite sim_events)
+add_test(NAME sim_map     COMMAND engine_tests --suite sim_map)      # M5.0 map grid + .mapdesc
 add_test(NAME sim         COMMAND engine_tests --suite sim)
 add_test(NAME sim_schedule COMMAND engine_tests --suite sim_schedule)
 add_test(NAME sim_systems COMMAND engine_tests --suite sim_systems)
@@ -139,7 +141,7 @@ if(MOBA_UBSAN)
         COMMAND sim_oracle_probe --sim-self-check)
     set_tests_properties(sim_ubsan_oracle PROPERTIES
         PASS_REGULAR_EXPRESSION
-            "sim_oracle ticks=10000 commands=923 final=0x637628abff59c823 stream=0x6f381609f7e59f0c logic=0xab96814425ba80a4")
+            "sim_oracle ticks=10000 commands=923 final=0xff4e1ca0c779455b stream=0x218da333e6834496 logic=0xcef8548df2b2a518")
     add_test(NAME sim_ubsan_tripwire
         COMMAND ${CMAKE_COMMAND}
                 -DTRIPWIRE_EXE=$<TARGET_FILE:sim_ubsan_tripwire>
@@ -207,7 +209,7 @@ add_test(NAME replay_inspect
     COMMAND $<TARGET_FILE:moba_replay> inspect "${REPLAY_FIXTURE_FILE}")
 set_tests_properties(replay_inspect PROPERTIES
     FIXTURES_REQUIRED replay_file
-    PASS_REGULAR_EXPRESSION "logic_hash=0xab96814425ba80a4")
+    PASS_REGULAR_EXPRESSION "logic_hash=0xcef8548df2b2a518")
 
 add_test(NAME replay_verify
     COMMAND $<TARGET_FILE:moba_replay> verify "${REPLAY_FIXTURE_FILE}")

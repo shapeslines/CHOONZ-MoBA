@@ -37,9 +37,9 @@ endif()
 foreach(required_field IN ITEMS
         "ticks=10000"
         "commands=923"
-        "final=0x637628abff59c823"
-        "stream=0x6f381609f7e59f0c"
-        "logic=0xab96814425ba80a4")
+        "final=0xff4e1ca0c779455b"
+        "stream=0x218da333e6834496"
+        "logic=0xcef8548df2b2a518")
     string(FIND "${test_output}" "${required_field}" field_at)
     if(field_at EQUAL -1)
         message(FATAL_ERROR "oracle output is missing ${required_field}: ${test_output}")

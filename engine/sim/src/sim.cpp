@@ -7,7 +7,7 @@ static bool sim_config_valid(SimWorldConfig config) {
     return config.max_entities > 0u && config.max_entities <= HANDLE_INDEX_MASK + 1u &&
            config.initial_unit_count <= SIM_MAX_UNITS &&
            config.initial_unit_count <= config.max_entities &&
-           config.damage_event_capacity > 0u;
+           config.damage_event_capacity > 0u && map_config_valid(config.map);
 }
 
 static bool add_required(size_t* total, size_t required) {
@@ -18,7 +18,7 @@ static bool add_required(size_t* total, size_t required) {
 
 SimWorldConfig sim_world_config_default(void) {
     return SimWorldConfig{
-        SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY};
+        SIM_DEFAULT_MAX_ENTITIES, SIM_MAX_UNITS, SIM_DEFAULT_DAMAGE_EVENT_CAPACITY, MapConfig{}};
 }
 
 size_t sim_world_memory_required(SimWorldConfig config) {
@@ -33,6 +33,8 @@ size_t sim_world_memory_required(SimWorldConfig config) {
                                   config.max_entities, config.max_entities)) ||
         !add_required(&total, damage_event_queue_memory_required(
                                   config.damage_event_capacity))) return 0u;
+    if (!map_config_is_empty(config.map) &&
+        !add_required(&total, map_memory_required(config.map))) return 0u;
 
     size_t destroy_bytes = sizeof(EntityId) * static_cast<size_t>(config.max_entities);
     if (destroy_bytes > SIZE_MAX - (alignof(EntityId) - 1u) ||
@@ -56,7 +58,8 @@ bool sim_init(SimWorld* world, Arena* arena, uint64_t seed, SimWorldConfig confi
         !health_pool_init(&staged.health, arena,
                           config.max_entities, config.max_entities) ||
         !damage_event_queue_init(&staged.damage_events, arena,
-                                 config.damage_event_capacity)) {
+                                 config.damage_event_capacity) ||
+        !map_init(&staged.map, arena, config.map)) {
         temp_end(temp);
         return false;
     }
