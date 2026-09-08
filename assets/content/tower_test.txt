@@ -1,0 +1,7 @@
+# Authored ObjectiveDef. Cooked by: cooker --kind objective.
+objective_id = objectives/lane/tower_a
+owner_team_id = 0
+kind = tower
+max_health = 1800
+armor = 20
+target_policy = hero_first
