@@ -1,0 +1,57 @@
+{
+  "schema_version": "runner-request/v1",
+  "request_id": "CHOONZ-MOBA-WIN-TOOLCHAIN-1",
+  "repository": "shapeslines/CHOONZ-MoBA",
+  "request_class": "capability-change",
+  "visibility": "public",
+  "workload": {
+    "summary": "Enroll the public CHOONZ-MoBA repo on the Windows self-hosted runner and bake its C++/Vulkan toolchain. ci.yml runs a /WX MSVC build + CTest across Debug, RelWithDebInfo, Release (~100 targets, 48 tests, a few minutes per config on 2 vCPU), an optional clang-cl/UBSan probe, and a fresh-clone walk; the Vulkan smoke self-classifies SKIP without a GPU. Hosted Actions is billing-locked. Activation = set repo variable CI_RUNNER; ci.yml never installs on the guest.",
+    "triggers": [
+      "push",
+      "workflow_dispatch"
+    ],
+    "fork_policy": "none",
+    "permissions": "contents read; no artifact upload; step summaries only",
+    "uses_secrets": false,
+    "network_access": "github-actions-and-pinned-package-sources"
+  },
+  "runner": {
+    "os": "windows",
+    "architecture": "x64",
+    "labels": [
+      "self-hosted",
+      "windows",
+      "x64"
+    ],
+    "toolchains": [
+      "Visual Studio 2022 Build Tools, MSVC v143 x64 (Desktop development with C++)",
+      "CMake >= 3.28 on the vcvars64 PATH",
+      "Ninja on the vcvars64 PATH",
+      "LunarG Vulkan SDK 1.4.357.0 at C:\\VulkanSDK\u0001.4.357.0, VULKAN_SDK set (glslc, validation layers)",
+      "Optional: LLVM clang-cl 19.x for the UBSan capability job (reports UNAVAILABLE without it)"
+    ],
+    "privileged_change": true
+  },
+  "capacity": {
+    "concurrency": 1,
+    "cpu_cores": 2,
+    "memory_gib": 4,
+    "disk_gib": 40,
+    "max_minutes": 60,
+    "runs_per_day": 10
+  },
+  "acceptance": {
+    "workflow": ".github/workflows/ci.yml",
+    "success_criteria": "With CI_RUNNER set to the label array, a workflow_dispatch of ci.yml on main completes windows-msvc (Debug), windows-msvc (RelWithDebInfo), and windows-msvc (Release) green with tools/verify-runner-toolchain.ps1 reporting RUNNER_TOOLCHAIN=OK, CTest 48/48 per config, and the sandbox step reporting SANDBOX_SMOKE=SKIP (no GPU) or a validation-clean run.",
+    "rollback": "Unset the CI_RUNNER repository variable; ci.yml falls back to windows-latest. No guest state is written by the workflow beyond the checkout and build-ci/."
+  },
+  "owner": {
+    "github_login": "carpacker",
+    "repository_role": "admin"
+  },
+  "evidence": [
+    "docs/ci-runner-handoff.md",
+    "tools/verify-runner-toolchain.ps1",
+    "docs/receipts/20260902-pm-baseline.md"
+  ]
+}
