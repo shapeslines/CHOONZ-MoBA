@@ -16,9 +16,23 @@ add_custom_command(
     COMMENT "Cooking sandbox texture: ${SANDBOX_BAKED_TEXTURE}"
     VERBATIM)
 
-# This intentionally contains only the M4.1 sandbox proof. Future asset kinds
-# extend this target instead of teaching the runtime about source formats.
-add_custom_target(content DEPENDS "${SANDBOX_BAKED_TEXTURE}")
+# M5.0: authored .mapdesc maps are already the runtime little-endian format; the
+# content target copies them beside the baked texture (no cooker step yet - typed
+# .mba wrapping is the content-typed-payloads slice).
+set(SANDBOX_BAKED_MAP_DIR "${SANDBOX_BAKED_ASSET_DIR}/maps")
+set(SANDBOX_BAKED_MAP "${SANDBOX_BAKED_MAP_DIR}/lane_test.mapdesc")
+add_custom_command(
+    OUTPUT "${SANDBOX_BAKED_MAP}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SANDBOX_BAKED_MAP_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/assets/maps/lane_test.mapdesc" "${SANDBOX_BAKED_MAP}"
+    DEPENDS "${CMAKE_SOURCE_DIR}/assets/maps/lane_test.mapdesc"
+    COMMENT "Staging authored map: ${SANDBOX_BAKED_MAP}"
+    VERBATIM)
+
+# Future asset kinds extend this target instead of teaching the runtime about
+# source formats.
+add_custom_target(content DEPENDS "${SANDBOX_BAKED_TEXTURE}" "${SANDBOX_BAKED_MAP}")
 
 add_executable(sandbox src/main.cpp)
 target_link_libraries(sandbox PRIVATE eng::assets eng::platform eng::render eng::game moba_warnings moba_options)

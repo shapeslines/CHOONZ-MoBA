@@ -22,7 +22,7 @@ alignas(16) static uint8_t g_record_world_storage[DETERMINISM_WORLD_CAPACITY];
 alignas(16) static uint8_t g_replay_world_storage[DETERMINISM_WORLD_CAPACITY];
 alignas(16) static uint8_t g_expected_world_storage[DETERMINISM_WORLD_CAPACITY];
 alignas(16) static uint8_t g_actual_world_storage[DETERMINISM_WORLD_CAPACITY];
-static_assert(SIM_LOGIC_HASH == 0xab96814425ba80a4ULL,
+static_assert(SIM_LOGIC_HASH == 0x46e9e287878ba88cULL,
               "logic behavior changes require a deliberate replay compatibility bump");
 
 static bool init_determinism_world(SimWorld* world, Arena* arena, uint8_t* storage,
@@ -65,7 +65,7 @@ TEST(sim_determinism, recorded_hash_stream_matches_independent_replay_for_10000_
     uint64_t recorded_final_hash = 0;
     size_t size = record_determinism_replay(&recorded_final_hash);
     CHECK(size == 134812);
-    CHECK(recorded_final_hash == 0x637628abff59c823ULL); // pins M3.2 canonical order + behavior
+    CHECK(recorded_final_hash == 0xac06a80d7f71b503ULL); // pins M3.2 canonical order + behavior
     if (size == 0) return;
 
     ByteReader reader;
@@ -112,7 +112,7 @@ TEST(sim_determinism, ten_k_tick_record_stays_inside_cpu_time_ceiling) {
     double cpu_seconds = static_cast<double>(t1 - t0) / static_cast<double>(CLOCKS_PER_SEC);
     std::printf("  10k-tick record+hash: %.3f s CPU\n", cpu_seconds);
     CHECK(size > 0);
-    CHECK(final_hash == 0x637628abff59c823ULL);   // oracle re-pinned in the smoke path
+    CHECK(final_hash == 0xac06a80d7f71b503ULL);   // oracle re-pinned in the smoke path
     CHECK(cpu_seconds < CEILING_SECONDS);
 }
 

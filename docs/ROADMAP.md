@@ -736,7 +736,7 @@ deterministic**, ready to drop the local command source into netcode in Phase 6.
 
 ---
 
-### M5.0 — Map grid (sim authority) + derived render heightfield  · M
+### M5.0 — Map grid (sim authority) + derived render heightfield  · M  ✅ SIM HALF COMPLETE 2026-09-02 (`m5-map-navigation`, slate `slate-moba-phase5-m5.0.md`; heightfield mesh deferred to a presentation slice)
 **Goal:** the single fixed-extent tile grid that feeds path/collision/vision; render mesh decoupled.
 **Deliverables:** `MapGrid` SoA (flags: walkable/block-vision/ramp, `height_band` as a small integer
 **not a float**, `cost`); integer cell↔world conversions; baked from an authored source (PNG-as-tilemap
@@ -763,6 +763,10 @@ sensitive). **Exercises:** Gameplay (movement), Math (fixed), ECS.
 ---
 
 ### M5.2 — Selection (client-only) + command/order system  🔴  · M
+**Execution note (2026-09-03):** the `Command`/`CommandReject` shapes and the deterministic intake
+(validate → key order → dedup → capacity, translated into the legacy `SimCommandBuffer`) landed in
+M5.1 `m5-command-replay` (`docs/slate-moba-phase5-m5.1.md`, `engine/sim/command.h`). M5.2 adds the
+client-side selection, order queues, and raw-input translation on top of that contract.
 **Goal:** the determinism boundary — player intent becomes ordered `Command`s.
 **Deliverables:** **client-side** `Selection` (box/click picking against rendered float positions — view
 concern, **never** in sim); per-entity `OrderQueue` (move/attack-move/attack-unit/cast/hold/stop,
@@ -784,7 +788,17 @@ silent bump.
 
 ---
 
-### M5.3 — Data-driven abilities + projectiles + status effects  · L
+### M5.3 — Data-driven abilities + projectiles + status effects  · L  ✅ SIM CORE COMPLETE 2026-09-03 (`m5-hero-combat`, slate `slate-moba-phase5-m5-hero-combat.md`; dash, spatial-hash collision, and the full stacking taxonomy deferred)
+**Execution note (2026-09-03):** the v1 sim half landed on the `m5-hero-combat` lane, not on a
+separately numbered lane. `engine/sim/hero.h` carries the sim-owned POD mirror of the authored
+`HeroDef`/`ActionDef`/`EffectDef` (proto-design §3.3); `HeroPool`/`ProjectilePool`/`StatusPool` are
+bounded SoA pools; and the effect vocabulary is `projectile_damage`, `self_heal`, `area_slow`, every
+one of them routed through the single `resolve_effect` pipeline in `engine/sim/combat.cpp` — enforced
+by the `sim_pipeline_owner` source lint. Cooldowns and resource are integer ticks and integer points;
+status stacking is refresh-and-max per (target, effect_type). Still open here: dash, AoE via the
+spatial hash (v1 range and area are squared-distance tests, never `map_*`), the wider stacking
+taxonomy, and `.gamedata` baking of ability defs (the game-layer `HeroDef` → `SimHeroDef` translation
+lands after PR #70).
 **Goal:** abilities as data, not code — a fixed effect vocabulary, no scripting VM.
 **Deliverables:** flat `AbilityDef` (targeting/cost/cooldown + ordered `Effect[]` from a fixed
 vocabulary: damage/heal/spawn-projectile/apply-status/dash/aoe), baked into `.gamedata`; per-entity
@@ -798,7 +812,16 @@ taxonomy needs enumeration once real abilities exist. **Exercises:** Gameplay (a
 
 ---
 
-### M5.4 — Event-driven combat resolution  · M
+### M5.4 — Event-driven combat resolution  · M  🟡 SINGLE-RESOLUTION-POINT LANDED 2026-09-03 (`m5-hero-combat`; mitigation, shields, lifesteal, gold/XP, and respawn still open)
+**Execution note (2026-09-03):** the single-resolution-point invariant is no longer "enforced by
+convention" — it is enforced by a gate. `resolve_effect` is the only appender and
+`sys_combat_resolve`/`sys_effects_resolve` in `combat.cpp` are the only committers of `health.current`;
+`tests/sim/check_sim_pipeline_owner.cmake` (CTest `sim_pipeline_owner`) fails the build on any other
+health, resource, or cooldown write in `engine/sim`. Alongside the frozen 12-byte `DamageEvent` wire
+there is now one 32-byte `SimEvent` envelope queue (heal, status applied/expired, death), fixed
+capacity and reject-at-source per ADR-0014. Deaths route through `sim_destroy_deferred`. Still open
+here: armor mitigation as real data (v1 mitigation is a constant 0), shields, lifesteal, kill credit,
+gold/XP on death, and hero respawn timers.
 **Goal:** one central deterministic damage pipeline.
 **Deliverables:** systems emit `DamageEvent`s into a per-tick queue; a single `combat_resolve` drains
 them in deterministic order — mitigation (`amount * 100/(100+armor)` in fixed-point), shields,
@@ -868,6 +891,9 @@ the sim is bit-stable — which it is.
 ---
 
 ### M6.0 — Command source abstraction + replay parity  · S
+**Execution note (2026-09-03):** M5.1 already produces per-command reject reasons at intake without
+changing the seam or the oracle; M6.0 carries `Command` verbatim in replay v2 (new ADR) and turns the
+intake reasons into the per-command wire rejects, which is the reviewed logic-hash bump ADR-0014 names.
 **Goal:** make the sim's command input swappable (local ↔ replay ↔ network) with one seam.
 **Deliverables:** route `sim_tick`'s commands through a single source interface; confirm the
 **replay codec is the exact same wire codec** (one source of truth — `Cmd_Packet` shared by

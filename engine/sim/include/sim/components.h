@@ -5,6 +5,7 @@
 
 #include "math/fix.h"
 #include "sim/component_pool.h"
+#include "sim/hero.h"
 
 typedef struct TransformView {
     mm::fix* position_x;
@@ -77,3 +78,116 @@ bool health_pool_add(HealthPool* pool, EntityId entity,
 bool health_pool_remove(HealthPool* pool, EntityId entity);
 bool health_pool_has(const HealthPool* pool, EntityId entity);
 bool health_pool_get(HealthPool* pool, EntityId entity, HealthView* view);
+
+// ------------------------------------------------------------------ M5.2 hero combat
+// Three bounded SoA pools sharing the ComponentPool membership core, exactly like
+// TransformPool. Every pool is optional: capacity zero leaves the whole struct
+// zeroed, allocates no arena bytes, and reports every entity absent.
+
+typedef enum SimHeroPending : uint8_t {
+    SIM_HERO_PENDING_NONE = 0,
+    SIM_HERO_PENDING_ATTACK = 1,
+    SIM_HERO_PENDING_CAST = 2,
+} SimHeroPending;
+
+typedef struct HeroView {
+    uint16_t* def_index;
+    int32_t* resource;
+    uint32_t* basic_attack_cooldown;
+    uint32_t* action_cooldown;          // SIM_MAX_ACTION_SLOTS entries
+    uint8_t* pending_kind;
+    uint8_t* pending_slot;
+    EntityId* pending_target;
+    mm::fix* pending_point_x;
+    mm::fix* pending_point_y;
+} HeroView;
+
+// pending_* is tick-local intent written by sys_apply_commands and consumed by
+// sys_hero_actions. It is authoritative between those two steps, so it is hashed;
+// sys_hero_actions clears it unconditionally before the step returns.
+typedef struct HeroPool {
+    ComponentPool membership;
+    uint16_t* def_index;
+    int32_t* resource;
+    uint32_t* basic_attack_cooldown;
+    uint32_t* action_cooldown;
+    uint8_t* pending_kind;
+    uint8_t* pending_slot;
+    EntityId* pending_target;
+    mm::fix* pending_point_x;
+    mm::fix* pending_point_y;
+} HeroPool;
+
+size_t hero_pool_memory_required(uint32_t entity_capacity, uint32_t capacity);
+bool hero_pool_init(HeroPool* pool, Arena* arena, uint32_t entity_capacity, uint32_t capacity);
+bool hero_pool_add(HeroPool* pool, EntityId entity, uint16_t def_index, int32_t resource);
+bool hero_pool_remove(HeroPool* pool, EntityId entity);
+bool hero_pool_has(const HeroPool* pool, EntityId entity);
+bool hero_pool_get(HeroPool* pool, EntityId entity, HeroView* view);
+// Read-only def lookup for const seams such as sim_validate_commands.
+bool hero_pool_def_index(const HeroPool* pool, EntityId entity, uint16_t* out_def_index);
+
+typedef struct ProjectileView {
+    EntityId* source;
+    EntityId* target;
+    uint16_t* def_index;
+    uint8_t* action_slot;
+    uint8_t* effect_index;
+    mm::fix* position_x;
+    mm::fix* position_y;
+    mm::fix* speed;
+    uint16_t* remaining_ticks;
+} ProjectileView;
+
+typedef struct ProjectilePool {
+    ComponentPool membership;
+    EntityId* source;
+    EntityId* target;
+    uint16_t* def_index;
+    uint8_t* action_slot;
+    uint8_t* effect_index;
+    mm::fix* position_x;
+    mm::fix* position_y;
+    mm::fix* speed;
+    uint16_t* remaining_ticks;
+} ProjectilePool;
+
+size_t projectile_pool_memory_required(uint32_t entity_capacity, uint32_t capacity);
+bool projectile_pool_init(ProjectilePool* pool, Arena* arena,
+                          uint32_t entity_capacity, uint32_t capacity);
+bool projectile_pool_add(ProjectilePool* pool, EntityId entity, EntityId source,
+                         EntityId target, uint16_t def_index, uint8_t action_slot,
+                         uint8_t effect_index, mm::fix position_x, mm::fix position_y,
+                         mm::fix speed, uint16_t remaining_ticks);
+bool projectile_pool_remove(ProjectilePool* pool, EntityId entity);
+bool projectile_pool_has(const ProjectilePool* pool, EntityId entity);
+bool projectile_pool_get(ProjectilePool* pool, EntityId entity, ProjectileView* view);
+
+typedef struct StatusView {
+    uint8_t* effect_type;
+    uint8_t* stack_count;
+    uint16_t* remaining_ticks;
+    int32_t* magnitude;
+    mm::fix* scalar;
+} StatusView;
+
+// One row per target entity, tagged with the effect type it carries. Re-applying
+// the same effect type refreshes the duration and keeps the larger magnitude;
+// a different effect type replaces the row. v1 defines exactly one status effect,
+// so the single-row rule is the whole (target, effect_type) rule.
+typedef struct StatusPool {
+    ComponentPool membership;
+    uint8_t* effect_type;
+    uint8_t* stack_count;
+    uint16_t* remaining_ticks;
+    int32_t* magnitude;
+    mm::fix* scalar;
+} StatusPool;
+
+size_t status_pool_memory_required(uint32_t entity_capacity, uint32_t capacity);
+bool status_pool_init(StatusPool* pool, Arena* arena, uint32_t entity_capacity, uint32_t capacity);
+bool status_pool_add(StatusPool* pool, EntityId entity, uint8_t effect_type,
+                     uint16_t remaining_ticks, int32_t magnitude, mm::fix scalar);
+bool status_pool_remove(StatusPool* pool, EntityId entity);
+bool status_pool_has(const StatusPool* pool, EntityId entity);
+bool status_pool_get(StatusPool* pool, EntityId entity, StatusView* view);
