@@ -81,6 +81,8 @@ logs/
 *.spv
 baked/
 *.mba
+!assets/content/golden/
+!assets/content/golden/*.mba
 *.pak
 *.bmp
 viz/
