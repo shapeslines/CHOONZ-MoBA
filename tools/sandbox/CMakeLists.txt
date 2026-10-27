@@ -16,9 +16,24 @@ add_custom_command(
     COMMENT "Cooking sandbox texture: ${SANDBOX_BAKED_TEXTURE}"
     VERBATIM)
 
-# This intentionally contains only the M4.1 sandbox proof. Future asset kinds
-# extend this target instead of teaching the runtime about source formats.
-add_custom_target(content DEPENDS "${SANDBOX_BAKED_TEXTURE}")
+# ADR-0016: one typed content record (HeroDef) is cooked from its authored text
+# source beside the texture so the sandbox proves the record path end to end.
+set(SANDBOX_BAKED_HERO "${SANDBOX_BAKED_ASSET_DIR}/hero_test.mba")
+add_custom_command(
+    OUTPUT "${SANDBOX_BAKED_HERO}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SANDBOX_BAKED_ASSET_DIR}"
+    COMMAND $<TARGET_FILE:cooker>
+            --kind hero
+            --input "${CMAKE_SOURCE_DIR}/assets/content/hero_test.txt"
+            --asset "hero_test.mba"
+            --output "${SANDBOX_BAKED_HERO}"
+    DEPENDS cooker "${CMAKE_SOURCE_DIR}/assets/content/hero_test.txt"
+    COMMENT "Cooking sandbox hero record: ${SANDBOX_BAKED_HERO}"
+    VERBATIM)
+
+# Future asset kinds extend this target instead of teaching the runtime about
+# source formats.
+add_custom_target(content DEPENDS "${SANDBOX_BAKED_TEXTURE}" "${SANDBOX_BAKED_HERO}")
 
 add_executable(sandbox src/main.cpp)
 target_link_libraries(sandbox PRIVATE eng::assets eng::platform eng::render eng::game moba_warnings moba_options)

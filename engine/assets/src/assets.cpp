@@ -410,6 +410,26 @@ AssetHandle asset_register_sound(AssetRegistry* registry, const char* path,
                         (uint32_t)(source.pcm_bytes / bytes_per_frame));
 }
 
+AssetHandle asset_register_record(AssetRegistry* registry, const char* path,
+                                  AssetLifetime lifetime, AssetRecordSource source) {
+    if (!registry || !registry->initialized || !source.bytes || source.bytes_count == 0u ||
+        !mba_record_is_kind(source.kind) || lifetime > ASSET_LIFETIME_GLOBAL)
+        return null_asset_handle();
+
+    char normalized[ASSET_PATH_MAX];
+    size_t path_length = 0u;
+    if (!asset_path_normalize(path, normalized, sizeof(normalized), &path_length))
+        return null_asset_handle();
+    const AssetId id = asset_id_normalized_bytes(normalized, path_length);
+    bool found = false;
+    AssetHandle existing = existing_asset(registry, id, normalized, path_length,
+                                          ASSET_TYPE_RECORD, lifetime, &found);
+    if (found) return existing;
+    return commit_asset(registry, normalized, path_length, id, ASSET_TYPE_RECORD,
+                        lifetime, source.bytes, source.bytes_count, HANDLE_NULL,
+                        source.kind, source.schema_version, source.bytes_count);
+}
+
 typedef struct BoundedArenaAlloc {
     Arena* arena;
     size_t max_bytes;
@@ -480,6 +500,16 @@ AssetHandle asset_load(AssetRegistry* registry, const char* path,
                                                 baked.texture.width,
                                                 baked.texture.height};
                 result = asset_register_texture(registry, normalized, lifetime, source);
+                break;
+            }
+            case MBA_ASSET_TYPE_HERO:
+            case MBA_ASSET_TYPE_OBJECTIVE:
+            case MBA_ASSET_TYPE_ECONOMY:
+            case MBA_ASSET_TYPE_MAP: {
+                const AssetRecordSource source{baked.record.bytes, baked.record.bytes_count,
+                                               baked.record.record_kind,
+                                               baked.record.schema_version};
+                result = asset_register_record(registry, normalized, lifetime, source);
                 break;
             }
             default:
@@ -587,6 +617,22 @@ bool asset_get_sound(const AssetRegistry* registry, AssetHandle handle,
     next.channels = (uint16_t)(registry->meta1[slot] >> 16u);
     next.bits_per_sample = (uint16_t)(registry->meta1[slot] & 0xffffu);
     next.frame_count = registry->meta2[slot];
+    *out = next;
+    return true;
+}
+
+bool asset_get_record(const AssetRegistry* registry, AssetHandle handle,
+                      AssetRecordView* out) {
+    uint32_t slot = 0u;
+    if (!out || !handle_slot(registry, handle, &slot) ||
+        registry->types[slot] != ASSET_TYPE_RECORD ||
+        registry->states[slot] != ASSET_STATE_READY) return false;
+    AssetRecordView next{};
+    next.id = registry->ids[slot];
+    next.bytes = (const uint8_t*)registry->cpu_blobs[slot];
+    next.bytes_count = (uint32_t)registry->cpu_blob_bytes[slot];
+    next.kind = registry->meta0[slot];
+    next.schema_version = registry->meta1[slot];
     *out = next;
     return true;
 }

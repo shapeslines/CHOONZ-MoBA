@@ -1,6 +1,7 @@
 #include "test.h"
 
 #include "assets/assets.h"
+#include "assets/content.h"
 #include "assets/mba.h"
 #include "platform/platform.h"
 #include "win32_test_directory.h"
@@ -495,5 +496,99 @@ TEST(assets, baked_mba_loads_through_the_single_type_tag_path) {
     CHECK(std::remove(valid_path) == 0);
     CHECK(std::remove(bad_magic_path) == 0);
     CHECK(std::remove(bad_version_path) == 0);
+    CHECK(test_release_owned_directory(&owned));
+}
+
+// ADR-0016: a typed record travels the single baked path, stays verbatim in the
+// level arena, and every rejected variant leaves the registry and arenas untouched.
+TEST(assets, baked_record_loads_through_the_single_type_tag_path) {
+    OwnedTestDirectory owned{};
+    owned.scope_custody = INVALID_HANDLE_VALUE;
+    owned.directory_custody = INVALID_HANDLE_VALUE;
+    const bool directory_owned = test_create_owned_directory("rec", &owned);
+    CHECK(directory_owned);
+    if (!directory_owned) return;
+
+    EconomyRule rule{};
+    rule.award_kind = CONTENT_AWARD_XP;
+    rule.source_kind = CONTENT_SOURCE_OBJECTIVE_DESTROY;
+    rule.award_amount = 150u;
+    uint8_t body[16];
+    ByteWriter writer;
+    byte_writer_init(&writer, body, sizeof(body));
+    CHECK(content_encode_economy(&writer, &rule));
+    uint8_t baked[96]{};
+    size_t baked_bytes = 0u;
+    CHECK(mba_encode_record(baked, sizeof(baked), asset_id("rule.mba"), MBA_ASSET_TYPE_ECONOMY,
+                            CONTENT_SCHEMA_VERSION, body, CONTENT_ECONOMY_ENCODED_BYTES, &baked_bytes));
+
+    uint8_t bad_kind[96];
+    uint8_t bad_schema[96];
+    uint8_t bad_body[96];
+    std::memcpy(bad_kind, baked, baked_bytes);
+    std::memcpy(bad_schema, baked, baked_bytes);
+    std::memcpy(bad_body, baked, baked_bytes);
+    bad_kind[32] = (uint8_t)MBA_ASSET_TYPE_HERO;      // record_kind != container tag
+    bad_schema[36] = 2u;                                // unknown schema
+    bad_body[48] = 9u;                                  // award_kind out of range
+
+    char valid_path[256], kind_path[256], schema_path[256], body_path[256];
+    const bool paths_ready =
+        std::snprintf(valid_path, sizeof(valid_path), "%s/rule.mba", owned.path) > 0 &&
+        std::snprintf(kind_path, sizeof(kind_path), "%s/bad_kind.mba", owned.path) > 0 &&
+        std::snprintf(schema_path, sizeof(schema_path), "%s/bad_schema.mba", owned.path) > 0 &&
+        std::snprintf(body_path, sizeof(body_path), "%s/bad_body.mba", owned.path) > 0;
+    CHECK(paths_ready);
+    const bool written = paths_ready &&
+        platform_file_write(valid_path, baked, baked_bytes) &&
+        platform_file_write(kind_path, bad_kind, baked_bytes) &&
+        platform_file_write(schema_path, bad_schema, baked_bytes) &&
+        platform_file_write(body_path, bad_body, baked_bytes - 1u);   // also truncated
+    CHECK(written);
+    if (!written) {
+        CHECK(test_release_owned_directory(&owned));
+        return;
+    }
+
+    RegistryFixture fixture;
+    const bool initialized = init_fixture(&fixture, 2u, owned.path);
+    CHECK(initialized);
+    if (initialized) {
+        const size_t level_before = fixture.level.offset;
+        CHECK(handle_is_null(asset_load(&fixture.registry, "bad_kind.mba", ASSET_LIFETIME_LEVEL).h));
+        CHECK(handle_is_null(asset_load(&fixture.registry, "bad_schema.mba", ASSET_LIFETIME_LEVEL).h));
+        CHECK(handle_is_null(asset_load(&fixture.registry, "bad_body.mba", ASSET_LIFETIME_LEVEL).h));
+        CHECK(fixture.registry.live_count == 0u && fixture.fake.creates == 0u &&
+              fixture.level.offset == level_before &&
+              fixture.io.offset == fixture.registry.io_base_offset);
+
+        const AssetHandle record = asset_load(&fixture.registry, "rule.mba", ASSET_LIFETIME_LEVEL);
+        CHECK(!handle_is_null(record.h));
+        AssetRecordView view{};
+        CHECK(asset_get_record(&fixture.registry, record, &view));
+        CHECK(view.id == asset_id("rule.mba") && view.kind == MBA_ASSET_TYPE_ECONOMY &&
+              view.schema_version == CONTENT_SCHEMA_VERSION &&
+              view.bytes_count == CONTENT_ECONOMY_ENCODED_BYTES &&
+              std::memcmp(view.bytes, body, CONTENT_ECONOMY_ENCODED_BYTES) == 0);
+        ByteReader reader;
+        byte_reader_init(&reader, view.bytes, view.bytes_count);
+        EconomyRule decoded{};
+        CHECK(content_decode_economy(&reader, &decoded) && decoded.award_amount == 150u);
+        AssetTextureView not_a_texture{};
+        CHECK(!asset_get_texture(&fixture.registry, record, &not_a_texture));
+        CHECK(fixture.fake.creates == 0u);
+        // Loading the same path again dedups to the same handle.
+        const AssetHandle again = asset_load(&fixture.registry, "rule.mba", ASSET_LIFETIME_LEVEL);
+        CHECK(again.h == record.h && fixture.registry.live_count == 1u);
+        assets_unload_level(&fixture.registry, 0u);
+        CHECK(!asset_get_record(&fixture.registry, record, &view));
+        CHECK(fixture.registry.live_count == 0u && fixture.level.offset == level_before);
+        asset_registry_shutdown(&fixture.registry, 0u);
+    }
+
+    CHECK(std::remove(valid_path) == 0);
+    CHECK(std::remove(kind_path) == 0);
+    CHECK(std::remove(schema_path) == 0);
+    CHECK(std::remove(body_path) == 0);
     CHECK(test_release_owned_directory(&owned));
 }

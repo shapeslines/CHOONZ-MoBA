@@ -11,6 +11,10 @@ constexpr uint32_t MBA_MAGIC = 0x0041424Du; // literal bytes: 'M' 'B' 'A' '\0'
 constexpr uint32_t MBA_VERSION = 1u;
 constexpr uint32_t MBA_HEADER_BYTES = 32u;
 constexpr uint32_t MBA_TEXTURE_PAYLOAD_HEADER_BYTES = 16u;
+// ADR-0016: typed record payloads carry a 16-byte record header
+// (record_kind, schema_version, record_bytes, reserved) before the record bytes.
+constexpr uint32_t MBA_RECORD_PAYLOAD_HEADER_BYTES = 16u;
+constexpr uint32_t MBA_RECORD_MAX_BYTES = 1u << 20u;
 
 typedef enum MbaAssetType {
     MBA_ASSET_TYPE_NONE = 0,
@@ -18,6 +22,11 @@ typedef enum MbaAssetType {
     MBA_ASSET_TYPE_MESH = 2,
     MBA_ASSET_TYPE_SOUND = 3,
     MBA_ASSET_TYPE_FONT = 4,
+    // ADR-0016 typed record payloads (content.h)
+    MBA_ASSET_TYPE_HERO = 5,
+    MBA_ASSET_TYPE_OBJECTIVE = 6,
+    MBA_ASSET_TYPE_ECONOMY = 7,
+    MBA_ASSET_TYPE_MAP = 8,
 } MbaAssetType;
 
 typedef enum MbaTextureFormat {
@@ -55,14 +64,32 @@ typedef struct MbaTextureView {
     uint32_t       format;
 } MbaTextureView;
 
+// A validated record payload: `bytes` points at the record body inside the file
+// (after the record header), already checked against its content codec.
+typedef struct MbaRecordView {
+    const uint8_t* bytes;
+    uint32_t       bytes_count;
+    uint32_t       record_kind;    // MbaAssetType of the record
+    uint32_t       schema_version;
+} MbaRecordView;
+
 typedef struct MbaAssetView {
     MbaHeader      header;
     MbaTextureView texture;
+    MbaRecordView  record;
 } MbaAssetView;
 
 // These allocation-free operations are the shared engine/tool interface. Failure
-// leaves output arguments untouched. M4.1 emits and accepts only one RGBA8 mip.
+// leaves output arguments untouched. Textures: one RGBA8 mip (M4.1).
 bool mba_texture_measure(const MbaTextureSource* source, size_t* out_file_bytes);
 bool mba_encode_texture(void* destination, size_t capacity, AssetId asset_id,
                         const MbaTextureSource* source, size_t* out_file_bytes);
+bool mba_record_is_kind(uint32_t type);
+// Records: `record_bytes` must already be a valid encoding for `kind` (the encoder
+// re-validates through the content codec so a cooker cannot bake a bad record).
+bool mba_record_measure(uint32_t kind, const uint8_t* record_bytes, size_t record_size,
+                        size_t* out_file_bytes);
+bool mba_encode_record(void* destination, size_t capacity, AssetId asset_id, uint32_t kind,
+                       uint32_t schema_version, const uint8_t* record_bytes, size_t record_size,
+                       size_t* out_file_bytes);
 bool mba_inspect(const void* bytes, size_t size, MbaAssetView* out);

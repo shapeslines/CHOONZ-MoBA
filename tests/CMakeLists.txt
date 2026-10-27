@@ -24,6 +24,7 @@ add_executable(engine_tests
     containers/container_tests.cpp
     assets/asset_id_tests.cpp
     assets/asset_registry_tests.cpp
+    assets/content_tests.cpp
     assets/mba_tests.cpp
     platform/platform_tests.cpp
     serialize/serialize_tests.cpp
@@ -96,6 +97,7 @@ add_test(NAME containers  COMMAND engine_tests --suite containers)
 add_test(NAME asset_id    COMMAND engine_tests --suite asset_id)
 add_test(NAME assets      COMMAND engine_tests --suite assets)
 add_test(NAME mba         COMMAND engine_tests --suite mba)
+add_test(NAME content     COMMAND engine_tests --suite content)   # ADR-0016 typed records
 add_test(NAME assets_boundary
     COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/assets/check_assets_boundary.cmake")
@@ -257,6 +259,7 @@ add_test(NAME cooker_cli
     COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/assets/cooker_cli_tests.ps1"
             -Exe $<TARGET_FILE:cooker>
+            -ContentDir "${CMAKE_SOURCE_DIR}/assets/content"
             -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 
 # This is the M4.1 vertical proof: invoke CMake's content target, then compare its
@@ -270,6 +273,9 @@ add_test(NAME sandbox_baked_content
             -Cooker $<TARGET_FILE:cooker>
             -Source "${CMAKE_SOURCE_DIR}/assets/uv_test.tga"
             -Baked "${CMAKE_BINARY_DIR}/content/$<CONFIG>/uv_test.mba"
+            -RecordSource "${CMAKE_SOURCE_DIR}/assets/content/hero_test.txt"
+            -RecordBaked "${CMAKE_BINARY_DIR}/content/$<CONFIG>/hero_test.mba"
+            -RecordGolden "${CMAKE_SOURCE_DIR}/assets/content/golden/hero_test.mba"
             -WorkDir "${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(sandbox_baked_content PROPERTIES
     PASS_REGULAR_EXPRESSION "sandbox baked content: CMake output matches deterministic cooker bytes")
