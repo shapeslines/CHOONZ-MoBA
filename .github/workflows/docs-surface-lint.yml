@@ -25,7 +25,11 @@ permissions:
 
 jobs:
   lint:
-    runs-on: [self-hosted, linux]
+    # Hosted fallback: the fleet [self-hosted, linux] label has never completed a run
+    # on this repo (24h queue timeouts). GitHub-hosted Actions is green again for ci;
+    # use ubuntu-latest so docs-surface-lint can actually execute.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
