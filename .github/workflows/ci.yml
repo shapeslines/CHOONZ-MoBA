@@ -11,10 +11,11 @@ name: ci
 # renderer's own ADR-0012 check).
 #
 # Runner routing (fleet booklet-ci-runner-variable, 2026-09-02):
-#   * `runs-on` reads the repo variable CI_RUNNER (JSON label array or a single
-#     label). Unset → hosted `windows-latest` (R1-safe default). The runner manager
-#     sets CI_RUNNER as the activation receipt once the Windows runner carries the
-#     baked toolchain requested in .github/runner-ci-request.json.
+#   * `runs-on` uses house expression B: pull_request → hosted `windows-latest` (R1);
+#     push/workflow_dispatch → repo variable CI_RUNNER (JSON label array or a single
+#     label), unset → `windows-latest`. The runner manager sets CI_RUNNER as the
+#     activation receipt once the Windows runner carries the baked toolchain in
+#     .github/runner-ci-request.json.
 #   * Self-hosted runners carry a pre-baked toolchain; this workflow never installs
 #     anything on them. The winget step runs only on GitHub-hosted images; on
 #     self-hosted the "verify toolchain" step fails fast if anything is missing.
@@ -47,7 +48,7 @@ concurrency:
 jobs:
   windows-msvc:
     name: windows-msvc (${{ matrix.config }})
-    runs-on: ${{ startsWith(vars.CI_RUNNER || '', '[') && fromJSON(vars.CI_RUNNER) || (vars.CI_RUNNER || 'windows-latest') }}
+    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || (startsWith(vars.CI_RUNNER || '', '[') && fromJSON(vars.CI_RUNNER) || (vars.CI_RUNNER || 'windows-latest')) }}
     timeout-minutes: 60
     strategy:
       fail-fast: false          # want every config's signal, not just the first failure
@@ -164,7 +165,7 @@ jobs:
   # A present compiler always runs the oracle; UBSan runs after its capability probe.
   windows-clang-cl-stretch:
     name: windows-clang-cl (UBSan capability)
-    runs-on: ${{ startsWith(vars.CI_RUNNER || '', '[') && fromJSON(vars.CI_RUNNER) || (vars.CI_RUNNER || 'windows-latest') }}
+    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || (startsWith(vars.CI_RUNNER || '', '[') && fromJSON(vars.CI_RUNNER) || (vars.CI_RUNNER || 'windows-latest')) }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -180,7 +181,7 @@ jobs:
   # documented README path. This is the repeatable replacement for the manual sweep.
   fresh-walk:
     name: fresh-walk (stranger's path)
-    runs-on: ${{ startsWith(vars.CI_RUNNER || '', '[') && fromJSON(vars.CI_RUNNER) || (vars.CI_RUNNER || 'windows-latest') }}
+    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || (startsWith(vars.CI_RUNNER || '', '[') && fromJSON(vars.CI_RUNNER) || (vars.CI_RUNNER || 'windows-latest')) }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1

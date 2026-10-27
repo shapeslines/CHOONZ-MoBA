@@ -28,8 +28,9 @@ Labels expected: `self-hosted`, `Windows`, `X64`.
 
 ## How the workflow routes
 
-- `runs-on: ${{ startsWith(vars.CI_RUNNER || '', '[') && fromJSON(vars.CI_RUNNER) || (vars.CI_RUNNER || 'windows-latest') }}`
-  on all three jobs (house expression A). Unset variable → hosted `windows-latest` (R1-safe default).
+- `runs-on` on all three jobs uses house expression B: `pull_request` → `windows-latest` (R1);
+  `push` / `workflow_dispatch` → `CI_RUNNER` when set (JSON array or single label), else
+  `windows-latest`.
 - Concurrency: `${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: false` (R2).
 - On `runner.environment == 'self-hosted'` the winget step is skipped and
   `tools/verify-runner-toolchain.ps1` runs first; a missing tool fails fast with
