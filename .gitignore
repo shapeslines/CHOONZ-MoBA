@@ -92,3 +92,6 @@ vk_pipeline_cache.bin
 .env
 .env.*
 !.env.example
+
+# any local build tree (e.g. build-asan-<toolset>)
+build*/

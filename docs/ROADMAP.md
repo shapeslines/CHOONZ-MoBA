@@ -736,7 +736,7 @@ deterministic**, ready to drop the local command source into netcode in Phase 6.
 
 ---
 
-### M5.0 — Map grid (sim authority) + derived render heightfield  · M
+### M5.0 — Map grid (sim authority) + derived render heightfield  · M  ✅ SIM HALF COMPLETE 2026-09-02 (`m5-map-navigation`, slate `slate-moba-phase5-m5.0.md`; heightfield mesh deferred to a presentation slice)
 **Goal:** the single fixed-extent tile grid that feeds path/collision/vision; render mesh decoupled.
 **Deliverables:** `MapGrid` SoA (flags: walkable/block-vision/ramp, `height_band` as a small integer
 **not a float**, `cost`); integer cell↔world conversions; baked from an authored source (PNG-as-tilemap

@@ -118,6 +118,7 @@ TEST(sim, replay_header_rejects_incompatible_and_impossible_values) {
         {8, 2, 4, REPLAY_STATUS_BAD_VERSION},
         {12, 0xf1b4e2b29b1e9643ULL, 8, REPLAY_STATUS_BAD_LOGIC_HASH},
         {12, 0x7902599e173f87a6ULL, 8, REPLAY_STATUS_BAD_LOGIC_HASH},
+        {12, 0xab96814425ba80a4ULL, 8, REPLAY_STATUS_BAD_LOGIC_HASH}, // M3.2 key, pre-map
         {12, SIM_LOGIC_HASH ^ 1ULL, 8, REPLAY_STATUS_BAD_LOGIC_HASH},
         {28, 60, 4, REPLAY_STATUS_BAD_TICK_RATE},
         {32, 0, 4, REPLAY_STATUS_BAD_PLAYER_COUNT},
