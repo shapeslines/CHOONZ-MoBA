@@ -73,8 +73,8 @@ static CommandRejectReason validate_one(const SimWorld* world, CommandIntakeConf
     if (!command_player_owns_unit(c->player_id, config.player_count, slot))
         return COMMAND_REJECT_UNAUTHORIZED_ACTOR;
     if (c->command_kind == COMMAND_KIND_BASIC_ATTACK) {
-        if (c->target.h == HANDLE_NULL || !entity_manager_is_alive(&world->entities, c->target))
-            return COMMAND_REJECT_STALE_ENTITY;
+        uint32_t target_slot = 0u;
+        if (!command_actor_slot(world, c->target, &target_slot)) return COMMAND_REJECT_STALE_ENTITY;
     }
     if (c->command_kind == COMMAND_KIND_USE_ACTION) {
         // No action table exists yet; every action is unknown, which is a shape
@@ -95,13 +95,26 @@ static void push_reject(CommandReject* rejects, uint32_t* count, const Command* 
     rejects[(*count)++] = r;
 }
 
-// Branch-stable insertion sort: at most SIM_MAX_COMMANDS_PER_TICK records, and the
-// comparator is a strict total order, so the output is unique for a given multiset.
+// Break equal canonical keys by fields that can otherwise change the retained
+// duplicate. Compare values, not object bytes: Command may contain padding.
+static int command_intake_compare(const Command* a, const Command* b) {
+    int key = command_key_compare(a, b);
+    if (key != 0) return key;
+    if (a->actor.h != b->actor.h) return a->actor.h < b->actor.h ? -1 : 1;
+    if (a->action_id != b->action_id) return a->action_id < b->action_id ? -1 : 1;
+    if (a->target.h != b->target.h) return a->target.h < b->target.h ? -1 : 1;
+    if (a->point_x_q16 != b->point_x_q16) return a->point_x_q16 < b->point_x_q16 ? -1 : 1;
+    if (a->point_y_q16 != b->point_y_q16) return a->point_y_q16 < b->point_y_q16 ? -1 : 1;
+    return 0;
+}
+
+// Bounded insertion sort: ties in the canonical key use the value ordering above,
+// so a given multiset retains the same payload regardless of its arrival order.
 static void sort_by_key(Command* items, uint32_t count) {
     for (uint32_t i = 1u; i < count; ++i) {
         Command key = items[i];
         uint32_t j = i;
-        while (j > 0u && command_key_compare(&items[j - 1u], &key) > 0) {
+        while (j > 0u && command_intake_compare(&items[j - 1u], &key) > 0) {
             items[j] = items[j - 1u];
             --j;
         }
@@ -121,8 +134,7 @@ bool command_intake_run(const SimWorld* world, CommandIntakeConfig config,
     uint32_t accepted_count = 0u;
     uint32_t reject_count = 0u;
 
-    // Pass 1: per-command validation in input order; survivors are staged in
-    // input order so rejects[] reports the caller's ordinal.
+    // Pass 1: per-command validation and its rejects are in input order.
     for (uint32_t i = 0u; i < count; ++i) {
         CommandRejectReason reason = validate_one(world, config, &input[i]);
         if (reason != COMMAND_REJECT_NONE) push_reject(rejects, &reject_count, &input[i], reason);
@@ -130,7 +142,7 @@ bool command_intake_run(const SimWorld* world, CommandIntakeConfig config,
     }
 
     // Pass 2: canonical order, then duplicate (player_id, sequence) removal keeps
-    // the first in key order and rejects every later one.
+    // the first in key order (using the value tie-break above) and rejects every later one.
     sort_by_key(accepted, accepted_count);
     uint32_t kept = 0u;
     for (uint32_t i = 0u; i < accepted_count; ++i) {

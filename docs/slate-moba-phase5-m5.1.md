@@ -46,9 +46,10 @@ Ownership uses a documented placeholder partition of unit slots per player until
 - [x] **S0** Baseline recorded above.
 - [x] **S1** `command.h/.cpp`: `Command` (40 bytes, §3.4 field order), `CommandReject` (12 bytes),
   reason enum + strings, `command_key_compare`, placeholder ownership partition, actor→slot lookup.
-- [x] **S2** `command_intake_run`: per-command validation in input order, branch-stable insertion sort
-  by key, duplicate `(player_id, sequence)` rejection keeping the first in key order; pure (no world
-  mutation, no RNG, no allocation).
+- [x] **S2** `command_intake_run`: per-command validation in input order, bounded insertion sort
+  by key, duplicate `(player_id, sequence)` rejection keeping the first in key order; equal keys use
+  `(actor.h, action_id, target.h, point_x, point_y)` as a value tie-break. Pure (no world mutation, no
+  RNG, no allocation).
 - [x] **S3** Capacity at intake (`damage_capacity_remaining`, `SIM_MAX_COMMANDS_PER_TICK`) in key
   order; the seam's atomic over-capacity rejection re-proven with arena-byte equality.
 - [x] **S4** Live/replay parity: 2,000 ticks of a hostile deterministic `Command` stream → intake →
@@ -63,8 +64,8 @@ Ownership uses a documented placeholder partition of unit slots per player until
 
 - `USE_ACTION` is rejected as `MALFORMED` until an action table exists (`m5-hero-combat`);
   `COOLDOWN` and `RANGE` are defined but not produced here.
-- `BASIC_ATTACK` translates to the legacy `DAMAGE` command with a placeholder amount of 1 against the
-  target's unit slot; `MOVE` translates to `SET_VELOCITY` with the point as the desired velocity until
+- `BASIC_ATTACK` requires a live target in a unit slot and translates to the legacy `DAMAGE` command
+  with a placeholder amount of 1 against that slot; `MOVE` translates to `SET_VELOCITY` with the point as the desired velocity until
   navigation lands (M5.x flow fields).
 - `rejects[]` is reported in input order for pass-1 reasons, then duplicates, then capacity (each in
   key order), so a given stream always yields one byte pattern.
@@ -74,8 +75,8 @@ Ownership uses a documented placeholder partition of unit slots per player until
 ### S1–S4
 
 - `engine/sim/include/sim/command.h` / `src/command.cpp`: `Command` 40 bytes (36 of fields, 8-aligned
-  by `action_id`), `CommandReject` 12 bytes, 10 reasons with strings, `command_key_compare` (strict
-  total order; generation excluded, index included), placeholder ownership partition
+  by `action_id`), `CommandReject` 12 bytes, 10 reasons with strings, `command_key_compare` (canonical
+  key; generation excluded, index included), placeholder ownership partition
   (`SIM_MAX_UNITS / player_count`, last player takes the remainder), `command_actor_slot`,
   `command_intake_run` (three passes: validate in input order; branch-stable insertion sort + dedup
   keeping the first in key order; capacity in key order), `command_to_sim` / `command_batch_to_sim`.

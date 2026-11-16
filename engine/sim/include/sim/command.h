@@ -86,7 +86,10 @@ bool command_actor_slot(const SimWorld* world, EntityId actor, uint32_t* out_slo
 
 // Validate, order, and de-duplicate one tick of commands.
 //   accepted[]  receives at most `capacity` commands in canonical key order.
-//   rejects[]   receives at most `capacity` rejects in input order.
+//               Equal keys use (actor.h, action_id, target.h, point_x, point_y)
+//               as a value tie-break before keeping one per (player_id, sequence).
+//   rejects[]   receives at most `capacity` rejects: validation failures in input
+//               order, then duplicates and capacity failures in sorted order.
 // Returns false only for invalid arguments (null pointers, count > capacity,
 // capacity > SIM_MAX_COMMANDS_PER_TICK); in that case nothing is written.
 bool command_intake_run(const SimWorld* world, CommandIntakeConfig config,

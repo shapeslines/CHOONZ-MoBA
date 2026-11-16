@@ -76,7 +76,7 @@ static bool run_intake(const SimWorld* world, CommandIntakeConfig config, const 
 
 // ---------------------------------------------------------------- S1 shapes + key
 
-TEST(sim_command, shapes_and_key_are_a_strict_total_order) {
+TEST(sim_command, shapes_and_canonical_key) {
     static_assert(sizeof(Command) == 40u, "Command layout");
     static_assert(sizeof(CommandReject) == 12u, "CommandReject layout");
     Command a = move_cmd(5u, 0u, 1u, EntityId{handle_make(0u, 1u)}, 0, 0);
@@ -178,6 +178,42 @@ TEST(sim_command, accepted_commands_come_out_in_canonical_key_order_and_are_pure
     SimCommandBuffer buffer{sims, 4u};
     CHECK(sim_validate_commands(&f.world, &buffer));
     CHECK(sim_tick(&f.world, &buffer));
+}
+
+TEST(sim_command, duplicate_key_payload_winner_is_independent_of_arrival_order) {
+    CommandFixture f{};
+    CHECK(fixture_init(&f));
+    EntityId actor = f.world.unit_entities[0];
+    Command move_a = move_cmd(3u, 0u, 7u, actor, FIX_ONE, 0);
+    Command move_b = move_cmd(3u, 0u, 7u, actor, -FIX_ONE, 0);
+    Command attack_a = attack_cmd(3u, 0u, 8u, actor, f.world.unit_entities[1]);
+    Command attack_b = attack_cmd(3u, 0u, 8u, actor, f.world.unit_entities[2]);
+    Command forward[] = {move_a, attack_b, move_b, attack_a};
+    Command reverse[] = {attack_a, move_b, attack_b, move_a};
+    IntakeResult a{}, b{};
+    CHECK(run_intake(&f.world, config_for(3u), forward, 4u, &a));
+    CHECK(run_intake(&f.world, config_for(3u), reverse, 4u, &b));
+    CHECK(a.accepted_count == 2u && b.accepted_count == 2u);
+    CHECK(a.reject_count == 2u && b.reject_count == 2u);
+    CHECK(a.accepted[0].point_x_q16 == -FIX_ONE && b.accepted[0].point_x_q16 == -FIX_ONE);
+    CHECK(a.accepted[1].target.h == f.world.unit_entities[1].h);
+    CHECK(b.accepted[1].target.h == f.world.unit_entities[1].h);
+    CHECK(std::memcmp(a.accepted, b.accepted, sizeof(Command) * 2u) == 0);
+    CHECK(a.rejects[0].reason == COMMAND_REJECT_DUPLICATE_SEQUENCE);
+    CHECK(a.rejects[1].reason == COMMAND_REJECT_DUPLICATE_SEQUENCE);
+}
+
+TEST(sim_command, live_non_unit_attack_target_is_rejected_at_intake) {
+    CommandFixture f{};
+    CHECK(fixture_init(&f));
+    EntityId non_unit = entity_manager_create(&f.world.entities);
+    CHECK(non_unit.h != HANDLE_NULL);
+    CHECK(entity_manager_is_alive(&f.world.entities, non_unit));
+    Command in = attack_cmd(3u, 0u, 1u, f.world.unit_entities[0], non_unit);
+    IntakeResult r{};
+    CHECK(run_intake(&f.world, config_for(3u), &in, 1u, &r));
+    CHECK(r.accepted_count == 0u);
+    CHECK(r.reject_count == 1u && r.rejects[0].reason == COMMAND_REJECT_STALE_ENTITY);
 }
 
 // ---------------------------------------------------------------- S3 backpressure
