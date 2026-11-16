@@ -7,7 +7,7 @@ effect_authority: none
 repo: shapeslines/CHOONZ-MoBA
 fleet_status: ALIVE
 related:
-  - GromCodebase docs/fleet/FLEET-MAP.md row CHOONZ-MoBA
+  - GromEstate docs/FLEET-MAP.md row CHOONZ-MoBA
   - docs/next-session.md
 ---
 
@@ -15,18 +15,17 @@ related:
 
 > Derived routing surface for agents and owners. **Does not** mint OGIP rows,
 > rewrite receipts, grant gates, or queue work — execution authority remains
-> this repo's `AGENTS.md`, its lane owners, and the estate queues. Census
-> authority: FLEET-MAP (GromCodebase `docs/fleet/`); this card routes, it does
-> not rule.
+> this repo's `AGENTS.md`, its lane owners, and the estate queues. GromAtlas
+> owns estate existence and structure; GromEstate's FLEET-MAP is a projection.
 
 ## Quick info
 | | |
 | --- | --- |
 | Role | From-scratch C++17/raw-Vulkan MOBA-RTS engine prototype: deterministic fixed-point sim, replay, offline SPIR-V renderer; off-spine by design |
 | Canonical checkout | CHOONZ/CHOONZ-MoBA |
-| FLEET-MAP status | ALIVE (row: canonical clone is CHOONZ/CHOONZ-MoBA; stray CHOONZ/MOBA-proto clone ABSENT on F: 2026-09-05 — do not restore without owner) |
-| Current front | `docs/next-session.md` — Phase 3 + M4.0 assets merged on `main`; M4.1 cooker boundary defined (@ `ac4d2b4`, 2026-08-18) |
-| Key surfaces | `AGENTS.md` · `ARCHITECTURE.md` · `docs/ROADMAP.md` · `docs/DECISIONS/` (ADRs) · `docs/JOURNAL.md` |
+| FLEET-MAP status | ALIVE in the [GromEstate projection](https://github.com/shapeslines/GromEstate/blob/main/docs/FLEET-MAP.md) |
+| Current front | `docs/next-session.md` and `docs/WORK-FRONTLOG.md`; check their freshness against current main and open PRs |
+| Key surfaces | `AGENTS.md` · `ARCHITECTURE.md` · `docs/ROADMAP.md` · `docs/decisions/` (ADRs) · `docs/JOURNAL.md` |
 
 ## Route here when
 - Work targets the MOBA/RTS engine itself: C++ modules under `engine/`, build presets, CI, tests, M-milestone lanes.
@@ -34,7 +33,7 @@ related:
 - Renderer, offline SPIR-V, asset registry, or `.mba` cooker work needs doing or citing.
 
 ## Route NOT here when
-- Estate census/structure or OGIP owner gates — GromCodebase `docs/fleet/FLEET-MAP.md`; EstateBoard `_registry` (`python tools/ogip.py`).
+- Estate census/structure — GromAtlas; the GromEstate `docs/FLEET-MAP.md` is a projection. OGIP owner gates — EstateBoard `_registry` (`python tools/ogip.py`).
 - Data-spine, auth, database, or backend work — this repo is off-spine, isolated by design (`ARCHITECTURE.md`).
 - Sibling repos CHOONZ and CHOONZ-mobile — separate repos with their own boards.
 
@@ -43,16 +42,17 @@ related:
 - In-repo contracts to cite (never import): the determinism contract, platform/renderer seams, replay codec + `moba_replay` CLI, CTest golden gates.
 
 ## Current state pointers
-- `docs/next-session.md` — handoff @ `ac4d2b4` (2026-08-18): Phase 3 M3.0–M3.4 + security consolidation and M4.0 (PR #52) merged; M4.1 boundary defined (PR #54 closed unmerged).
-- Open lanes (2026-09-07): M5 series PRs #68–#72 (map, command intake, content payloads, hero combat, lane objectives), CI runner #66, PM baseline #65.
+- [Next session](next-session.md) and [work frontlog](WORK-FRONTLOG.md) are handoff pointers; verify the pin and current branch before following a first action.
+- [Open pull requests](https://github.com/shapeslines/CHOONZ-MoBA/pulls) carry the current candidate heads, checks, and integration order. PR #66 has landed.
 
 ## Stop signs
 - Vulkan SDK in hosted CI (`find_package(Vulkan) → REQUIRED` flip) is owner-gated (`docs/sessions/2026-06-06-m2.0.md`, `docs/slate-moba-2026-08-11.md`); no OGIP rows are cited in this repo's own docs.
 - FLEET-MAP row note (2026-09-05): the stray `CHOONZ/MOBA-proto` clone is ABSENT on F: — do not restore without owner.
 
 ## Quicklinks
-- [README](../README.md) · [AGENTS.md](../AGENTS.md) · [ARCHITECTURE](../ARCHITECTURE.md) · [ROADMAP](../ROADMAP.md)
+- [README](../README.md) · [AGENTS.md](../AGENTS.md) · [ARCHITECTURE](../ARCHITECTURE.md) · [ROADMAP](ROADMAP.md)
 - System-Architecture deep-dive (sibling repo): `../System-Architecture/projects/moba.md`
 
 ## Changelog
 - 2026-09-07 — board seeded (estate repo-board rollout, EstateBoard tracker).
+- 2026-11-16 — refresh the census authority and routing pointers against current main and PR state.
