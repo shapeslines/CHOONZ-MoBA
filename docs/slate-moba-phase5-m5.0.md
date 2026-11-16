@@ -1,6 +1,6 @@
 # Phase 5 M5.0 Slate - Map Grid and `.mapdesc` Codec (`m5-map-navigation`)
 
-**Status:** complete on the lane; PR open, owner merge gated (Actions billing lock; see `docs/ci-runner-handoff.md`)
+**Status (2026-11-16):** sim half prepared for integration; see PR #68 for current gates.
 
 **Branch:** `lane/moba-m5.0-map/20260902` (worktree `GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.0-map`)
 
