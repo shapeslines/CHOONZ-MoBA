@@ -1,37 +1,32 @@
 # CHOONZ-MoBA — next session
 
-## State @ `4f66af1` · 2026-09-04 · homebase/pm-baseline
-Main still at `4f66af1` (M4.1). Seven lanes await owner merge: #65 docs, #66 CI runner, #68 M5.0 map,
-#69 M5.1 intake, #70 typed content, #71 M5.2 hero combat, #72 M5.5 lane objectives. Depth: standard.
+## State @ `8fc6d9b` · 2026-11-15 · integration candidate
+M4.1 is on main; the CI runner handoff #66 has landed. PR #65 is still in review at this
+observation. Refresh GitHub heads, checks and mergeability before acting on this snapshot.
 
 ## Shipped
-- `4f66af1` M4.1: sandbox texture through CMake `content` target [PR #63]
-- `lane/moba-pm-baseline/20260902` PM baseline + roadmap translation (docs-only) [PR #65]
-- `lane/moba-ci-runner/20260902` CI → fleet runner handoff + local-ci fix [PR #66]
-- `lane/moba-m5.0-map/20260903` M5.0 map grid + `.mapdesc` + canonical hash [PR #68, supersedes #67]
-- `lane/moba-m5.1-command/20260903` M5.1 command intake + live/replay parity [PR #69]
-- `lane/moba-content-payloads/20260903` typed content record payloads, ADR-0016 [PR #70]
-- `lane/moba-m5-hero-combat/20260903` M5.2 hero combat, unified effect pipeline, stacked on #68/#69 [PR #71]
-- `lane/moba-m5-lane-objectives/20260904` M5.5 waves, towers, cores, ledgers, match over, stacked on #71 [PR #72]
+- M4.1 cooker and sandbox content target: #57 and #63 (`4f66af1`).
+- CI runner handoff and local-CI repair: #66 (`8fc6d9b`).
 
 ## Companion packet
-- changelog: inline/none
 - summary: [receipts/20260902-pm-baseline.md](receipts/20260902-pm-baseline.md)
-- nuances: [groundwork.md](groundwork.md) "Conventions settled 2026-09-02"
-- logging: inline/none
-- suggestions / pickup: [plans/README.md](plans/README.md)
+- nuances: [groundwork.md](groundwork.md) · pickup: [plans/README.md](plans/README.md)
+- logging: historical session evidence in [JOURNAL.md](JOURNAL.md).
 
 ## Signals
-- **state/flags:** PR #68 bumps `SIM_LOGIC_HASH` → `0xcef8548df2b2a518`; PR #71 → `0x46e9e287878ba88c`; PR #72 → `0x5b47e648953a63fc`, oracle → `0x36e6de56cb662dba`/`0xb6067f3f0955b292`; `AGENTS.md` §1 must be refreshed on merge. Phase 5 open; `docs/sessions/` retired.
-- **communicated:** mailbox posture/start/wrap on `choonz-moba`; GAP-011 request to GromCodebase seat.
-- **raised for /custodian:** 1 marker → [custodian-queue.md](custodian-queue.md)
-- **FOR /brain:** distill → brain/choonz-moba.md ← CHOONZ-MoBA@4f66af1: vault is `Y:\GromBrain`; plan-before-slate convention; M4.1 DoD = cooker + `content` target + runtime `asset_load`.
-- **DEFERRED / unresolved:** Actions billing-locked; owner adds admin bypass on `main-gate` and merges #65 → #66 → #68 → #69 → #70 → #71 → #72 on local green (`docs/ci-runner-handoff.md`); runner manager provisions the toolchain (WID `wid-20260903-choonz-moba-f56aa7`). ASan needs `vcvars64 -vcvars_ver=14.44` (M5.0 slate).
+- #68–#72 are open integration candidates; at this observation each conflicts with main.
+  #71 depends on #68/#69 and #72 on #71, but their current PR heads are not ancestors of the
+  later heads. Reconcile the source lineage and preserve each logic-hash contract.
+- The [runner handoff](ci-runner-handoff.md) describes a historical billing interruption and
+  proposed bypass. Use the live ruleset and exact-head required checks; no bypass is assumed.
+- The 2026-09-02 custodian marker remains in [custodian-queue.md](custodian-queue.md); its
+  downstream completion has not been independently rechecked here.
 
 ## Next — FIRST action
-1. Owner merges #65 → #66 → #68 → #69 → #70 → #71 → #72 (local green + admin bypass). Then write `plans/game-content-bridge.md` from the merged `main` (`.mba` hero/objective/economy records → `SimHeroDef`/`SimMatchDef` in `eng_game`, `content.h` static_assert bridge) and claim it; refresh `AGENTS.md` §1 oracle values in that lane.
+1. If #65 is still open, qualify its current head against current main and required checks. Once
+   it lands, reconcile #68 first, then its dependent work, with fresh checks after each base moves.
 
 ## Queue
-- Presentation slice for the M5.0 heightfield mesh (deferred from ROADMAP M5.0).
-- First playable local match: sandbox drives `lane_slice.mapdesc` + cooked records through the bridge (presentation after the bridge).
-- Keep `docs-surface-lint.py --repo .` green on wrap; patch vault `moba.md` projection fields.
+- Complete the #68–#72 integration sequence and re-pin the simulation oracle after each accepted bump.
+- Plan the `game-content-bridge` after its content and simulation predecessors land.
+- Keep the docs-surface lint green and retain the historical receipts.

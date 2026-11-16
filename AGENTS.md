@@ -43,8 +43,10 @@ Vulkan smoke `build-ci\tools\sandbox\Debug\sandbox.exe --frames 90 --screenshot 
 (validation-clean; see `docs/testing-hardware.md`). Developer-shell equivalents: `cmake --preset ci`,
 `cmake --build build-ci --config Debug`, `ctest --test-dir build-ci -C Debug --output-on-failure`.
 Docs-only changes must keep `python <GromCodebase>/tools/docs-surface-lint.py --repo .` green.
-Hosted Actions is billing-locked; `docs/ci-runner-handoff.md` (PR #66) is the fleet-runner handoff and
-the interim local-green merge path. Fleet local-green instrument: `tools/local-green.manifest.json`.
+`docs/ci-runner-handoff.md` records the September runner request and historical billing interruption.
+Before landing, check the live `main-gate` ruleset and the current PR head's GitHub checks; do not
+assume a bypass or that local-green evidence replaces required checks. Fleet local-green instrument:
+`tools/local-green.manifest.json`.
 
 ## 3. Inference Allocation Matrix
 

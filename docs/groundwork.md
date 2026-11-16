@@ -4,7 +4,8 @@ Longer-lived build status. The resume pin is `docs/next-session.md`. Tickets liv
 
 ## Build status
 
-- **Now:** Phases 0–3 and Phase 4 M4.0–M4.1 are complete on `main` (`4f66af1`, 2026-09-02). Real and
+- **Now:** Phases 0–3 and Phase 4 M4.0–M4.1 are complete through `4f66af1`; the CI runner handoff
+  joined `main` at `8fc6d9b` (PR #66). Real and
   tested: a raw-Vulkan 1.3 renderer (instanced 500-cube field, depth, debug overlay, null backend,
   screenshot readback, validation-clean on an RTX 4070 Ti); a platform-free 30 Hz Q16.16 simulation
   with arena-backed generational entities, sparse-set SoA pools, phase-buffered typed events, a literal
