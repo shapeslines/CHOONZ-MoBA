@@ -68,7 +68,7 @@ assume a bypass or that local-green evidence replaces required checks. Fleet loc
 | `.mba` container, `asset_load`, cooker | `engine/asset_parsers/include/assets/mba.h`, `tools/cooker/`, CMake `content` target | ADR-0015, M4.1 slate |
 | Renderer seam, null backend, shaders | `engine/render/`, `engine/render/shaders/` | ADR-0004, ADR-0008, ADR-0012 |
 | `MapGrid`, `MapCell`, `LaneDef` (M5.0 sim half) | `engine/sim/` map-owned files | proto-design §3.2; `docs/plans/m5.0-map-navigation.md` |
-| `Command`, `CommandReject`, `SimEvent` (planned, M5.1) | `engine/sim/` command-owned files | proto-design §3.4; `docs/plans/m5.1-command-replay.md` |
+| `Command`, `CommandReject` (PR #69); `SimEvent` (later slice) | `engine/sim/` command-owned files | proto-design §3.4; `docs/plans/m5.1-command-replay.md` |
 
 ## 5. Session protocol
 

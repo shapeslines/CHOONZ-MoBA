@@ -8,6 +8,18 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Integration — 2026-11-16 — M5.1 command intake
+
+PR #69 was reconciled with the landed M5.0 map slice. Intake now uses a value tie-break for
+equal canonical keys and rejects live targets that cannot resolve to a unit slot. Regression
+tests cover reordered conflicting duplicates, the translation boundary, regenerated reject
+parity and multi-event replay order. Replay v1 stores accepted simulation commands only; the
+reject comparison requires the original source stream. The previous oracle is historical;
+the M5.0 pin is `0xff4e1ca0c779455b` / `0x218da333e6834496` / `0xcef8548df2b2a518`.
+See the live PR and slate for current-head gates.
+
+---
+
 ## Session 20 — 2026-09-04 — M5.5 lane objectives (the last slice of the minimum vertical path)
 
 **Scope:** execute `m5-lane-objectives` stacked on the hero-combat lane through Opus 5 subagents (Agent A

@@ -41,7 +41,7 @@ turns this boundary into the wire contract, so the policy must be decided before
 
 ## Consequences
 
-- Replays of valid streams are unaffected; the oracle `0x637628abff59c823` stands.
+- Replays of valid streams are unaffected; the oracle `0x637628abff59c823 (M3.2; M5.0 re-pinned the oracle to 0xff4e1ca0c779455b with logic key 0xcef8548df2b2a518)` stands.
 - M6.0 owns the per-command refinement + rejection codes + hash bump as one reviewed
   change; ADR-0014's "today" half is the authority until then.
 - A server that wants "drop the bad command, keep the packet" must wait for M6.0 — it
