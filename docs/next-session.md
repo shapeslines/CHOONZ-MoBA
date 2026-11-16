@@ -1,6 +1,6 @@
 # CHOONZ-MoBA — next session
 
-## State @ `9628e62` · 2026-11-16 · integration candidate
+## State @ `46cd8e1` · 2026-11-16 · integration candidate
 M4.1 is on main; the CI runner handoff #66 has landed. PR #65 is still in review at this
 observation. Refresh GitHub heads, checks and mergeability before acting on this snapshot.
 
