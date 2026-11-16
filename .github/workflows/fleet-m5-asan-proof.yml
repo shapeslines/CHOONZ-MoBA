@@ -1,14 +1,14 @@
-name: fleet-m5-asan-proof
+name: fleet-m5-strict-clang-proof
 on:
   push:
     branches: [codex/fleet-m5-asan-c9533bd-20261116]
 permissions:
   contents: read
 jobs:
-  windows-asan:
-    name: M5 exact-source Windows ASan
+  windows-clang:
+    name: M5 exact-source strict clang and UBSan
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -22,40 +22,6 @@ jobs:
           if ($head -ne 'c9533bd4e6810b9150d76ad0491e92282ca1a67b') { throw "Unexpected source revision $head" }
           if (git status --porcelain) { throw 'Source checkout is dirty' }
           Write-Output "SOURCE_HEAD=$head"
-      - name: Install pinned Vulkan SDK
+      - name: Require clang-cl and UBSan
         shell: pwsh
-        run: |
-          winget install --id KhronosGroup.VulkanSDK --version 1.4.357.0 --source winget --silent --accept-package-agreements --accept-source-agreements
-          $sdk = 'C:\VulkanSDK\1.4.357.0'
-          if (-not (Test-Path $sdk)) { $sdk = Join-Path ${env:ProgramFiles} 'VulkanSDK\1.4.357.0' }
-          if (-not (Test-Path $sdk)) { throw 'Pinned Vulkan SDK not found after installation' }
-          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
-          "PATH=$sdk\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
-      - name: Canonical local CI Debug
-        shell: pwsh
-        run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/local-ci.ps1 -Configuration Debug
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build and test Debug ASan
-        shell: cmd
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSPATH=%%i"
-          if not defined VSPATH ( echo No Visual Studio install found & exit /b 1 )
-          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          cmake --preset debug-asan -DMOBA_VULKAN_REQUIRED=ON || exit /b 1
-          cmake --build build-asan --config Debug || exit /b 1
-          ctest --test-dir build-asan -C Debug --output-on-failure --no-tests=error --output-junit "%CD%\asan-ctest.xml" || exit /b 1
-      - name: Check ASan test inventory
-        shell: pwsh
-        run: |
-          if (-not (Select-String -Path build-asan/CMakeCache.txt -Pattern '^MOBA_ASAN:BOOL=ON$' -Quiet)) { throw 'ASan was not enabled' }
-          $compiler = Get-ChildItem build-asan/CMakeFiles -Filter CMakeCXXCompiler.cmake -Recurse | Select-Object -First 1
-          if (-not $compiler -or -not (Select-String -Path $compiler.FullName -Pattern 'CMAKE_CXX_COMPILER_ID "MSVC"' -Quiet)) { throw 'MSVC compiler was not selected' }
-          $commands = Get-Content build-asan/compile_commands.json -Raw | ConvertFrom-Json
-          $map = @($commands | Where-Object { $_.file -match '[/\\]engine[/\\]sim[/\\]src[/\\]map\.cpp$' })
-          if ($map.Count -eq 0 -or -not ($map | Where-Object { $_.command -match '/fsanitize=address' })) { throw 'Map source was not compiled with ASan' }
-          [xml]$report = Get-Content asan-ctest.xml
-          $cases = @($report.SelectNodes('//testcase'))
-          $names = @($cases | ForEach-Object { $_.GetAttribute('name') })
-          if ($cases.Count -lt 49 -or 'sim_map' -notin $names -or 'sim_determinism' -notin $names) { throw "Incomplete ASan CTest inventory: $($cases.Count)" }
-          Write-Output "ASAN_CTEST_CASES=$($cases.Count)"
+        run: ./tools/check-clang-cl-determinism.ps1 -RequireCompiler -RequireUbsan
