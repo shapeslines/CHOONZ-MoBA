@@ -93,5 +93,8 @@ vk_pipeline_cache.bin
 .env.*
 !.env.example
 
+# any local build tree (e.g. build-asan-<toolset>)
+build*/
+
 # Session-local advisor trajectory logs (never commit)
 .advisor/

@@ -1,13 +1,14 @@
 # CHOONZ-MoBA — next session
 
-## State @ `46cd8e1` · 2026-11-16 · integration candidate
-M4.1 is on main; the CI runner handoff #66 has landed. PR #65 is still in review at this
-observation. Refresh GitHub heads, checks and mergeability before acting on this snapshot.
+## State @ `10ec409` · 2026-11-16 · integration candidate
+M4.1 and the PM plan #65 are on main. PR #68 carries the M5.0 map sim half;
+refresh GitHub heads, checks and mergeability before acting on this snapshot.
 
 ## Shipped
 - M4.1 cooker and sandbox content target: #57 and #63 (`4f66af1`).
 - CI runner handoff and local-CI repair: #66 (`8fc6d9b`).
 - Fleet noticeboard routing: #73 (`9628e62`).
+- PM baseline and M5 plan: #65 (`5e69755`).
 
 ## Companion packet
 - summary: [receipts/20260902-pm-baseline.md](receipts/20260902-pm-baseline.md)
@@ -25,8 +26,8 @@ observation. Refresh GitHub heads, checks and mergeability before acting on this
   downstream completion has not been independently rechecked here.
 
 ## Next — FIRST action
-1. If #65 is still open, qualify its current head against current main and required checks. Once
-   it lands, reconcile #68 first, then its dependent work, with fresh checks after each base moves.
+1. Qualify #68 against current main and its milestone gates if still open; then reconcile
+   #69–#72 with fresh checks and the map fix after each base moves.
 
 ## Queue
 - Complete the #68–#72 integration sequence and re-pin the simulation oracle after each accepted bump.

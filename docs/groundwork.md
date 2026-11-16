@@ -10,14 +10,16 @@ Longer-lived build status. The resume pin is `docs/next-session.md`. Tickets liv
   screenshot readback, validation-clean on an RTX 4070 Ti); a platform-free 30 Hz Q16.16 simulation
   with arena-backed generational entities, sparse-set SoA pools, phase-buffered typed events, a literal
   schedule, canonical FNV-1a state hashing, replay v1 + `moba_replay` CLI, and a bit-identical
-  10,000-tick oracle (`0x637628abff59c823`); a platform-owned fixed-step accumulator with `eng_game`
+  10,000-tick oracle (M5.0: `0xff4e1ca0c779455b`); a platform-owned fixed-step accumulator with `eng_game`
   snapshots and interpolation; `eng_assets` with portable `AssetId`, an arena-backed registry, direct
   TGA/WAV loaders; the `.mba` v1 container, the offline cooker, the unified `asset_load`, and a CMake
   `content` target that bakes `uv_test.tga` and feeds the sandbox. Structural gates: sim compiler
   policy, test/game binary parity, isolation lint, clang-cl/UBSan, ASan, fresh-walk, CodeQL. The
   playable-slice design contract (`docs/slate-moba-proto-design.md`) is ratified: schemas, the 11-step
   tick, a seven-slice DAG, and nine acceptance tests.
-- **Not yet:** nothing gameplay-shaped exists. No `MapGrid`, no navigation, no per-command reject
+- **M5.0 sim half:** `MapGrid`, lane definitions and the `.mapdesc` codec are implemented in the
+  map integration slice; see PR #68 and its slate for current landing and verification status.
+- **Not yet:** no navigation, no per-command reject
   reasons, no typed `.mba` payloads (texture-only), no PNG/inflate, no glTF meshes, no hot reload, no
   heroes/abilities/creeps/towers, no netcode (`engine/net/` does not exist), no HUD. Docs-side: the
   vault `moba` and `game-design` notes overlap and need Carson's disposition; GAP-011 (the vanished
@@ -25,8 +27,8 @@ Longer-lived build status. The resume pin is `docs/next-session.md`. Tickets liv
 
 ## Up next
 
-- **M5.0 `m5-map-navigation`** — integer `MapGrid`/`MapCell`/`LaneDef`, cell↔world conversions,
-  deterministic neighbor ordering, `.mapdesc` codec, golden tests. Plan:
+- **M5.0 `m5-map-navigation`** — qualify the implemented sim half and preserve its hash contract.
+  Plan:
   [plans/m5.0-map-navigation.md](plans/m5.0-map-navigation.md); manifest
   `arc-m5.0-map-navigation-manifest.json`. Fence: map-owned files in `engine/sim/`, `tests/sim/`.
 - **M5.1 `m5-command-replay`** — `Command`/`CommandReject`/`SimEvent`, ordering key, duplicate and

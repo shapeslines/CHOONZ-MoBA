@@ -17,11 +17,10 @@ repo. Read it, then `docs/next-session.md`, then `docs/groundwork.md`. Everythin
   - `eng_sim` is Q16.16 fixed-point only, links `core + math + serialize` only, and never sees the
     platform, renderer, or floats (ADR-0002, ADR-0006; enforced by `tests/sim/check_sim_*.cmake`).
   - The renderer never sees `SimWorld`; `eng_game` is the sole fixed→float owner (ADR-0005, M3.3).
-  - The 10,000-tick oracle is bit-identical in every configuration: final `0x637628abff59c823`,
-    stream `0x6f381609f7e59f0c`, `SIM_LOGIC_HASH 0xab96814425ba80a4`; the controlled mutation reports
+  - The 10,000-tick oracle is bit-identical in every configuration: final `0xff4e1ca0c779455b`,
+    stream `0x218da333e6834496`, `SIM_LOGIC_HASH 0xcef8548df2b2a518`; the controlled mutation reports
     exactly `tick=4321 field=position_x entity=7`. A slate must record any deliberate logic-hash bump.
-    (PR #68 / M5.0 bumps these to final `0xff4e1ca0c779455b`, stream `0x218da333e6834496`,
-    logic `0xcef8548df2b2a518`; the values above are pre-M5.0 until that lane merges.)
+    The earlier M3.2 oracle is preserved in the M5.0 slate as historical evidence.
   - RNG is `pcg32` inside `SimWorld`, advanced unconditionally once per tick (ADR-0007, ADR-0013).
   - `.mba` v1 is the only baked container and is texture-only until a slate widens it (ADR-0015);
     loose `.spv` stays renderer-owned (ADR-0008).
@@ -68,7 +67,7 @@ assume a bypass or that local-green evidence replaces required checks. Fleet loc
 | `AssetId`, asset registry, direct TGA/WAV | `engine/assets/`, `engine/asset_parsers/` | ADR-0010, M4.0 slate |
 | `.mba` container, `asset_load`, cooker | `engine/asset_parsers/include/assets/mba.h`, `tools/cooker/`, CMake `content` target | ADR-0015, M4.1 slate |
 | Renderer seam, null backend, shaders | `engine/render/`, `engine/render/shaders/` | ADR-0004, ADR-0008, ADR-0012 |
-| `MapGrid`, `MapCell`, `LaneDef` (planned, M5.0) | `engine/sim/` map-owned files | proto-design §3.2; `docs/plans/m5.0-map-navigation.md` |
+| `MapGrid`, `MapCell`, `LaneDef` (M5.0 sim half) | `engine/sim/` map-owned files | proto-design §3.2; `docs/plans/m5.0-map-navigation.md` |
 | `Command`, `CommandReject`, `SimEvent` (planned, M5.1) | `engine/sim/` command-owned files | proto-design §3.4; `docs/plans/m5.1-command-replay.md` |
 
 ## 5. Session protocol
