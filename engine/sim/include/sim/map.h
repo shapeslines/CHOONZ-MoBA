@@ -135,9 +135,10 @@ const uint16_t* map_lane_waypoints(const MapGrid* grid, uint16_t lane_index);
 // ordinal-th spawn-flagged cell in ascending cell order.
 MapStatus map_find_spawn(const MapGrid* grid, uint32_t ordinal, uint32_t* out_cell);
 
-// .mapdesc codec. Decode validates the entire stream against the grid's capacity
-// before writing anything, so a rejected stream leaves the grid untouched; the
-// reported status names the first invalid boundary.
+// .mapdesc codec. Decode consumes the reader's entire remaining input and validates
+// it against the grid's capacity before writing anything. A rejected stream,
+// including one with trailing bytes, leaves the grid untouched; the reported
+// status names the first invalid boundary.
 MapStatus map_encode(const MapGrid* grid, ByteWriter* writer);
 MapStatus map_decode(MapGrid* grid, ByteReader* reader);
 MapStatus map_require_end(const ByteReader* reader);

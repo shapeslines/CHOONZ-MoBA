@@ -338,15 +338,22 @@ TEST(sim_map, decode_rejects_each_malformed_stream_at_first_invalid_boundary) {
     bytes[0] = 'X';
     CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC), &untouched) == MAP_STATUS_BAD_MAGIC);
     CHECK(untouched);
+    // A later truncation must not hide an earlier invalid field.
+    CHECK(decode_bytes(&fixture, bytes, 4u, &untouched) == MAP_STATUS_BAD_MAGIC);
+    CHECK(untouched);
     // bad version
     std::memcpy(bytes, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
     bytes[4] = 2u;
     CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC), &untouched) == MAP_STATUS_BAD_VERSION);
     CHECK(untouched);
+    CHECK(decode_bytes(&fixture, bytes, 8u, &untouched) == MAP_STATUS_BAD_VERSION);
+    CHECK(untouched);
     // dimensions exceed capacity (width 9 on an 8-wide fixture)
     std::memcpy(bytes, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
     bytes[16] = 9u;
     CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC), &untouched) == MAP_STATUS_BAD_DIMENSIONS);
+    CHECK(untouched);
+    CHECK(decode_bytes(&fixture, bytes, 24u, &untouched) == MAP_STATUS_BAD_DIMENSIONS);
     CHECK(untouched);
     // cell_count disagrees with width*height
     std::memcpy(bytes, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
@@ -358,6 +365,9 @@ TEST(sim_map, decode_rejects_each_malformed_stream_at_first_invalid_boundary) {
     bytes[MAPDESC_HEADER_ENCODED_SIZE + 4u * 5u] = MAP_CELL_WALKABLE | MAP_CELL_BLOCKED;
     CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC), &untouched) == MAP_STATUS_BAD_CELL);
     CHECK(untouched);
+    bytes[MAPDESC_HEADER_ENCODED_SIZE] = MAP_CELL_WALKABLE | MAP_CELL_BLOCKED;
+    CHECK(decode_bytes(&fixture, bytes, MAPDESC_HEADER_ENCODED_SIZE + 1u, &untouched) == MAP_STATUS_BAD_CELL);
+    CHECK(untouched);
     // lane waypoint on a non-lane cell
     std::memcpy(bytes, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
     bytes[MAPDESC_HEADER_ENCODED_SIZE + 64u * 4u + 2u + 16u] = 1u; // first waypoint -> cell 1 ('.')
@@ -368,16 +378,25 @@ TEST(sim_map, decode_rejects_each_malformed_stream_at_first_invalid_boundary) {
     bytes[MAPDESC_HEADER_ENCODED_SIZE + 64u * 4u] = 3u;
     CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC), &untouched) == MAP_STATUS_CAPACITY);
     CHECK(untouched);
+    // An invalid first lane must not be hidden by its truncated remaining fields.
+    std::memcpy(bytes, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
+    bytes[MAPDESC_HEADER_ENCODED_SIZE + 64u * 4u + 2u + 1u] = 1u;
+    CHECK(decode_bytes(&fixture, bytes, MAPDESC_HEADER_ENCODED_SIZE + 64u * 4u + 4u, &untouched) ==
+          MAP_STATUS_BAD_LANE);
+    CHECK(untouched);
+    // A duplicate second lane id is invalid as soon as that id is available.
+    std::memcpy(bytes, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
+    bytes[MAPDESC_HEADER_ENCODED_SIZE + 64u * 4u] = 2u;
+    bytes[sizeof(MAP_GOLDEN_MAPDESC)] = 1u;
+    CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC) + 1u, &untouched) ==
+          MAP_STATUS_BAD_LANE);
+    CHECK(untouched);
     // trailing bytes
     std::memcpy(bytes, MAP_GOLDEN_MAPDESC, sizeof(MAP_GOLDEN_MAPDESC));
     bytes[sizeof(MAP_GOLDEN_MAPDESC)] = 0u;
-    CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC) + 1u, &untouched) == MAP_STATUS_OK);
-    ByteReader reader;
-    byte_reader_init(&reader, bytes, sizeof(MAP_GOLDEN_MAPDESC) + 1u);
-    MapFixture again{};
-    CHECK(fixture_init(&again));
-    CHECK(map_decode(&again.grid, &reader) == MAP_STATUS_OK);
-    CHECK(map_require_end(&reader) == MAP_STATUS_TRAILING_BYTES);
+    CHECK(decode_bytes(&fixture, bytes, sizeof(MAP_GOLDEN_MAPDESC) + 1u, &untouched) ==
+          MAP_STATUS_TRAILING_BYTES);
+    CHECK(untouched);
 }
 
 // ---------------------------------------------------------------- SimWorld integration

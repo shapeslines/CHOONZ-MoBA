@@ -9,6 +9,10 @@
 
 **Base:** `main` at `4f66af17e9b8ad65c9b5238426775f656d2811fe` (M4.1 accepted)
 
+**Integration update (2026-11-16):** Decode now rejects trailing bytes before changing the grid and
+reports an earlier invalid field ahead of later truncation. The Windows and ASan results below are
+historical evidence from before this correction; the updated head needs fresh platform gates.
+
 ## Goal
 
 Give the simulation its authoritative integer tile grid: `MapGrid` SoA storage in a caller-owned

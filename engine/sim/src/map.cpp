@@ -385,18 +385,23 @@ typedef struct MapDescHeader {
     uint32_t cell_count;
 } MapDescHeader;
 
-static MapStatus read_header(ByteReader* cursor, MapDescHeader* out) {
+static MapStatus read_header(ByteReader* cursor, const MapGrid* grid, MapDescHeader* out) {
     uint8_t magic[4];
     MapDescHeader header{};
-    if (!byte_reader_read_bytes(cursor, magic, sizeof(magic)) ||
-        !byte_reader_read_u32(cursor, &header.schema_version) ||
-        !byte_reader_read_u64(cursor, &header.map_id) ||
+    if (!byte_reader_read_bytes(cursor, magic, sizeof(magic))) return MAP_STATUS_TRUNCATED;
+    if (std::memcmp(magic, MAPDESC_MAGIC, sizeof(magic)) != 0) return MAP_STATUS_BAD_MAGIC;
+    if (!byte_reader_read_u32(cursor, &header.schema_version)) return MAP_STATUS_TRUNCATED;
+    if (header.schema_version != SIM_MAP_SCHEMA_VERSION) return MAP_STATUS_BAD_VERSION;
+    if (!byte_reader_read_u64(cursor, &header.map_id) ||
         !byte_reader_read_u16(cursor, &header.width_cells) ||
         !byte_reader_read_u16(cursor, &header.height_cells) ||
-        !byte_reader_read_i32(cursor, &header.cell_size_q16) ||
-        !byte_reader_read_u32(cursor, &header.cell_count)) return MAP_STATUS_TRUNCATED;
-    if (std::memcmp(magic, MAPDESC_MAGIC, sizeof(magic)) != 0) return MAP_STATUS_BAD_MAGIC;
-    if (header.schema_version != SIM_MAP_SCHEMA_VERSION) return MAP_STATUS_BAD_VERSION;
+        !byte_reader_read_i32(cursor, &header.cell_size_q16)) return MAP_STATUS_TRUNCATED;
+    if (!dimensions_fit(grid, header.width_cells, header.height_cells, header.cell_size_q16))
+        return MAP_STATUS_BAD_DIMENSIONS;
+    if (!byte_reader_read_u32(cursor, &header.cell_count)) return MAP_STATUS_TRUNCATED;
+    uint32_t expected_cells = static_cast<uint32_t>(header.width_cells) *
+                              static_cast<uint32_t>(header.height_cells);
+    if (header.cell_count != expected_cells) return MAP_STATUS_BAD_COUNT;
     *out = header;
     return MAP_STATUS_OK;
 }
@@ -407,15 +412,8 @@ static MapStatus read_header(ByteReader* cursor, MapDescHeader* out) {
 // accepted. The apply walk then repeats the same reads and stores; both walks
 // share this function so a stream cannot validate one way and apply another.
 static MapStatus walk_stream(MapGrid* grid, ByteReader* cursor, bool apply, MapDescHeader* header) {
-    MapStatus status = read_header(cursor, header);
+    MapStatus status = read_header(cursor, grid, header);
     if (status != MAP_STATUS_OK) return status;
-    if (!dimensions_fit(grid, header->width_cells, header->height_cells, header->cell_size_q16))
-        return MAP_STATUS_BAD_DIMENSIONS;
-    uint32_t expected_cells = static_cast<uint32_t>(header->width_cells) *
-                              static_cast<uint32_t>(header->height_cells);
-    if (header->cell_count != expected_cells) return MAP_STATUS_BAD_COUNT;
-    uint64_t remaining = static_cast<uint64_t>(byte_reader_remaining(cursor));
-    if (header->cell_count > remaining / MAPDESC_CELL_ENCODED_SIZE) return MAP_STATUS_TRUNCATED;
 
     if (apply) {
         status = map_set_dimensions(grid, header->map_id, header->width_cells,
@@ -426,9 +424,10 @@ static MapStatus walk_stream(MapGrid* grid, ByteReader* cursor, bool apply, MapD
     for (uint32_t cell = 0u; cell < header->cell_count; ++cell) {
         uint8_t flags, cost;
         int16_t height;
-        if (!byte_reader_read_u8(cursor, &flags) || !byte_reader_read_u8(cursor, &cost) ||
-            !byte_reader_read_i16(cursor, &height)) return MAP_STATUS_TRUNCATED;
+        if (!byte_reader_read_u8(cursor, &flags)) return MAP_STATUS_TRUNCATED;
         if (!cell_flags_valid(flags)) return MAP_STATUS_BAD_CELL;
+        if (!byte_reader_read_u8(cursor, &cost) || !byte_reader_read_i16(cursor, &height))
+            return MAP_STATUS_TRUNCATED;
         if (apply) {
             grid->flags[cell] = flags;
             grid->movement_cost[cell] = cost;
@@ -439,20 +438,21 @@ static MapStatus walk_stream(MapGrid* grid, ByteReader* cursor, bool apply, MapD
     uint16_t lane_count;
     if (!byte_reader_read_u16(cursor, &lane_count)) return MAP_STATUS_TRUNCATED;
     if (lane_count > grid->config.max_lanes) return MAP_STATUS_CAPACITY;
-    remaining = static_cast<uint64_t>(byte_reader_remaining(cursor));
-    if (lane_count > remaining / MAPDESC_LANE_BASE_ENCODED_SIZE) return MAP_STATUS_TRUNCATED;
-
     uint8_t seen_ids[SIM_MAP_MAX_LANES] = {};
     for (uint32_t lane = 0u; lane < lane_count; ++lane) {
         MapLane def{};
         uint16_t waypoints[SIM_MAP_MAX_WAYPOINTS];
-        if (!byte_reader_read_u8(cursor, &def.lane_id) ||
-            !byte_reader_read_u8(cursor, &def.waypoint_count) ||
-            !byte_reader_read_u16(cursor, &def.wave_interval_ticks) ||
-            !byte_reader_read_u32(cursor, &def.first_wave_tick) ||
-            !byte_reader_read_u64(cursor, &def.creep_archetype_id)) return MAP_STATUS_TRUNCATED;
+        if (!byte_reader_read_u8(cursor, &def.lane_id)) return MAP_STATUS_TRUNCATED;
+        for (uint32_t previous = 0u; previous < lane; ++previous) {
+            if (seen_ids[previous] == def.lane_id) return MAP_STATUS_BAD_LANE;
+        }
+        seen_ids[lane] = def.lane_id;
+        if (!byte_reader_read_u8(cursor, &def.waypoint_count)) return MAP_STATUS_TRUNCATED;
         if (def.waypoint_count < 2u || def.waypoint_count > grid->config.max_waypoints)
             return MAP_STATUS_BAD_LANE;
+        if (!byte_reader_read_u16(cursor, &def.wave_interval_ticks) ||
+            !byte_reader_read_u32(cursor, &def.first_wave_tick) ||
+            !byte_reader_read_u64(cursor, &def.creep_archetype_id)) return MAP_STATUS_TRUNCATED;
         for (uint32_t i = 0u; i < def.waypoint_count; ++i) {
             if (!byte_reader_read_u16(cursor, &waypoints[i])) return MAP_STATUS_TRUNCATED;
             if (waypoints[i] >= header->cell_count) return MAP_STATUS_BAD_LANE;
@@ -460,10 +460,6 @@ static MapStatus walk_stream(MapGrid* grid, ByteReader* cursor, bool apply, MapD
             if (!(streamed_flags & MAP_CELL_WALKABLE) || !(streamed_flags & MAP_CELL_LANE))
                 return MAP_STATUS_BAD_LANE;
         }
-        for (uint32_t previous = 0u; previous < lane; ++previous) {
-            if (seen_ids[previous] == def.lane_id) return MAP_STATUS_BAD_LANE;
-        }
-        seen_ids[lane] = def.lane_id;
         if (apply) {
             status = map_add_lane(grid, &def, waypoints);
             if (status != MAP_STATUS_OK) return status;
@@ -481,6 +477,7 @@ MapStatus map_decode(MapGrid* grid, ByteReader* reader) {
     MapDescHeader header{};
     MapStatus status = walk_stream(grid, &probe, false, &header);
     if (status != MAP_STATUS_OK) return reader_fail(reader, status);
+    if (byte_reader_remaining(&probe) != 0u) return reader_fail(reader, MAP_STATUS_TRAILING_BYTES);
 
     ByteReader cursor = *reader;
     status = walk_stream(grid, &cursor, true, &header);
