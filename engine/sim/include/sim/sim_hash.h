@@ -45,6 +45,22 @@ typedef enum SimStateField : uint8_t {
     SIM_STATE_FIELD_HEALTH_CURRENT,
     SIM_STATE_FIELD_HEALTH_MAXIMUM,
     SIM_STATE_FIELD_DAMAGE_COOLDOWN,
+    // M5.0 map block (appended after Health so earlier first-divergence reports keep
+    // their meaning): scalars, then cells in ascending index, then lanes.
+    SIM_STATE_FIELD_MAP_ID,
+    SIM_STATE_FIELD_MAP_WIDTH,
+    SIM_STATE_FIELD_MAP_HEIGHT,
+    SIM_STATE_FIELD_MAP_CELL_SIZE,
+    SIM_STATE_FIELD_MAP_CELL_FLAGS,
+    SIM_STATE_FIELD_MAP_CELL_COST,
+    SIM_STATE_FIELD_MAP_CELL_HEIGHT,
+    SIM_STATE_FIELD_MAP_LANE_COUNT,
+    SIM_STATE_FIELD_MAP_LANE_ID,
+    SIM_STATE_FIELD_MAP_LANE_WAYPOINT_COUNT,
+    SIM_STATE_FIELD_MAP_LANE_WAVE_INTERVAL,
+    SIM_STATE_FIELD_MAP_LANE_FIRST_WAVE,
+    SIM_STATE_FIELD_MAP_LANE_ARCHETYPE,
+    SIM_STATE_FIELD_MAP_LANE_WAYPOINT,
 } SimStateField;
 
 static const uint32_t SIM_STATE_DIFF_NO_INDEX = UINT32_MAX;
@@ -60,7 +76,9 @@ typedef struct SimStateDiff {
 //   tick; config max/initial/event capacity; RNG state/inc; entity capacity/live/next/free;
 //   generations then liveness through next_fresh; free-stack order; all 64 unit
 //   mappings; pending-destroy count/order; logical damage read/write phases;
-//   then Transform, Velocity, and Health.
+//   then Transform, Velocity, and Health;
+//   then the M5.0 map: map_id, width, height, cell_size, every cell's flags/cost/
+//   height in ascending index, lane_count, and each lane's scalars + waypoints.
 // Each component pool encodes count, then a membership byte per allocated entity
 // index and, when present, exact EntityId plus its SoA fields. This makes entity
 // index the semantic order and excludes pointers, padding, unused capacity,

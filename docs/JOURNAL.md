@@ -8,6 +8,248 @@ cross-cutting nuance, one level up from per-milestone entries) live in
 
 ---
 
+## Session 20 — 2026-09-04 — M5.5 lane objectives (the last slice of the minimum vertical path)
+
+**Scope:** execute `m5-lane-objectives` stacked on the hero-combat lane through Opus 5 subagents (Agent A
+plan + slate, Agent B S1–S4, Agent C S5–S6) so a whole two-team, one-lane match runs from seed to core
+destruction inside `sim_tick` with a replayable, hashed result (proto-design §7.2 item 6).
+
+**Outcome:** PR #72 (`lane/moba-m5-lane-objectives/20260904`, stacked on #68 → #69 → #71). The sim gains
+`TeamPool`, a POD `SimMatchDef` (team, objective, economy, creep defs mirroring §3.2/§3.3), `MinionPool` and
+`ObjectivePool`, saturating gold/XP ledgers, `SimMatchState`, four new `SimEvent` kinds (objective damaged /
+destroyed, economy, match over), and `HealthPool.last_damage_source` for kill credit. New systems: `sys_waves`
+on the `MapLane` clock, `sys_minion_ai` (push along lane waypoints, attack nearest, return), `sys_tower_ai`
+(enemy hitting an allied hero > nearest minion > nearest hero, firing through `resolve_effect`), a generalized
+`sys_death`, and `sys_economy`. Intake honours match-over and team ownership. One `SIM_LOGIC_HASH` bump
+(`…|lane-objectives-v1` → `0x5b47e648953a63fc`); oracle `0x36e6de56cb662dba` / `0xb6067f3f0955b292`.
+
+### What changed
+
+- Authored `assets/maps/lane_slice.mapdesc` (two spawns, two towers, two cores on one lane) with a Python golden.
+- `sim_pipeline_owner` lint gained ledger / match-state rules and `objectives.cpp` as an owner; it now also runs
+  in the clang-cl subset.
+- Corrections of record: the oracle `stream` value is a digest over every per-tick canonical hash and moves
+  with every bump, so the rng-drift rule is the single `pcg32_next` call site plus `world->rng` equality;
+  Agent B's inverted tower tier-1 rule was fixed before close; `move_speed` is per-second velocity and a
+  creep step at 30 Hz is 32760 not 32768, so objective cells must sit inside `attack_range` with slack.
+- The acceptance match is deliberately asymmetric (team 1's tower has no target policy) because a mirror
+  match on a mirror map is a permanent stalemate; it ends at tick 46 with one `MATCH_OVER`.
+
+### Verification
+
+- `sim_lane_objectives` 28 tests / 1,109 checks; CTest 53/53 in Debug, RelWithDebInfo, Release, and
+  `debug-asan` (MSVC 14.44); clang-cl/UBSan PASS 7/7 with the new oracle; boundary, compiler-policy,
+  binary-parity, pipeline-owner lints green; mutation `tick=4321 field=position_x entity=7`; replay size 134812.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 → #70 → #71 → #72. The minimum vertical path's sim half is then complete;
+the next claim is the game-layer translation slice (`HeroDef` / `ObjectiveDef` / `EconomyRule` bytes from `.mba`
+records → `SimHeroDef` / `SimMatchDef` in `eng_game`, with the `content.h` static_assert bridge), which makes the
+first playable local match a presentation task.
+
+---
+
+## Session 19 — 2026-09-03 — M5.2 hero combat (unified effect pipeline)
+
+**Scope:** execute `m5-hero-combat` on an integration branch (`main` + #68 + #69) through Opus 5
+subagents so the orchestrator stayed light on context: Agent A wrote the plan and slate, Agent B built
+S1–S4, Agent C (cut off by an API session limit, resumed as Agent C′) closed S5–S6.
+
+**Outcome:** PR #71 (`lane/moba-m5-hero-combat/20260903`, stacked on #68 and #69). The sim owns a
+POD mirror of the §3.3 content shapes (`sim/hero.h`), bounded SoA `HeroPool` / `ProjectilePool` /
+`StatusPool`, a 32-byte `SimEvent` envelope on a fixed-capacity reject-at-source queue, and one
+`resolve_effect` pipeline that is the only writer of health, resource, and cooldown. Basic attack,
+`projectile_damage`, `self_heal`, and `area_slow` run through it; `SIM_COMMAND_ATTACK=3` and
+`SIM_COMMAND_CAST=4` translate from the M5.1 intake, which now validates `USE_ACTION` against the def
+table. Exactly one `SIM_LOGIC_HASH` bump (`…|hero-combat-v1` → `0x46e9e287878ba88c`); oracle
+`0xac06a80d7f71b503` / `0x4209159b82890bcb`, mutation probe unchanged.
+
+### What changed
+
+- New source lint `sim_pipeline_owner` (`tests/sim/check_sim_pipeline_owner.cmake`) proves no second
+  mutation path exists, in the spirit of `check_sim_boundary`.
+- ADR-0014 consequences clause records the envelope + fixed-capacity queue; ROADMAP M5.3 sim core
+  complete, M5.4 single resolution point landed.
+- Deviation of record: a full event queue fails the source op and `sim_tick` returns false for that
+  tick (plan failure table), drain-then-retry proven in test.
+
+### Verification
+
+- `sim_hero_combat` 27 tests / 704 checks; CTest 52/52 in Debug, RelWithDebInfo, Release, `debug-asan`
+  (MSVC 14.44); clang-cl/UBSan PASS with the new oracle; boundary, compiler-policy, binary-parity, and
+  pipeline-owner lints green; determinism mutation `tick=4321 field=position_x entity=7`.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 → #70 → #71. Then write `plans/m5-lane-objectives.md` (minion
+waves, towers, objectives on the M5.0 lanes) from the merged `main` and claim it; the game-layer
+`HeroDef` bytes → `SimHeroDef` translation is a small follow-on named in the hero slate.
+
+---
+
+## Session 18 — 2026-09-03 — typed content record payloads (ADR-0016)
+
+**Scope:** execute `content-typed-payloads` so heroes, objectives, economy rules, and maps are
+authored offline, cooked byte-identically, and loaded through the single `asset_load` path.
+
+**Outcome:** PR #70 (`lane/moba-content-payloads/20260903`) lands ADR-0016: `.mba` stays at
+container v1 and gains record tags `HERO=5, OBJECTIVE=6, ECONOMY=7, MAP=8` with a 16-byte record
+header; `mba_inspect` decodes and validates record bodies before publishing a view, so the registry
+never sees a bad record. `engine/asset_parsers/content.h/.cpp` carry the proto-design §3.3 records
+(`HeroDef` with nested `ActionDef`/`EffectDef`, `ObjectiveDef`, `EconomyRule`) with `eng::serialize`
+codecs; `MAP` bodies stay opaque `.mapdesc` bytes because the asset modules may not include `sim/`.
+The registry stores records verbatim (`ASSET_TYPE_RECORD`, `asset_get_record`); the cooker gains
+`--kind` and a `key = value` authored text format; an independent Python encoder produces the goldens
+and the C++ encoder, the cooker, and the CMake `content` target all match it byte for byte; the
+sandbox loads `hero_test.mba` and prints the record line. No sim change; oracle unchanged.
+
+### What changed
+
+- ADR-0016 written; ADR-0015 carries the partial-supersession note; index updated.
+- `eng_asset_parsers` links `eng::serialize`; `mba.cpp`'s hand-rolled LE helpers replaced wholesale.
+- ROADMAP M4.1 execution note; ADR-0010 generated id constants named as a follow-on slice.
+
+### Verification
+
+- Debug CTest 49/49 (new `content` suite, registry record test, extended `cooker_cli` and
+  `sandbox_baked_content`); RelWithDebInfo + Release; `debug-asan` (MSVC 14.44); clang-cl/UBSan;
+  Vulkan smoke on the RTX 4070 Ti with validation on: 90 clean frames, `SANDBOX_SMOKE=PASS`, record
+  line `kind=5 schema=1 bytes=172`. Oracle unchanged.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 → #70. Then the map, command, and content contracts are all in
+tree and `m5-hero-combat` becomes claimable (needs its plan file first); ADR-0010 generated constants
+is the small follow-on.
+
+---
+
+## Session 17 — 2026-09-03 — M5.1 command intake, clean M5.0 lane, typed-payload plan
+
+**Scope:** replace the tainted M5.0 lane, execute M5.1 `m5-command-replay`, and write the
+`content-typed-payloads` plan so the next content slice is claimable.
+
+**Outcome:** PR #68 re-cuts M5.0 cleanly (S1–S4 cherry-picked, S5 re-applied by path, `build*/`
+ignored) and supersedes #67. PR #69 (`lane/moba-m5.1-command/20260903`) lands
+`engine/sim/command.h/.cpp`: the proto-design §3.4 `Command`/`CommandReject` shapes, the canonical key
+`(tick, player_id, sequence, actor.index, command_kind)`, a pure intake (validate → key order → dedup →
+capacity) translated into the legacy `SimCommandBuffer`, and a 2,000-tick hostile live/replay parity
+proof through replay v1. Replay bytes and the oracle are unchanged (no logic-hash bump). Design
+decision recorded in the slate: the §3.4 key cannot ride the 16-byte replay v1 record, so the intake
+sits in front of the seam and M6.0 carries `Command` verbatim in replay v2.
+
+### What changed
+
+- `docs/plans/content-typed-payloads.md` written (ADR-0016 `.mba` v2 typed payloads as its first slice);
+  bridge table and frontlog updated.
+- ROADMAP M5.2/M6.0 execution notes; ADR-0014 consequences line notes the M5.0 oracle re-pin.
+
+### Verification
+
+- M5.1: `/WX` Debug / RelWithDebInfo / Release 49/49 each with the pre-M5.0 oracle reproduced in every
+  config; `debug-asan` (MSVC 14.44) 49/49; clang-cl 19 + UBSan PASS; `sim_command` 5 tests / 6,069 checks.
+- M5.0 clean lane: Debug 49/49; oracle `0xff4e1ca0c779455b` reproduced.
+
+### Next
+
+Owner merges #65 → #66 → #68 → #69 (local green + admin bypass). Then claim `content-typed-payloads`
+per its plan from the merged `main`; refresh `AGENTS.md` §1 oracle values in that lane.
+
+---
+
+## Session 16 — 2026-09-02 — Phase 5 M5.0 map grid, CI runner handoff, vault reconcile
+
+**Scope:** execute the first Phase 5 slice (`m5-map-navigation`), prepare CI for the fleet's
+self-hosted Windows runner, and reconcile the two vault project notes.
+
+**Outcome:** PR #68 (`lane/moba-m5.0-map/20260902`) lands `engine/sim/map.h/.cpp`: `MapGrid` SoA,
+Q16.16 cell↔world with floor semantics, fixed neighbour order, fail-closed lanes, spawn lookup, the
+`.mapdesc` codec, and the map hashed into canonical state with one recorded `SIM_LOGIC_HASH` bump
+(`0xab96814425ba80a4` → `0xcef8548df2b2a518`; new oracle final `0xff4e1ca0c779455b`, stream
+`0x218da333e6834496`, identical Debug/Release; mutation still `tick=4321 field=position_x entity=7`).
+PR #66 (`lane/moba-ci-runner/20260902`) routes `ci.yml` through the `CI_RUNNER` variable with a hosted
+fallback, verifies a pre-baked toolchain on self-hosted, adds `.github/runner-ci-request.json` and
+`docs/ci-runner-handoff.md`, and fixes `tools/local-ci.ps1` (benign native stderr no longer fatal).
+Vault: `moba.md` = engine record, `game-design.md` = area hub with `depends_on` edges
+(`05 Exchange/records/2026-09-02-moba-game-design-reconcile.md`; `project-doctor.py --check` PASS).
+
+### What changed
+
+- Sim: `SimWorldConfig.map` (all-zero = empty map, the default); `SimWorld.map`; `content` target
+  stages `assets/maps/*.mapdesc`; golden cross-checked against an independent Python encoder.
+- Hash: map block after Health; 14 `SimStateField` map entries; mirrored `diff_map`.
+- Pins: `sim_determinism_tests`, `tests/CMakeLists` regexes, `check_sim_binary_parity`,
+  `check-clang-cl-determinism.ps1`, README, PR template.
+
+### Verification
+
+- `/WX` Debug / RelWithDebInfo / Release 49/49 each; clang-cl 19 + UBSan PASS; `debug-asan` 49/49 on
+  the MSVC 14.44 toolset (plain `vcvars64` picks 14.38, which lacks the ASan runtime); `sim_map`
+  12 tests / 20,342 checks.
+- GitHub Actions is billing-locked; merges follow `docs/ci-runner-handoff.md`.
+
+### Next
+
+Owner merges #65, #66, #68 (local green + admin bypass, or runner activation). Then claim M5.1
+`m5-command-replay` per `docs/plans/m5.1-command-replay.md`; refresh `AGENTS.md` §1 oracle values.
+
+---
+
+## Session 15 — 2026-09-02 — M4.1 close-out and PM baseline
+
+**Scope:** land the last two M4.1 DoD pieces, make the repo self-explaining for the next agent, and
+translate the vault's theoretical roadmap into claimable repo plans.
+
+**Outcome:** PR #63 squash-merged as `4f66af1` (CMake `content` target bakes `uv_test.tga`; sandbox
+loads `uv_test.mba` through `asset_load`), closing M4.1. PR #64 (legacy-root rescue) closed as
+superseded. Docs-only lane `lane/moba-pm-baseline/20260902` adds `CLAUDE.md` → `AGENTS.md` shim,
+reshapes `AGENTS.md` (boundaries, verification matrix, objects map, session protocol), fills
+`groundwork.md` and `WORK-FRONTLOG.md`, replaces the pin, adds `docs/README.md`,
+`docs/custodian-queue.md`, `docs/plans/` (bridge table, M4.1 close-out, M5.0 map-navigation, M5.1
+command-replay), the M5.0 ARC manifest, the M4.1 slate, and this entry. Vault `moba.md` and the
+`_Projects.md` row were patched to the real state.
+
+### What changed
+
+- ROADMAP: M4.0/M4.1 marked complete; Phase 4 banner → "Phase 5 open, M4.2–M4.4 on demand"; M5.0
+  carries an execution note that the bake path is `.mapdesc` + typed payloads, not the M4.2 parser.
+- `docs/sessions/` retired in favour of slates + `session-archive/`.
+- GAP-011 (vanished in-tree `MOBA-proto` clone) raised to GromCodebase via mailbox; marker in the
+  custodian queue.
+
+### Verification
+
+- Canonical local CI on `4f66af1` and the docs-surface lint / next-session audit results are recorded
+  in the lane PR body and `docs/receipts/20260902-pm-baseline.md`.
+
+### Next
+
+Claim `m5-map-navigation` per `docs/plans/m5.0-map-navigation.md` on
+`lane/moba-m5.0-map/<yyyymmdd>`; M5.1 may run in parallel with disjoint files.
+
+---
+
+## Session 14 — 2026-08-27 — Phase 4 M4.1 cooker, `.mba` v1, and the design packet
+
+**Scope:** the offline cooker and unified container (M4.1 core) plus the one-lane MOBA design packet.
+Reconstructed 2026-09-02 from PR #57 and PR #60; no journal entry was written at the time.
+
+**Outcome:** PR #57 (`codex/m4.1-cooker-restart`, accepted base `6571ee4`) moved TGA parsing,
+`asset_id`, and a new `.mba` v1 codec into POD-C `engine/asset_parsers/`, added `tools/cooker/`
+(brute-force TGA → `.mba`, `/EHsc` STL-private per ADR-0009), the unified `asset_load`, ADR-0015, and
+the `mba` / `cooker_cli` tests. PR #60 (`lane/moba-proto-design/20260826`, docs-only) landed
+`docs/slate-moba-proto-design.md` (schemas, 11-step tick, seven-slice DAG, nine acceptance tests),
+its ARC manifest, and receipt. PR #58/#59 added the FLEET STATUS line and the portable local-CI
+evidence gate; PR #61/#62 reshaped the pin under ADR-0025.
+
+### What was left open
+
+The `content` target and runtime consumption of a baked `.mba` (closed by PR #63 in Session 15);
+the M4.1 slate and this entry.
+
+---
+
 ## Session 13 — 2026-08-13 — Phase 4 M4.0 direct asset foundation
 
 **Scope:** establish stable asset identity and lifetimes, promote the bootstrap TGA path into the

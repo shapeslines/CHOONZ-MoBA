@@ -43,6 +43,9 @@ function Get-NativeFirstLine {
         [string]$FilePath,
         [string[]]$Arguments
     )
+    # vcvars64/vswhere emit benign stderr lines; under PS 5.1 the script-level 'Stop'
+    # preference would turn them into terminating NativeCommandErrors. Exit codes decide.
+    $ErrorActionPreference = 'Continue'
 
     $output = @(& $FilePath $Arguments 2>$null)
     if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) {
@@ -53,6 +56,9 @@ function Get-NativeFirstLine {
 
 function Get-VsToolVersion {
     param([string]$CommandText)
+    # vcvars64/vswhere emit benign stderr lines; under PS 5.1 the script-level 'Stop'
+    # preference would turn them into terminating NativeCommandErrors. Exit codes decide.
+    $ErrorActionPreference = 'Continue'
 
     $inner = "call `"$script:vcvarsPath`" >nul && cd /d `"$script:repoRoot`" && $CommandText"
     $output = @(& $env:ComSpec /d /c $inner 2>$null)
@@ -68,6 +74,9 @@ function Invoke-VsStage {
         [string]$Name,
         [string]$CommandText
     )
+    # vcvars64/vswhere emit benign stderr lines; under PS 5.1 the script-level 'Stop'
+    # preference would turn them into terminating NativeCommandErrors. Exit codes decide.
+    $ErrorActionPreference = 'Continue'
 
     $stageStartedUtc = [DateTime]::UtcNow
     Write-Output "LOCAL_CI_STAGE_START name=$Name"
