@@ -1,14 +1,13 @@
 # Phase 5 M5.1 Slate - Command Intake and Replay Parity (`m5-command-replay`)
 
-**Status:** complete on the lane; PR open, owner merge gated (Actions billing lock)
+**Status:** integration candidate in PR #69; check the live PR and its current-head gates.
 
 **Branch:** `lane/moba-m5.1-command/20260903` (worktree `GITHUB-ROOT/_worktrees/CHOONZ-MoBA-m5.1-command`)
 
 **Plan of record:** `docs/plans/m5.1-command-replay.md` (PR #65)
 
-**Base:** `main` at `4f66af17e9b8ad65c9b5238426775f656d2811fe` (M4.1). Independent of the M5.0 lane
-(PR #68): no shared files except one adjacent line each in `engine/sim/CMakeLists.txt` and
-`tests/CMakeLists.txt`.
+**Original base:** `main` at `4f66af17e9b8ad65c9b5238426775f656d2811fe` (M4.1). M5.0 (PR #68)
+has since landed; the integration candidate incorporates its map and updated oracle.
 
 ## Goal
 
@@ -54,8 +53,9 @@ Ownership uses a documented placeholder partition of unit slots per player until
   order; the seam's atomic over-capacity rejection re-proven with arena-byte equality.
 - [x] **S4** Live/replay parity: 2,000 ticks of a hostile deterministic `Command` stream → intake →
   `command_batch_to_sim` → `sim_tick` recorded via `replay_write_tick`; replay via `replay_read_tick`
-  matches every per-tick hash; reject logs of two live runs are byte-identical; every provoked reason
-  class observed.
+  matches every per-tick hash; replay intake with the same regenerated source matches the live reject
+  log and accepted commands. A multi-attack case checks replay event order. Replay v1 itself stores
+  only accepted simulation commands, so it cannot reconstruct raw input or rejects on its own.
 - [x] **S5** Gates: `/WX` Debug/RelWithDebInfo/Release, `debug-asan` (`-vcvars_ver=14.44`),
   clang-cl/UBSan, isolation lint, oracle unchanged; ROADMAP M5.2/M6.0 notes; ADR-0014 consequences
   line; JOURNAL; PR.
@@ -65,8 +65,8 @@ Ownership uses a documented placeholder partition of unit slots per player until
 - `USE_ACTION` is rejected as `MALFORMED` until an action table exists (`m5-hero-combat`);
   `COOLDOWN` and `RANGE` are defined but not produced here.
 - `BASIC_ATTACK` requires a live target in a unit slot and translates to the legacy `DAMAGE` command
-  with a placeholder amount of 1 against that slot; `MOVE` translates to `SET_VELOCITY` with the point as the desired velocity until
-  navigation lands (M5.x flow fields).
+  with a placeholder amount of 1 against that slot; `MOVE` translates to `SET_VELOCITY` with the
+  point as the desired velocity until navigation lands (M5.x flow fields).
 - `rejects[]` is reported in input order for pass-1 reasons, then duplicates, then capacity (each in
   key order), so a given stream always yields one byte pattern.
 
@@ -80,17 +80,20 @@ Ownership uses a documented placeholder partition of unit slots per player until
   (`SIM_MAX_UNITS / player_count`, last player takes the remainder), `command_actor_slot`,
   `command_intake_run` (three passes: validate in input order; branch-stable insertion sort + dedup
   keeping the first in key order; capacity in key order), `command_to_sim` / `command_batch_to_sim`.
-- `tests/sim/command_tests.cpp` suite `sim_command`, 5 tests / 6,069 checks in Debug: every reason
+- Earlier lane `tests/sim/command_tests.cpp` suite `sim_command`, 5 tests / 6,069 checks in Debug: every reason
   produced once with arena bytes and state hash unchanged; shuffled and reversed inputs give the same
   accepted order and byte-identical outputs; capacity rejected at intake and the seam's atomic reject
   re-proven; 2,000-tick hostile stream (2–6 commands per tick, duplicates, stale generations, wrong
   owner/tick/player, one-damage budget) recorded through replay v1 replays with every per-tick hash
   equal, two live runs give byte-identical replay bytes and reject logs, and all five provokable reason
   classes are observed.
+- Integration regression coverage adds equal-key conflicting move/attack payload permutations, rejection
+  of a live non-unit target, replay-side comparison against regenerated rejects and accepted commands,
+  and multi-event order after replay decoding.
 - `engine/sim/CMakeLists.txt` + `tests/CMakeLists.txt` wired; `systems.cpp`, `sim.h`, `replay.*`,
   `sim_hash.*` untouched.
 
-### S5 gates
+### S5 gates — historical lane before M5.0
 
 - `/WX` matrix: Debug **49/49**, RelWithDebInfo **49/49**, Release **49/49**; `sim_oracle_probe
   --sim-self-check` prints the unchanged pre-M5.0 oracle in every config
@@ -100,4 +103,5 @@ Ownership uses a documented placeholder partition of unit slots per player until
   ubsan=on`, 6/6, oracle reproduced.
 - Isolation: `check_sim_boundary`, compiler policy (+selftest), binary parity, isolation self-test,
   UBSan tripwire green in every configuration over `command.cpp`.
-- No Vulkan smoke required (no renderer change). Hosted CI cannot run (billing lock).
+- No Vulkan smoke required by this slice (no renderer change). The original lane reported a billing
+  lock; consult current PR checks for hosted results against the integrated head.

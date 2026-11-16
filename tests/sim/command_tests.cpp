@@ -2,6 +2,7 @@
 #include "sim/command.h"
 #include "sim/replay.h"
 #include "sim/sim_hash.h"
+#include "sim/systems.h"
 
 #include <cstring>
 
@@ -342,11 +343,27 @@ TEST(sim_command, live_intake_stream_replays_bit_identically_and_rejects_are_sta
     CHECK(replay_read_header(&reader, &header) == REPLAY_STATUS_OK);
     CHECK(header.tick_count == PARITY_TICKS && header.sim_logic_hash == SIM_LOGIC_HASH);
     uint32_t accepted_total = 0u;
+    uint32_t reject_offset = 0u;
     for (uint32_t tick = 0u; tick < PARITY_TICKS; ++tick) {
+        // Replay v1 stores accepted SimCommands, not raw input or rejects. Given
+        // the same source stream, replay intake must reproduce the reject log.
+        Command input[6];
+        uint32_t input_count = generate_commands(7u, tick, &f.world, input);
+        IntakeResult intake{};
+        CHECK(run_intake(&f.world, config_for(tick, 1u), input, input_count, &intake));
+        CHECK(reject_offset + intake.reject_count <= rejects_a);
+        if (reject_offset + intake.reject_count > rejects_a) return;
+        CHECK(std::memcmp(intake.rejects, g_parity_rejects_a + reject_offset,
+                          sizeof(CommandReject) * intake.reject_count) == 0);
+        reject_offset += intake.reject_count;
         SimCommand commands[SIM_MAX_COMMANDS_PER_TICK];
         uint32_t count = 0u;
         uint64_t expected = 0u;
         CHECK(replay_read_tick(&reader, PLAYERS, commands, SIM_MAX_COMMANDS_PER_TICK, &count, &expected) == REPLAY_STATUS_OK);
+        SimCommand translated[6];
+        CHECK(command_batch_to_sim(&f.world, intake.accepted, intake.accepted_count, translated) == intake.accepted_count);
+        CHECK(count == intake.accepted_count);
+        CHECK(count != intake.accepted_count || std::memcmp(commands, translated, sizeof(SimCommand) * count) == 0);
         SimCommandBuffer buffer{commands, count};
         CHECK(sim_tick(&f.world, &buffer));
         CHECK(sim_hash_state(&f.world) == expected);
@@ -355,6 +372,7 @@ TEST(sim_command, live_intake_stream_replays_bit_identically_and_rejects_are_sta
     CHECK(replay_require_end(&reader) == REPLAY_STATUS_OK);
     CHECK(sim_hash_state(&f.world) == final_a);
     CHECK(accepted_total > 0u);
+    CHECK(reject_offset == rejects_a);
     // Every reject reason class that the generator can provoke appeared at least once.
     bool seen[16] = {};
     for (uint32_t i = 0u; i < rejects_a; ++i) seen[g_parity_rejects_a[i].reason & 15u] = true;
@@ -363,4 +381,48 @@ TEST(sim_command, live_intake_stream_replays_bit_identically_and_rejects_are_sta
     CHECK(seen[COMMAND_REJECT_STALE_ENTITY]);
     CHECK(seen[COMMAND_REJECT_DUPLICATE_SEQUENCE]);
     CHECK(seen[COMMAND_REJECT_CAPACITY]);
+}
+
+TEST(sim_command, replay_preserves_multi_event_command_order) {
+    CommandFixture live{}, replay{};
+    CHECK(fixture_init(&live, 3u));
+    CHECK(fixture_init(&replay, 3u));
+    EntityId actor = live.world.unit_entities[0];
+    Command input[] = {
+        attack_cmd(0u, 0u, 3u, actor, live.world.unit_entities[3]),
+        attack_cmd(0u, 0u, 1u, actor, live.world.unit_entities[2]),
+        attack_cmd(0u, 0u, 2u, actor, live.world.unit_entities[1]),
+    };
+    IntakeResult intake{};
+    CHECK(run_intake(&live.world, config_for(0u, 3u), input, 3u, &intake));
+    CHECK(intake.accepted_count == 3u && intake.reject_count == 0u);
+    SimCommand live_commands[3]{};
+    CHECK(command_batch_to_sim(&live.world, intake.accepted, 3u, live_commands) == 3u);
+    SimCommandBuffer live_buffer{live_commands, 3u};
+
+    uint8_t bytes[REPLAY_TICK_BASE_ENCODED_SIZE + 3u * REPLAY_COMMAND_ENCODED_SIZE]{};
+    ByteWriter writer;
+    byte_writer_init(&writer, bytes, sizeof(bytes));
+    CHECK(replay_write_tick(&writer, PLAYERS, &live_buffer, 123u) == REPLAY_STATUS_OK);
+    ByteReader reader;
+    byte_reader_init(&reader, bytes, byte_writer_size(&writer));
+    SimCommand replay_commands[3]{};
+    uint32_t count = 0u;
+    uint64_t hash = 0u;
+    CHECK(replay_read_tick(&reader, PLAYERS, replay_commands, 3u, &count, &hash) == REPLAY_STATUS_OK);
+    CHECK(count == 3u && hash == 123u);
+    SimCommandBuffer replay_buffer{replay_commands, count};
+    CHECK(sys_apply_commands(&live.world, &live_buffer));
+    CHECK(sys_apply_commands(&replay.world, &replay_buffer));
+    CHECK(damage_event_queue_publish(&live.world.damage_events));
+    CHECK(damage_event_queue_publish(&replay.world.damage_events));
+    DamageEventView live_events{}, replay_events{};
+    CHECK(damage_event_queue_read(&live.world.damage_events, &live_events));
+    CHECK(damage_event_queue_read(&replay.world.damage_events, &replay_events));
+    CHECK(live_events.count == 3u && replay_events.count == 3u);
+    if (live_events.count != 3u || replay_events.count != 3u) return;
+    CHECK(live_events.events[0].target.h == live.world.unit_entities[2].h);
+    CHECK(live_events.events[1].target.h == live.world.unit_entities[1].h);
+    CHECK(live_events.events[2].target.h == live.world.unit_entities[3].h);
+    CHECK(std::memcmp(live_events.events, replay_events.events, sizeof(DamageEvent) * 3u) == 0);
 }

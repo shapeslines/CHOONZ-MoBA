@@ -17,9 +17,10 @@ Longer-lived build status. The resume pin is `docs/next-session.md`. Tickets liv
   policy, test/game binary parity, isolation lint, clang-cl/UBSan, ASan, fresh-walk, CodeQL. The
   playable-slice design contract (`docs/slate-moba-proto-design.md`) is ratified: schemas, the 11-step
   tick, a seven-slice DAG, and nine acceptance tests.
-- **M5.0 sim half:** `MapGrid`, lane definitions and the `.mapdesc` codec are implemented in the
-  map integration slice; see PR #68 and its slate for current landing and verification status.
-- **Not yet:** no navigation, no per-command reject
+- **M5.0 sim half:** `MapGrid`, lane definitions and the `.mapdesc` codec landed in #68 (`51f479a`).
+- **M5.1 intake:** PR #69 implements `Command`/`CommandReject`, deterministic ordering and intake
+  reasons ahead of the legacy replay v1 seam. Replay v1 does not store rejected inputs.
+- **Not yet:** no navigation, no wire-level per-command reject
   reasons, no typed `.mba` payloads (texture-only), no PNG/inflate, no glTF meshes, no hot reload, no
   heroes/abilities/creeps/towers, no netcode (`engine/net/` does not exist), no HUD. Docs-side: the
   vault `moba` and `game-design` notes overlap and need Carson's disposition; GAP-011 (the vanished
@@ -27,13 +28,9 @@ Longer-lived build status. The resume pin is `docs/next-session.md`. Tickets liv
 
 ## Up next
 
-- **M5.0 `m5-map-navigation`** — qualify the implemented sim half and preserve its hash contract.
-  Plan:
-  [plans/m5.0-map-navigation.md](plans/m5.0-map-navigation.md); manifest
-  `arc-m5.0-map-navigation-manifest.json`. Fence: map-owned files in `engine/sim/`, `tests/sim/`.
 - **M5.1 `m5-command-replay`** — `Command`/`CommandReject`/`SimEvent`, ordering key, duplicate and
-  stale rejection, live/replay parity. Plan: [plans/m5.1-command-replay.md](plans/m5.1-command-replay.md).
-  Parallel to M5.0 only with disjoint file claims.
+  stale rejection, live/replay parity. Qualify PR #69; `SimEvent` remains a later slice.
+  Plan: [plans/m5.1-command-replay.md](plans/m5.1-command-replay.md).
 - **`content-typed-payloads`** — typed `.mba` payloads; gate (M4.1 acceptance) is now met; needs its
   own plan before claim. Then `m5-hero-combat`, `m5-lane-objectives` per the DAG in
   [plans/README.md](plans/README.md).
