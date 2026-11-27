@@ -1,5 +1,5 @@
 # Copy into a product repo as .github/workflows/docs-surface-lint.yml
-# after GromCodebase ADR-0025 is on the default branch the `ref` points at.
+# after GromFleet ADR-0025 is on the default branch the `ref` points at.
 
 name: docs-surface-lint
 
@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          repository: shapeslines/GromCodebase
+          repository: shapeslines/GromFleet
           path: .gcb-docs-lint
           sparse-checkout: |
             tools/docs-surface-lint.py
